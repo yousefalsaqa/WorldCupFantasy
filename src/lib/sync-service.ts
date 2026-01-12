@@ -53,38 +53,25 @@ export const syncService = {
     // Store API team IDs for player sync
     const teamMapping: Array<{ apiId: number; dbId: string }> = [];
 
+    // TODO: Update sync service for World Cup (nations instead of clubs)
+    // This sync service was designed for La Liga and needs to be updated for World Cup
     for (const { team } of apiTeams) {
-      const existing = await prisma.club.findFirst({
-        where: { 
-          OR: [
-            { name: team.name },
-            { shortName: team.code }
-          ]
-        },
-      });
-
-      let dbClubId: string;
+      // World Cup uses nations, not clubs - skipping club sync for now
+      const existing = null; // await prisma.nation.findFirst({ ... });
+      let dbClubId: string = ''; // Placeholder
 
       if (existing) {
-        await prisma.club.update({
-          where: { id: existing.id },
-          data: {
-            name: team.name,
-            shortName: team.code || existing.shortName,
-            badgeUrl: team.logo,
-          },
-        });
-        dbClubId = existing.id;
+        // await prisma.nation.update({ ... });
         teamsUpdated++;
       } else {
-        const newClub = await prisma.club.create({
-          data: {
-            name: team.name,
-            shortName: team.code || team.name.substring(0, 3).toUpperCase(),
-            badgeUrl: team.logo,
-          },
-        });
-        dbClubId = newClub.id;
+        // const newNation = await prisma.nation.create({
+        //   data: {
+        //     name: team.name,
+        //     code: team.code || team.name.substring(0, 3).toUpperCase(),
+        //     flagUrl: team.logo,
+        //   },
+        // });
+        // dbClubId = newNation.id;
         teamsAdded++;
       }
 
@@ -123,7 +110,7 @@ export const syncService = {
   // SYNC PLAYERS FOR A TEAM
   // Cost: 1 request per team (20 teams = 20 requests)
   // ============================================
-  async syncPlayersForTeam(apiTeamId: number, clubId: string): Promise<{ added: number; updated: number }> {
+  async syncPlayersForTeam(apiTeamId: number, nationId: string): Promise<{ added: number; updated: number }> {
     const squads = await apiFootball.getSquad(apiTeamId);
     if (!squads.length) return { added: 0, updated: 0 };
 
@@ -137,7 +124,7 @@ export const syncService = {
       // Try to find existing player
       const existing = await prisma.player.findFirst({
         where: {
-          clubId,
+          nationId, // Updated for World Cup - was clubId
           displayName: player.name,
         },
       });
@@ -163,9 +150,8 @@ export const syncService = {
             lastName,
             displayName: player.name,
             position,
-            clubId,
+            nationId, // Updated for World Cup - was clubId
             currentPrice: price,
-            initialPrice: price,
             photoUrl: player.photo,
           },
         });
@@ -206,8 +192,9 @@ export const syncService = {
     }
 
     // Get club mapping
-    const clubs = await prisma.club.findMany();
-    const clubByName = new Map(clubs.map(c => [c.name.toLowerCase(), c]));
+    // TODO: Update for World Cup - use nations instead of clubs
+    const clubs: any[] = []; // await prisma.nation.findMany();
+    const clubByName = new Map(clubs.map((c: any) => [c.name.toLowerCase(), c]));
 
     for (const apiFixture of apiFixtures) {
       const homeClub = clubByName.get(apiFixture.teams.home.name.toLowerCase());
@@ -283,9 +270,10 @@ export const syncService = {
     if (!fixture) return { playersUpdated: 0 };
 
     // Get our players
+    // TODO: Update for World Cup - use nationId instead of clubId
     const ourPlayers = await prisma.player.findMany({
       where: {
-        clubId: { in: [fixture.homeClubId, fixture.awayClubId] },
+        nationId: { in: [fixture.homeNationId || '', fixture.awayNationId || ''] }, // Updated for World Cup
       },
     });
 

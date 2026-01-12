@@ -185,7 +185,7 @@ export function calculateBonusPointsForMatch(
   const sorted = [...playerScores].sort((a, b) => b.bpsScore - a.bpsScore);
 
   // Get unique scores in order
-  const uniqueScores = [...new Set(sorted.map(p => p.bpsScore))];
+  const uniqueScores = Array.from(new Set(sorted.map(p => p.bpsScore)));
   
   if (uniqueScores.length === 0) return bonusMap;
 
