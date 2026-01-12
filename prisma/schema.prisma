@@ -1,0 +1,347 @@
+// ============================================
+// WORLD CUP 2026 FANTASY - DATABASE SCHEMA
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USER & AUTHENTICATION
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  username      String    @unique
+  passwordHash  String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastLoginAt   DateTime?
+  isAdmin       Boolean   @default(false)
+  
+  team          Team?
+  sessions      Session[]
+  leaguesOwned  League[]  @relation("LeagueOwner")
+  leagueMemberships LeagueMembership[]
+  
+  @@index([email])
+  @@index([username])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userAgent String?
+  ipAddress String?
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([token])
+  @@index([userId])
+}
+
+// ============================================
+// NATIONS (instead of clubs)
+// ============================================
+
+model Nation {
+  id            String   @id @default(cuid())
+  name          String   @unique  // e.g., "Brazil"
+  code          String   @unique  // e.g., "BRA"
+  flagUrl       String?
+  group         String?  // e.g., "C"
+  isEliminated  Boolean  @default(false)
+  eliminatedAt  String?  // Stage where eliminated (e.g., "R32")
+  
+  // Kit colors for player cards
+  kitColor1     String   @default("#FFFFFF")  // Primary kit color
+  kitColor2     String   @default("#000000")  // Secondary/number color
+  
+  players       Player[]
+  homeMatches   Match[]  @relation("HomeNation")
+  awayMatches   Match[]  @relation("AwayNation")
+  
+  @@index([code])
+  @@index([group])
+  @@index([isEliminated])
+}
+
+model Player {
+  id            String   @id @default(cuid())
+  firstName     String
+  lastName      String
+  displayName   String
+  position      String   // GK, DEF, MID, FWD
+  nationId      String
+  currentPrice  Float    @default(5.0)
+  photoUrl      String?
+  shirtNumber   Int?
+  isAvailable   Boolean  @default(true)
+  availabilityNote String?
+  
+  nation        Nation   @relation(fields: [nationId], references: [id])
+  
+  squadPlayers  SquadPlayer[]
+  performances  PlayerPerformance[]
+  
+  @@index([nationId])
+  @@index([position])
+  @@index([currentPrice])
+}
+
+// Position values: GK, DEF, MID, FWD
+
+// ============================================
+// TOURNAMENT STAGES & MATCHES
+// ============================================
+
+model Stage {
+  id            String   @id @default(cuid())
+  stageId       String   @unique  // e.g., "GR1", "R32", "QF"
+  name          String   // e.g., "Group Stage - Round 1"
+  order         Int      // For sorting
+  deadlineTime  DateTime?
+  isActive      Boolean  @default(false)
+  isComplete    Boolean  @default(false)
+  
+  matches       Match[]
+  teamStages    TeamStage[]
+  
+  @@index([stageId])
+  @@index([order])
+}
+
+model Match {
+  id            String   @id @default(cuid())
+  stageId       String
+  homeNationId  String
+  awayNationId  String
+  kickoffTime   DateTime
+  
+  // Results
+  homeScore     Int?
+  awayScore     Int?
+  isStarted     Boolean  @default(false)
+  isFinished    Boolean  @default(false)
+  
+  // For knockouts
+  homePenalties Int?     // Penalty shootout
+  awayPenalties Int?
+  winnerId      String?  // Nation that won (for knockouts)
+  
+  stage         Stage    @relation(fields: [stageId], references: [id])
+  homeNation    Nation   @relation("HomeNation", fields: [homeNationId], references: [id])
+  awayNation    Nation   @relation("AwayNation", fields: [awayNationId], references: [id])
+  
+  performances  PlayerPerformance[]
+  
+  @@index([stageId])
+  @@index([kickoffTime])
+}
+
+// ============================================
+// PLAYER PERFORMANCE
+// ============================================
+
+model PlayerPerformance {
+  id                    String   @id @default(cuid())
+  playerId              String
+  matchId               String
+  
+  minutesPlayed         Int      @default(0)
+  goals                 Int      @default(0)
+  assists               Int      @default(0)
+  cleanSheet            Boolean  @default(false)
+  goalsConceeded        Int      @default(0)
+  saves                 Int      @default(0)
+  penaltiesSaved        Int      @default(0)
+  penaltiesMissed       Int      @default(0)
+  yellowCards           Int      @default(0)
+  redCards              Int      @default(0)
+  ownGoals              Int      @default(0)
+  bonusPoints           Int      @default(0)
+  
+  totalPoints           Int      @default(0)
+  
+  player  Player @relation(fields: [playerId], references: [id])
+  match   Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  
+  @@unique([playerId, matchId])
+  @@index([playerId])
+  @@index([matchId])
+}
+
+// ============================================
+// FANTASY TEAMS & SQUADS
+// ============================================
+
+model Team {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  name            String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Budget
+  initialBudget   Float    @default(100.0)
+  bankBalance     Float    @default(100.0)
+  teamValue       Float    @default(0.0)
+  
+  // Transfers tracking (resets per stage)
+  freeTransfers   Int      @default(2)
+  transfersUsed   Int      @default(0)
+  
+  // Chips
+  wildcard1Used   Boolean  @default(false)
+  wildcard2Used   Boolean  @default(false)
+  tripleCaptainUsed Boolean @default(false)
+  benchBoostUsed  Boolean  @default(false)
+  
+  // Points
+  totalPoints     Int      @default(0)
+  
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  squadPlayers    SquadPlayer[]
+  teamStages      TeamStage[]
+  transfers       Transfer[]
+  leagueMemberships LeagueMembership[]
+  
+  @@index([totalPoints])
+}
+
+model SquadPlayer {
+  id              String   @id @default(cuid())
+  teamId          String
+  playerId        String
+  purchasePrice   Float
+  points          Int      @default(0)  // Points scored this stage
+  
+  isStarting      Boolean  @default(false)
+  isCaptain       Boolean  @default(false)
+  isViceCaptain   Boolean  @default(false)
+  benchOrder      Int?     // 1-5 if on bench
+  
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id])
+  
+  @@unique([teamId, playerId])
+  @@index([teamId])
+  @@index([playerId])
+}
+
+// ============================================
+// STAGE SNAPSHOTS (Points per stage)
+// ============================================
+
+model TeamStage {
+  id              String   @id @default(cuid())
+  teamId          String
+  stageId         String
+  
+  rawPoints       Int      @default(0)
+  captainPoints   Int      @default(0)
+  transferHits    Int      @default(0)
+  totalPoints     Int      @default(0)
+  
+  chipUsed        String?  // WILDCARD_1, WILDCARD_2, TRIPLE_CAPTAIN, BENCH_BOOST
+  
+  // Snapshot of squad at deadline
+  squadSnapshot   String?  // JSON
+  
+  // Eliminated players count (for mercy rule)
+  eliminatedCount Int      @default(0)
+  mercyTransfers  Int      @default(0)
+  
+  team     Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  stage    Stage @relation(fields: [stageId], references: [id])
+  
+  @@unique([teamId, stageId])
+  @@index([teamId])
+  @@index([stageId])
+}
+
+// ChipType values: WILDCARD_1, WILDCARD_2, TRIPLE_CAPTAIN, BENCH_BOOST
+
+// ============================================
+// TRANSFERS
+// ============================================
+
+model Transfer {
+  id            String   @id @default(cuid())
+  teamId        String
+  stageId       String?
+  playerInId    String
+  playerOutId   String
+  priceIn       Float
+  priceOut      Float
+  isFreeTransfer Boolean @default(true)
+  isMercyTransfer Boolean @default(false) // From mercy rule
+  isWildcard    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  
+  @@index([teamId])
+  @@index([stageId])
+}
+
+// ============================================
+// LEAGUES
+// ============================================
+
+model League {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  ownerId     String
+  isGlobal    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  
+  owner       User     @relation("LeagueOwner", fields: [ownerId], references: [id])
+  memberships LeagueMembership[]
+  
+  @@index([code])
+}
+
+model LeagueMembership {
+  id        String   @id @default(cuid())
+  leagueId  String
+  teamId    String
+  userId    String
+  joinedAt  DateTime @default(now())
+  
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([leagueId, teamId])
+  @@index([leagueId])
+  @@index([teamId])
+}
+
+// ============================================
+// AUDIT LOG
+// ============================================
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  details   String
+  ipAddress String?
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}

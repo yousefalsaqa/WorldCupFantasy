@@ -1,0 +1,533 @@
+La Liga Fantasy – Official Rules (v1.0)
+0. Overview
+
+This is a season-long fantasy game based on La Liga matches only.
+
+Managers pick real La Liga players and score points from their real performances.
+
+The rules follow Fantasy Premier League (FPL) behaviour wherever stated, with a small number of explicit custom changes:
+
+Extra points for long-shot goals.
+
+Slightly different handling of Free Hit + saved transfers.
+
+BPS defensive metric defined as defensive contributions (tackles, interceptions, clearances, blocks, aerial duels).
+
+1. Squads, Budget, and Positions
+1.1 Squad size and structure
+
+Each manager controls exactly one squad per season:
+
+15 players total:
+
+2 Goalkeepers (GK)
+
+5 Defenders (DEF)
+
+5 Midfielders (MID)
+
+3 Forwards (FWD)
+
+At most 3 players from any single La Liga club at any time.
+
+Player positions (GK/DEF/MID/FWD) are set by game admins and do not change during the season.
+
+1.2 Budget and prices
+
+New squads start with a 100.0 budget (valued in arbitrary “m” units, e.g. 100.0m).
+
+Player prices:
+
+Minimum: 4.0
+
+Maximum: 14.5
+
+Prices move in steps of 0.1.
+
+2. Gameweeks, Fixtures, Competitions
+2.1 La Liga only
+
+Only official La Liga league matches count for points.
+
+Domestic cups, Super Cup and European competitions are not included.
+
+2.2 Gameweeks (GWs)
+
+The season is split into Gameweeks, each associated with a set of La Liga fixtures.
+
+Postponed/rearranged matches:
+
+If a fixture is moved to a different date, it scores in the Gameweek it is actually played (this can create Double/Blank Gameweeks).
+
+2.3 Deadlines and timezones
+
+Each GW has a deadline 90 minutes before the first kickoff of that GW.
+
+All deadlines are enforced in UTC on the backend.
+
+Deadlines and fixture times are displayed in Eastern Time (EST/EDT) to users.
+
+3. Team Selection and Substitutions
+3.1 Starting XI and bench
+
+Before each GW deadline, a manager must set:
+
+Starting XI: 11 players in a valid formation.
+
+Bench: 4 players with an explicit order (3 outfield + 1 GK).
+
+Captain (C): one player in the starting XI.
+
+Vice-captain (VC): a different player in the starting XI.
+
+3.2 Valid formations
+
+Formation = 1 GK + 10 outfield players.
+
+Outfield constraints (identical to FPL):
+
+DEF: minimum 3, maximum 5
+
+MID: minimum 2, maximum 5
+
+FWD: minimum 1, maximum 3
+
+The valid formation combinations are the standard FPL set (e.g. 3-4-3, 3-5-2, 4-4-2, 4-3-3, 4-5-1, 5-3-2, 5-4-1, 5-2-3).
+
+3.3 Definition of “played” vs “inactive”
+
+A player is active for a GW if they play any minutes in at least one fixture that belongs to that GW.
+
+A player is inactive if they play 0 minutes in all GW fixtures.
+
+This matches FPL’s autosub behaviour.
+Wikipedia
+
+3.4 Captain, vice-captain, and multipliers
+
+If the Captain is active, their total GW points (after bonus, including all fixtures) are doubled.
+
+If Triple Captain chip is active, the effective captain’s total GW points are tripled.
+
+If the Captain is inactive and the Vice-captain is active, the VC becomes effective captain and gets the double/triple multiplier.
+
+If both Captain and Vice-captain are inactive, no captain bonus applies that GW.
+
+3.5 Auto-substitutions
+
+After all matches in the GW finish and raw points are calculated:
+
+Identify starting XI players who are inactive (0 minutes).
+
+Go through bench players in their pinned order:
+
+For each inactive outfield starter, try to bring in the highest-priority bench outfield player who:
+
+Did not start,
+
+Is active, and
+
+Keeps the XI in a valid formation.
+
+For goalkeeper:
+
+If starting GK is inactive and bench GK is active, they swap.
+
+If both GKs are inactive, no GK substitution happens.
+
+If no bench player can be used without breaking formation, that particular substitution is skipped.
+
+Auto-subs are not performed for players who have played any minutes.
+
+This mirrors FPL’s substitution rules.
+Wikipedia
+
+4. Scoring System
+4.1 General
+
+Points are scored per player per Gameweek.
+
+If a player appears in multiple fixtures in the same GW, their GW score is the sum across those fixtures.
+
+Long-shot and bonus-point rules apply on top of this.
+
+The base point values match the official FPL 2025/26 scoring matrix.
+Premier League
+
+4.2 Appearance points
+
+Per match:
+
+Plays 0 minutes: 0 points.
+
+Plays up to 60 minutes (excluding stoppage time): 1 point.
+
+Plays 60 minutes or more: 2 points.
+
+If a player appears multiple times in a GW, appearance points are added for each match.
+
+4.3 Goals scored (per goal)
+
+Goalkeeper: 10 points
+
+Defender: 6 points
+
+Midfielder: 5 points
+
+Forward: 4 points
+
+4.4 Assists
+
+Each valid assist: 3 points (any position).
+
+Assist criteria follow FPL’s public guidance (passes, deflections, rebounds, own goals, penalties/free-kicks), paraphrased from the current rules: an assist is generally credited to the player from the scoring team who last intentionally played the ball leading directly to the goal, with specific treatment for deflections, rebounds and own goals.
+Premier League
+
+4.5 Clean sheets
+
+A clean sheet is awarded to qualifying players when:
+
+Their team concedes 0 goals while they are on the pitch, and
+
+They play 60+ minutes in that match.
+Premier League
+
+Points:
+
+GK or DEF: +4 points per clean sheet.
+
+MID: +1 point per clean sheet.
+
+FWD: no clean sheet points.
+
+If a player is substituted after 60+ minutes with the score 0-0 and the team later concedes, they keep the clean sheet points (in line with FPL).
+Premier League
+
+4.6 Defensive contributions (base scoring)
+
+In addition to clean sheets, players earn extra points for defensive contributions, as in FPL 2025/26.
+Premier League
+
+Per match:
+
+Defender: +2 points for every 10 defensive contributions.
+
+Midfielder: +2 points for every 12 defensive contributions.
+
+Forward: +2 points for every 12 defensive contributions.
+
+“Defensive contributions” are as defined by the event provider (clearances, blocks, interceptions, etc.) in the same way FPL uses this metric.
+
+Note: This is base scoring, separate from the BPS defensive contributions used for bonus points (Section 5).
+
+4.7 Goalkeeper saves and penalties
+
+Per match:
+
+For every 3 saves by a goalkeeper: +1 point.
+
+For each penalty save: +5 points.
+
+For each penalty miss by any outfield player: −2 points.
+
+4.8 Goals conceded
+
+Per match:
+
+For every 2 goals conceded by a GK or DEF: −1 point.
+Premier League
+
+Conceded goals are counted while the player is on the pitch.
+
+4.9 Cards and own goals
+
+Per match:
+
+Yellow card: −1 point.
+
+Red card: −3 points (includes second-yellow situations, matching FPL behaviour).
+Premier League
+
+Own goal: −2 points.
+
+4.10 Long-shot goal bonus (custom rule)
+
+On top of the normal goal points:
+
+Any outfield player (DEF/MID/FWD) who scores from a long-range shot gets an extra +2 points for that goal.
+
+Definition:
+
+A long-shot goal is one where the shot is recorded by the event provider as being taken from outside the penalty area (the same classification commonly used in stats systems).
+
+This bonus can stack with all other scoring (goals, assists, bonus points, etc.).
+
+4.11 Bonus points (BPS → fantasy points)
+
+Bonus points are awarded per match based on the Bonus Points System (BPS):
+
+The top three players in BPS score for that match receive:
+
+1st: 3 bonus points
+
+2nd: 2 bonus points
+
+3rd: 1 bonus point
+Premier League
++1
+
+Tie-breaking matches FPL’s published examples:
+
+Tie for 1st: tied players get 3 each, next best gets 1.
+
+Tie for 2nd: top gets 3, tied players get 2 each.
+
+Tie for 3rd: top gets 3, second 2, all tied for 3rd get 1.
+Premier League
+
+BPS details and the defensive contribution metric are in Section 5.
+
+4.12 Order of operations in scoring
+
+For each GW:
+
+Calculate each player’s base points per match (goals, assists, clean sheets, def contributions, cards, etc.).
+
+Add bonus points from BPS for each match.
+
+Sum per player across all fixtures in the GW.
+
+Apply captain / triple-captain multipliers on the player’s total GW score.
+
+Sum all squad players’ GW scores to get the manager’s GW total.
+
+Subtract transfer hits (−4 per extra transfer beyond free allocation).
+
+5. Bonus Points System (BPS)
+5.1 Purpose
+
+The BPS uses detailed on-ball statistics (Opta-style data) to create a performance score for each player in each match.
+Premier League
+
+Bonus fantasy points are then assigned as described in 4.11.
+
+5.2 Structure
+
+BPS uses the same event categories and weightings as FPL, except for one change:
+
+Where FPL used “ball recoveries”, this game uses a defensive contributions composite.
+
+5.3 Defensive contributions in BPS (custom)
+
+For BPS purposes, defensive contributions is a weighted sum of:
+
+Tackles won
+
+Interceptions
+
+Clearances
+
+Blocks (shots blocked)
+
+Aerial duels won
+
+The exact weights assigned to each component are internal configuration (not shown in public rules). The intention is to reward overall defensive impact, not just one raw stat.
+
+5.4 BPS transparency
+
+The full BPS event-to-points mapping and weights are not published in this rules document, consistent with FPL’s approach.
+
+Admins maintain a configuration table of events and weights to be used consistently across matches.
+
+5.5 Corrections
+
+If the data provider issues corrections (e.g. reclassified shots, assists, defensive actions) within 24 hours of full-time, the BPS and associated bonus points may be recomputed.
+
+After this 24-hour window, BPS and bonus points for that match are locked.
+
+6. Transfers and Free Transfers
+6.1 Free transfers per GW
+
+Each GW, a manager receives 1 free transfer.
+
+If you do not use it, it rolls over, up to a maximum of 2 free transfers.
+
+If you already have 2 and do not use one, you stay at 2 (you cannot go to 3).
+
+This matches FPL’s transfer rules.
+Shake X Sempe
+
+6.2 Additional transfers (hits)
+
+Transfers beyond your free allocation each cost −4 points.
+
+Example:
+
+You have 1 free transfer and make 3 transfers ⇒ 2 extra ⇒ −8 points.
+
+6.3 Transfer window
+
+Transfers can be made from the moment one GW locks until the next GW’s deadline.
+
+All transfers must respect:
+
+15-man squad size
+
+Position counts (2 GK, 5 DEF, 5 MID, 3 FWD)
+
+Max 3 players per club
+
+Budget constraints
+
+7. Chips
+
+The following chips exist and behave like their FPL equivalents unless explicitly noted.
+
+7.1 General chip rules
+
+Only one chip can be active in any single Gameweek (including Wildcard).
+
+Chip status can be freely toggled before the GW deadline.
+
+After the deadline, chip activation is locked.
+
+7.2 Wildcard (two per season)
+
+Allows unlimited free transfers in that GW.
+
+No −4 “hits” for transfers in that GW.
+
+All normal rules (budget, positions, club limits) still apply.
+
+You get two Wildcards per season, used in separate halves of the season, exactly as in FPL (first half vs second half windows).
+Never Manage Alone
+
+7.3 Triple Captain
+
+The effective captain’s total GW score is tripled instead of doubled.
+
+If the original Captain is inactive and the Vice-captain becomes effective captain, the Triple-Captain effect moves to the VC.
+
+7.4 Bench Boost
+
+For that GW, all 15 players in your squad score points, regardless of who is on the bench or in the XI.
+
+Auto-substitutions are disabled that GW (your starting XI is fixed for formation purposes, but bench players still score).
+
+7.5 Free Hit (with custom transfer-carry behaviour)
+
+Allows unlimited transfers for one Gameweek only.
+
+At the next Gameweek, your squad reverts to its previous composition (before the Free Hit).
+
+Custom rule (differs from FPL):
+
+Your saved free transfers are preserved across the Free Hit.
+
+Example:
+
+You enter a Free Hit GW with 2 saved free transfers.
+
+After the Free Hit GW resolves, when your old squad returns, you still have 2 free transfers (subject to the usual max of 2).
+
+8. Prices, Team Value, and Profits
+8.1 Price range and increments
+
+All prices are between 4.0 and 14.5, stepping in increments of 0.1.
+
+8.2 How prices change
+
+The public rule mirrors FPL’s public description:
+Fantasy Premier League
++1
+
+Player prices change during the season based on how popular they are in the transfer market.
+
+Players who are transferred in by many managers will rise in price.
+
+Players who are sold by many managers will fall in price.
+
+Player prices do not change before the season starts.
+
+There is a maximum change per day (±0.1) and per Gameweek (±0.3) for each player.
+
+The internal thresholds and exact formula used to decide when a player’s price changes are not publicly disclosed, consistent with FPL.
+
+8.3 Purchase price, sell price, and 50% profit rule
+
+As in FPL:
+Premier League
++1
+
+When you buy a player, you record a purchase price.
+
+The player’s current price may later rise or fall for everyone.
+
+When you sell the player, you receive their sell price, which is:
+
+Purchase price plus 50% of any profit, rounded down to the nearest 0.1.
+
+You do not lose money on price drops beyond the loss of team value.
+
+Example idea (consistent with FPL):
+
+Buy at 7.0, current price rises to 7.5 ⇒ profit 0.5 ⇒ you gain 0.2 (half of 0.4, rounded down) so sell price becomes 7.2.
+
+9. Leagues
+9.1 Types of leagues in v1
+
+Global overall league:
+
+All managers participate automatically.
+
+Ranking by total season points.
+
+Private classic leagues:
+
+Managers can create and join invitation-based leagues.
+
+Ranking by total season points.
+
+No head-to-head format in v1.
+
+9.2 Ties in classic leagues
+
+If teams have the same total points, they share the rank (simple tie, no extra tie-break chain).
+
+10. Joining Late and Season Scoring
+10.1 Late entry
+
+Managers who create a team mid-season start scoring from the first GW in which they have a valid team.
+
+No retroactive points are awarded for past Gameweeks.
+
+10.2 Season total
+
+Season total = sum of all GW scores (including chip effects, transfer hits, and bonus points).
+
+11. Data, Corrections, and Fairness
+11.1 Data provider
+
+The game uses an external stats provider (Opta-style) for:
+
+Line-ups and minutes
+
+Goals, assists, cards, penalties
+
+Saves, shots, defensive actions
+
+Derived metrics like defensive contributions and BPS inputs.
+
+11.2 Corrections window
+
+If the provider updates stats (goals, assists, defensive actions, etc.) within 24 hours of full-time, fantasy scores and BPS may be recomputed.
+
+After that window, scores for that match are final and will not change.
+
+11.3 Integrity and anti-cheat
+
+Squads must always obey squad size, budget and club-limit rules.
+
+System tracks logins, transfers, and chip usage for abnormal patterns.
+
+Cheating, exploiting bugs or using multiple coordinated accounts may result in sanctions, up to removal from leaderboards.
