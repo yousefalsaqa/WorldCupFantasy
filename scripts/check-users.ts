@@ -60,7 +60,7 @@ async function main() {
     }
 
     console.log(`👤 Recently Active Users: ${recentUsers.size}\n`);
-    for (const [userId, user] of recentUsers.entries()) {
+    for (const [userId, user] of Array.from(recentUsers.entries())) {
       const userRecentSessions = recentSessions.filter(s => s.userId === userId);
       const latestSession = userRecentSessions[0];
       const isActive = latestSession.expiresAt > now;
