@@ -330,14 +330,14 @@ export const syncService = {
         // Upsert performance
         await prisma.playerPerformance.upsert({
           where: {
-            playerId_fixtureId: {
+            playerId_matchId: {
               playerId: ourPlayer.id,
-              fixtureId: dbFixtureId,
+              matchId: dbFixtureId,
             },
           },
           create: {
             playerId: ourPlayer.id,
-            fixtureId: dbFixtureId,
+            matchId: dbFixtureId, // Updated for World Cup - was fixtureId
             minutesPlayed,
             goals,
             assists,
