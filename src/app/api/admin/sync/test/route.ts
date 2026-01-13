@@ -7,6 +7,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
 const API_FOOTBALL_KEY = process.env.API_FOOTBALL_KEY;
 const API_FOOTBALL_HOST = 'v3.football.api-sports.io';
 
+// This route is dynamic because it reads cookies for authentication
+export const dynamic = 'force-dynamic';
+
 async function verifyAdmin() {
   const cookieStore = await cookies();
   const token = cookieStore.get('auth_token')?.value;

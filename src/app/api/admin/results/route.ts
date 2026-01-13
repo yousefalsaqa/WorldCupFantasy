@@ -5,6 +5,9 @@ import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
 
+// This route is dynamic because it reads cookies for authentication
+export const dynamic = 'force-dynamic';
+
 async function verifyAdmin() {
   const cookieStore = await cookies();
   const token = cookieStore.get('auth_token')?.value;

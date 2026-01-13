@@ -4,6 +4,9 @@ import { syncService } from '@/lib/sync-service';
 import { apiFootball } from '@/lib/api-football';
 import { logAudit } from '@/lib/audit';
 
+// This route is dynamic because it reads cookies for authentication
+export const dynamic = 'force-dynamic';
+
 // Manual sync trigger (admin only)
 export async function POST(request: NextRequest) {
   const ip = request.headers.get('x-forwarded-for') || 'unknown';
