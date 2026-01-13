@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 
+// This route is dynamic because it reads cookies for authentication
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const session = await getSession();

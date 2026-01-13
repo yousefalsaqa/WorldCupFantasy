@@ -5,6 +5,9 @@ import { joinLeagueSchema } from '@/lib/validation';
 import { logAudit } from '@/lib/audit';
 import { ZodError } from 'zod';
 
+// This route is dynamic because it reads cookies for authentication
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   const ip = request.headers.get('x-forwarded-for') || 'unknown';
 

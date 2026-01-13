@@ -6,6 +6,9 @@ import { logAudit } from '@/lib/audit';
 import { SQUAD_SIZE } from '@/lib/constants';
 import { calculateSellPrice, roundPrice } from '@/lib/utils';
 
+// This route is dynamic because it reads cookies for authentication
+export const dynamic = 'force-dynamic';
+
 // Get current squad
 export async function GET() {
   try {

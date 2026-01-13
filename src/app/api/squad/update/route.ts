@@ -3,6 +3,9 @@ import { prisma } from '@/lib/db';
 import { verifyToken, JWTPayload } from '@/lib/auth';
 import { cookies } from 'next/headers';
 
+// This route is dynamic because it reads cookies for authentication
+export const dynamic = 'force-dynamic';
+
 async function getSessionFromRequest(request: NextRequest): Promise<JWTPayload | null> {
   try {
     const cookieStore = await cookies();

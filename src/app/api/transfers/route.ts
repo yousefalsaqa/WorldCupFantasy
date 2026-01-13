@@ -3,6 +3,9 @@ import { prisma } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
 
+// This route is dynamic because it reads cookies for authentication
+export const dynamic = 'force-dynamic';
+
 const TRANSFER_HIT_COST = 4;
 
 interface TransferRequest {

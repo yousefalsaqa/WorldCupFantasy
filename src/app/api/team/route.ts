@@ -3,6 +3,9 @@ import { prisma } from '@/lib/db';
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth';
 
+// This route is dynamic because it reads cookies for authentication
+export const dynamic = 'force-dynamic';
+
 async function getUser() {
   const cookieStore = await cookies();
   const token = cookieStore.get('fantasy-laliga-session')?.value;

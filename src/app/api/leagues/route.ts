@@ -6,6 +6,9 @@ import { logAudit } from '@/lib/audit';
 import { generateLeagueCode } from '@/lib/utils';
 import { ZodError } from 'zod';
 
+// This route is dynamic because it reads cookies for authentication
+export const dynamic = 'force-dynamic';
+
 // Create a new league
 export async function POST(request: NextRequest) {
   const ip = request.headers.get('x-forwarded-for') || 'unknown';
