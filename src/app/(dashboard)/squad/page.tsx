@@ -90,10 +90,12 @@ export default function SquadPage() {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [playerToSub, setPlayerToSub] = useState<Player | null>(null);
 
-  // Prevent body scroll when modal is open
+  // Prevent body scroll when modal is open and scroll to top
   useEffect(() => {
     if (selectedPlayer) {
       document.body.style.overflow = 'hidden';
+      // Scroll to top when modal opens to ensure it's visible
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       document.body.style.overflow = 'unset';
     }
@@ -660,7 +662,7 @@ export default function SquadPage() {
   const fwds = startingXI.filter(p => p.position === 'FWD');
 
   return (
-    <div className="max-w-5xl mx-auto px-2 sm:px-4 py-6 overflow-x-hidden">
+    <div className="max-w-5xl mx-auto px-1 sm:px-4 py-6" style={{ overflowX: 'hidden', overflowY: 'visible' }}>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
@@ -691,18 +693,18 @@ export default function SquadPage() {
       </div>
 
       {/* Pitch */}
-      <div className="relative bg-gradient-to-b from-green-700 via-green-600 to-green-700 rounded-2xl p-3 sm:p-6 mb-6 overflow-visible">
+      <div className="relative bg-gradient-to-b from-green-700 via-green-600 to-green-700 rounded-2xl p-2 sm:p-6 mb-6" style={{ overflow: 'visible' }}>
         <div className="absolute inset-0 opacity-20 rounded-2xl">
           <div className="absolute top-1/2 left-0 right-0 h-px bg-white" />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 border border-white rounded-full" />
           <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-40 h-14 border-t border-l border-r border-white" />
         </div>
 
-        <div className="relative z-10 space-y-4 sm:space-y-5">
+        <div className="relative z-10 space-y-3 sm:space-y-5" style={{ overflow: 'visible' }}>
           {/* FWD */}
-          <div className="flex justify-center gap-3 sm:gap-6 overflow-x-auto pb-2 -mx-3 sm:-mx-2 px-3 sm:px-2 scrollbar-hide">
+          <div className="flex justify-center gap-1.5 sm:gap-6 overflow-x-auto pb-3 -mx-2 px-2 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             {fwds.map(p => (
-              <div key={p.id} className="flex-shrink-0 px-1">
+              <div key={p.id} className="flex-shrink-0" style={{ paddingLeft: '4px', paddingRight: '4px' }}>
                 <PlayerCard
                   player={p}
                   onClick={() => setSelectedPlayer(p)}
@@ -715,9 +717,9 @@ export default function SquadPage() {
           </div>
 
           {/* MID */}
-          <div className="flex justify-center gap-2 sm:gap-4 overflow-x-auto pb-2 -mx-3 sm:-mx-2 px-3 sm:px-2 scrollbar-hide">
+          <div className="flex justify-center gap-1.5 sm:gap-4 overflow-x-auto pb-3 -mx-2 px-2 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             {mids.map(p => (
-              <div key={p.id} className="flex-shrink-0 px-1">
+              <div key={p.id} className="flex-shrink-0" style={{ paddingLeft: '4px', paddingRight: '4px' }}>
                 <PlayerCard
                   player={p}
                   onClick={() => setSelectedPlayer(p)}
@@ -730,9 +732,9 @@ export default function SquadPage() {
           </div>
 
           {/* DEF */}
-          <div className="flex justify-center gap-2 sm:gap-4 overflow-x-auto pb-2 -mx-3 sm:-mx-2 px-3 sm:px-2 scrollbar-hide">
+          <div className="flex justify-center gap-1.5 sm:gap-4 overflow-x-auto pb-3 -mx-2 px-2 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             {defs.map(p => (
-              <div key={p.id} className="flex-shrink-0 px-1">
+              <div key={p.id} className="flex-shrink-0" style={{ paddingLeft: '4px', paddingRight: '4px' }}>
                 <PlayerCard
                   player={p}
                   onClick={() => setSelectedPlayer(p)}
@@ -745,9 +747,9 @@ export default function SquadPage() {
           </div>
 
           {/* GK */}
-          <div className="flex justify-center gap-4 sm:gap-6 overflow-x-auto pb-2 -mx-3 sm:-mx-2 px-3 sm:px-2 scrollbar-hide">
+          <div className="flex justify-center gap-2 sm:gap-6 overflow-x-auto pb-3 -mx-2 px-2 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             {gks.map(p => (
-              <div key={p.id} className="flex-shrink-0 px-1">
+              <div key={p.id} className="flex-shrink-0" style={{ paddingLeft: '4px', paddingRight: '4px' }}>
                 <PlayerCard
                   player={p}
                   onClick={() => setSelectedPlayer(p)}
@@ -803,21 +805,28 @@ export default function SquadPage() {
       {/* Player Detail Modal */}
       {selectedPlayer && (
         <div 
-          className="fixed inset-0 bg-black/80 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 backdrop-blur-sm"
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-0 sm:p-4 backdrop-blur-sm"
           onClick={(e) => {
             if (e.target === e.currentTarget) setSelectedPlayer(null);
           }}
-          style={{ position: 'fixed', overflow: 'hidden' }}
+          style={{ 
+            position: 'fixed', 
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            overflow: 'auto'
+          }}
         >
-          <div className="bg-slate-900 border border-white/10 rounded-t-3xl sm:rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl max-h-[90vh] sm:max-h-[95vh] flex flex-col">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl max-h-[95vh] flex flex-col my-auto">
             {/* Modal Header - Sticky close button */}
-            <div className="relative bg-gradient-to-br from-green-600 to-green-800 p-4 sm:p-6 flex items-end flex-shrink-0 min-h-[120px] sm:min-h-[128px]">
+            <div className="sticky top-0 z-20 relative bg-gradient-to-br from-green-600 to-green-800 p-4 sm:p-6 flex items-end flex-shrink-0 min-h-[100px] sm:min-h-[120px]">
               <button 
                 onClick={() => setSelectedPlayer(null)}
-                className="absolute top-3 right-3 sm:top-4 sm:right-4 text-white hover:text-white bg-black/60 hover:bg-black/80 p-2.5 sm:p-3 rounded-full backdrop-blur-md z-30 transition-all touch-manipulation shadow-lg"
-                style={{ minWidth: '44px', minHeight: '44px', WebkitTapHighlightColor: 'transparent' }}
+                className="absolute top-2 right-2 sm:top-4 sm:right-4 text-white hover:text-white bg-black/70 hover:bg-black/90 p-3 rounded-full backdrop-blur-md z-30 transition-all touch-manipulation shadow-lg"
+                style={{ minWidth: '48px', minHeight: '48px', WebkitTapHighlightColor: 'transparent' }}
               >
-                <span className="text-xl sm:text-2xl font-bold leading-none block">✕</span>
+                <span className="text-2xl font-bold leading-none block">✕</span>
               </button>
               
               <div className="flex items-center gap-3 sm:gap-4 pr-12">

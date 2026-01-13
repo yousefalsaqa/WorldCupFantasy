@@ -62,7 +62,7 @@ export default function Kit({
   };
 
   return (
-    <div className={`relative ${sizes[size]}`}>
+    <div className={`relative ${sizes[size]}`} style={{ overflow: 'visible' }}>
       <svg viewBox="0 0 60 72" className="w-full h-full drop-shadow-lg">
         <defs>
           {/* Gradient for depth */}
@@ -193,15 +193,15 @@ export default function Kit({
       
       {/* Captain badge */}
       {isCaptain && (
-        <div className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-br from-yellow-400 to-amber-500 rounded-full flex items-center justify-center shadow-lg ring-2 ring-yellow-300">
-          <span className="text-[10px] font-black text-black">C</span>
+        <div className="absolute -top-0.5 -right-0.5 w-4 h-4 sm:w-5 sm:h-5 bg-gradient-to-br from-yellow-400 to-amber-500 rounded-full flex items-center justify-center shadow-lg ring-1 sm:ring-2 ring-yellow-300 z-10">
+          <span className="text-[8px] sm:text-[10px] font-black text-black">C</span>
         </div>
       )}
       
       {/* Vice-Captain badge */}
       {isViceCaptain && !isCaptain && (
-        <div className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-br from-gray-300 to-gray-500 rounded-full flex items-center justify-center shadow-lg ring-2 ring-white">
-          <span className="text-[10px] font-black text-black">V</span>
+        <div className="absolute -top-0.5 -right-0.5 w-4 h-4 sm:w-5 sm:h-5 bg-gradient-to-br from-gray-300 to-gray-500 rounded-full flex items-center justify-center shadow-lg ring-1 sm:ring-2 ring-white z-10">
+          <span className="text-[8px] sm:text-[10px] font-black text-black">V</span>
         </div>
       )}
       
@@ -254,7 +254,7 @@ export function PlayerCard({
     <div 
       className={`flex flex-col items-center cursor-pointer group transition-transform hover:scale-105 hover:-translate-y-1 relative`}
       onClick={onClick}
-      style={{ overflow: 'visible' }}
+      style={{ overflow: 'visible', padding: '2px' }}
     >
       <div className="relative" style={{ overflow: 'visible' }}>
         <Kit
