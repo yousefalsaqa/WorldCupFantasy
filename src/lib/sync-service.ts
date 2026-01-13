@@ -431,7 +431,7 @@ export const syncService = {
               homeScore: live.goals.home,
               awayScore: live.goals.away,
               isStarted: true,
-              minutesPlayed: live.fixture.status.elapsed || 0,
+              // Match model doesn't have minutesPlayed field in World Cup schema
             },
           });
 

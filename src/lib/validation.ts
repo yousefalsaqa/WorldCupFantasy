@@ -308,15 +308,13 @@ export function canSubstitutePlayer(
   // Simulate the substitution
   const newFormation = { ...currentFormation };
   
-  // Remove out player
-  if (outPlayer.position !== 'GK') {
-    newFormation[outPlayer.position]--;
-  }
+  // Remove out player (we know it's not GK from the check above)
+  const outPos = outPlayer.position as 'DEF' | 'MID' | 'FWD';
+  newFormation[outPos]--;
   
-  // Add in player
-  if (inPlayer.position !== 'GK') {
-    newFormation[inPlayer.position]++;
-  }
+  // Add in player (we know it's not GK from the check above)
+  const inPos = inPlayer.position as 'DEF' | 'MID' | 'FWD';
+  newFormation[inPos]++;
 
   // Check if still valid
   return VALID_FORMATIONS.some(
