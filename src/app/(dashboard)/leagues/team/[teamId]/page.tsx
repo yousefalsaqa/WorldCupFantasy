@@ -155,7 +155,7 @@ export default function TeamViewPage({ params }: { params: { teamId: string } })
       </div>
 
       {/* Pitch */}
-      <div className="bg-gradient-to-b from-green-700 via-green-600 to-green-700 relative" style={{ overflow: 'visible' }}>
+      <div className="bg-gradient-to-b from-green-700 via-green-600 to-green-700 relative overflow-x-auto" style={{ overflowY: 'visible' }}>
         {/* Pitch markings */}
         <div className="absolute inset-0 opacity-20">
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-16 border-2 border-white border-t-0" />
@@ -164,9 +164,9 @@ export default function TeamViewPage({ params }: { params: { teamId: string } })
           <div className="absolute top-1/2 left-0 right-0 border-t border-white" />
         </div>
 
-        <div className="relative p-2 sm:p-6 space-y-3 sm:space-y-5" style={{ overflow: 'visible' }}>
+        <div className="relative p-1 sm:p-6 space-y-3 sm:space-y-5 min-w-max sm:min-w-0" style={{ overflow: 'visible' }}>
           {/* Forwards */}
-          <div className="flex justify-center gap-1 sm:gap-8 overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div className="flex justify-center gap-0.5 sm:gap-8 overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
             {forwards.map(player => (
               <div key={player.id} className="flex-shrink-0">
                 <PlayerCard player={player} />
@@ -175,7 +175,7 @@ export default function TeamViewPage({ params }: { params: { teamId: string } })
           </div>
 
           {/* Midfielders */}
-          <div className="flex justify-center gap-1 sm:gap-6 overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div className="flex justify-center gap-0.5 sm:gap-6 overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
             {midfielders.map(player => (
               <div key={player.id} className="flex-shrink-0">
                 <PlayerCard player={player} />
@@ -184,7 +184,7 @@ export default function TeamViewPage({ params }: { params: { teamId: string } })
           </div>
 
           {/* Defenders */}
-          <div className="flex justify-center gap-1 sm:gap-6 overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div className="flex justify-center gap-0.5 sm:gap-6 overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
             {defenders.map(player => (
               <div key={player.id} className="flex-shrink-0">
                 <PlayerCard player={player} />
@@ -193,7 +193,7 @@ export default function TeamViewPage({ params }: { params: { teamId: string } })
           </div>
 
           {/* Goalkeeper */}
-          <div className="flex justify-center overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div className="flex justify-center overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
             {goalkeeper.map(player => (
               <div key={player.id} className="flex-shrink-0">
                 <PlayerCard player={player} />

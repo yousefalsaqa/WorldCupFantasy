@@ -680,7 +680,7 @@ export default function SquadPage() {
   const fwds = startingXI.filter(p => p.position === 'FWD');
 
   return (
-    <div className="max-w-5xl mx-auto px-0 sm:px-4 py-6" style={{ overflowX: 'visible', overflowY: 'visible' }}>
+    <div className="max-w-5xl mx-auto px-0 sm:px-4 py-6" style={{ overflowX: 'auto', overflowY: 'visible', width: '100%' }}>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
@@ -711,16 +711,16 @@ export default function SquadPage() {
       </div>
 
       {/* Pitch */}
-      <div className="relative bg-gradient-to-b from-green-700 via-green-600 to-green-700 rounded-2xl p-2 sm:p-6 mb-6" style={{ overflow: 'visible' }}>
+      <div className="relative bg-gradient-to-b from-green-700 via-green-600 to-green-700 rounded-2xl p-1 sm:p-6 mb-6 overflow-x-auto" style={{ overflowY: 'visible' }}>
         <div className="absolute inset-0 opacity-20 rounded-2xl">
           <div className="absolute top-1/2 left-0 right-0 h-px bg-white" />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 border border-white rounded-full" />
           <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-40 h-14 border-t border-l border-r border-white" />
         </div>
 
-        <div className="relative z-10 space-y-3 sm:space-y-5" style={{ overflow: 'visible' }}>
+        <div className="relative z-10 space-y-3 sm:space-y-5 min-w-max sm:min-w-0" style={{ overflow: 'visible' }}>
           {/* FWD */}
-          <div className="flex justify-center gap-0.5 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div className="flex justify-center gap-0.5 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
             {fwds.map(p => (
               <div key={p.id} className="flex-shrink-0">
                 <PlayerCard
@@ -736,7 +736,7 @@ export default function SquadPage() {
           </div>
 
           {/* MID */}
-          <div className="flex justify-center gap-0.5 sm:gap-4 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div className="flex justify-center gap-0.5 sm:gap-4 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
             {mids.map(p => (
               <div key={p.id} className="flex-shrink-0">
                 <PlayerCard
@@ -752,7 +752,7 @@ export default function SquadPage() {
           </div>
 
           {/* DEF */}
-          <div className="flex justify-center gap-0.5 sm:gap-4 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div className="flex justify-center gap-0.5 sm:gap-4 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
             {defs.map(p => (
               <div key={p.id} className="flex-shrink-0">
                 <PlayerCard
@@ -768,7 +768,7 @@ export default function SquadPage() {
           </div>
 
           {/* GK */}
-          <div className="flex justify-center gap-1 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div className="flex justify-center gap-1 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
             {gks.map(p => (
               <div key={p.id} className="flex-shrink-0">
                 <PlayerCard
@@ -879,13 +879,13 @@ export default function SquadPage() {
                 <span className="text-2xl font-bold leading-none block">✕</span>
               </button>
               
-              <div className="flex items-center gap-3 sm:gap-4 pr-14">
+              <div className="flex items-center gap-2 sm:gap-4 pr-14">
                 <Kit
                   primaryColor={selectedPlayer.nation?.kitColor1 || '#FFF'}
                   secondaryColor={selectedPlayer.nation?.kitColor2 || '#000'}
                   number={selectedPlayer.shirtNumber}
                   nationCode={selectedPlayer.nation?.code || ''}
-                  size="md"
+                  size="sm"
                   isCaptain={captainId === selectedPlayer.id}
                   isViceCaptain={viceCaptainId === selectedPlayer.id}
                 />
