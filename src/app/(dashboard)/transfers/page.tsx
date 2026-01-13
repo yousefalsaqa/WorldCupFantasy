@@ -192,9 +192,19 @@ export default function TransfersPage() {
 
   // Check if a player can be brought in
   const canBringIn = (player: Player): { allowed: boolean; reason?: string } => {
-    // Price check
-    if (player.currentPrice > newBankBalance) {
-      return { allowed: false, reason: 'Insufficient funds' };
+    if (!selectedOut) {
+      return { allowed: false, reason: 'Select a player to transfer out first' };
+    }
+
+    // Calculate what the balance would be after this transfer
+    // We get money back from selling selectedOut, then spend on buying player
+    // Net cost = player.currentPrice - selectedOut.purchasePrice
+    const transferCost = player.currentPrice - selectedOut.purchasePrice;
+    const balanceAfterTransfer = newBankBalance - transferCost;
+    
+    // Price check - balance must remain >= 0 after transfer
+    if (balanceAfterTransfer < 0) {
+      return { allowed: false, reason: `Insufficient funds. Need £${transferCost.toFixed(1)}m more` };
     }
     
     // Nation limit

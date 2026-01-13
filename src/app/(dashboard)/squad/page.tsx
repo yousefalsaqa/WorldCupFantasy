@@ -25,6 +25,14 @@ interface Player {
   isCaptain?: boolean;
   isViceCaptain?: boolean;
   points?: number;
+  stats?: {
+    goals: number;
+    assists: number;
+    passAccuracy: number;
+    interceptions: number;
+    tackles: number;
+    dribbles: number;
+  };
 }
 
 type Position = 'GK' | 'DEF' | 'MID' | 'FWD';
@@ -82,6 +90,18 @@ export default function SquadPage() {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [playerToSub, setPlayerToSub] = useState<Player | null>(null);
 
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    if (selectedPlayer) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [selectedPlayer]);
+
   // Fetch data
   useEffect(() => {
     async function fetchData() {
@@ -116,6 +136,14 @@ export default function SquadPage() {
               isCaptain: sp.isCaptain,
               isViceCaptain: sp.isViceCaptain,
               points: sp.points || 0,
+              stats: sp.stats || {
+                goals: 0,
+                assists: 0,
+                passAccuracy: 0,
+                interceptions: 0,
+                tackles: 0,
+                dribbles: 0,
+              },
             }));
             
             setSquad(players);
@@ -423,53 +451,61 @@ export default function SquadPage() {
 
           <div className="relative z-10 space-y-4">
             {/* FWD row */}
-            <div className="flex justify-center gap-3">
+            <div className="flex justify-center gap-2 sm:gap-3 overflow-x-auto pb-2 -mx-2 px-2">
               {[...Array(3)].map((_, i) => (
                 fwds[i] ? (
-                  <div key={fwds[i].id} className="group cursor-pointer" onClick={() => removePlayer(fwds[i].id)}>
+                  <div key={fwds[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(fwds[i].id)}>
                     <PlayerCard player={fwds[i]} showOpponent={getNextOpponent(fwds[i].nation?.code || '')} />
                   </div>
                 ) : (
-                  <EmptySlot key={`fwd-${i}`} position="FWD" onClick={() => openModal('FWD')} />
+                  <div key={`fwd-${i}`} className="flex-shrink-0">
+                    <EmptySlot position="FWD" onClick={() => openModal('FWD')} />
+                  </div>
                 )
               ))}
             </div>
 
             {/* MID row */}
-            <div className="flex justify-center gap-3">
+            <div className="flex justify-center gap-2 sm:gap-3 overflow-x-auto pb-2 -mx-2 px-2">
               {[...Array(5)].map((_, i) => (
                 mids[i] ? (
-                  <div key={mids[i].id} className="group cursor-pointer" onClick={() => removePlayer(mids[i].id)}>
+                  <div key={mids[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(mids[i].id)}>
                     <PlayerCard player={mids[i]} showOpponent={getNextOpponent(mids[i].nation?.code || '')} />
                   </div>
                 ) : (
-                  <EmptySlot key={`mid-${i}`} position="MID" onClick={() => openModal('MID')} />
+                  <div key={`mid-${i}`} className="flex-shrink-0">
+                    <EmptySlot position="MID" onClick={() => openModal('MID')} />
+                  </div>
                 )
               ))}
             </div>
 
             {/* DEF row */}
-            <div className="flex justify-center gap-3">
+            <div className="flex justify-center gap-2 sm:gap-3 overflow-x-auto pb-2 -mx-2 px-2">
               {[...Array(5)].map((_, i) => (
                 defs[i] ? (
-                  <div key={defs[i].id} className="group cursor-pointer" onClick={() => removePlayer(defs[i].id)}>
+                  <div key={defs[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(defs[i].id)}>
                     <PlayerCard player={defs[i]} showOpponent={getNextOpponent(defs[i].nation?.code || '')} />
                   </div>
                 ) : (
-                  <EmptySlot key={`def-${i}`} position="DEF" onClick={() => openModal('DEF')} />
+                  <div key={`def-${i}`} className="flex-shrink-0">
+                    <EmptySlot position="DEF" onClick={() => openModal('DEF')} />
+                  </div>
                 )
               ))}
             </div>
 
             {/* GK row */}
-            <div className="flex justify-center gap-6">
+            <div className="flex justify-center gap-4 sm:gap-6 overflow-x-auto pb-2 -mx-2 px-2">
               {[...Array(2)].map((_, i) => (
                 gks[i] ? (
-                  <div key={gks[i].id} className="group cursor-pointer" onClick={() => removePlayer(gks[i].id)}>
+                  <div key={gks[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(gks[i].id)}>
                     <PlayerCard player={gks[i]} showOpponent={getNextOpponent(gks[i].nation?.code || '')} />
                   </div>
                 ) : (
-                  <EmptySlot key={`gk-${i}`} position="GK" onClick={() => openModal('GK')} />
+                  <div key={`gk-${i}`} className="flex-shrink-0">
+                    <EmptySlot position="GK" onClick={() => openModal('GK')} />
+                  </div>
                 )
               ))}
             </div>
@@ -662,69 +698,73 @@ export default function SquadPage() {
           <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-40 h-14 border-t border-l border-r border-white" />
         </div>
 
-        <div className="relative z-10 space-y-5">
+        <div className="relative z-10 space-y-4 sm:space-y-5">
           {/* FWD */}
-          <div className="flex justify-center gap-6">
+          <div className="flex justify-center gap-3 sm:gap-6 overflow-x-auto pb-2 -mx-2 px-2">
             {fwds.map(p => (
-              <PlayerCard
-                key={p.id}
-                player={p}
-                onClick={() => setSelectedPlayer(p)}
-                showOpponent={getNextOpponent(p.nation?.code || '')}
-                isCaptain={captainId === p.id}
-                isViceCaptain={viceCaptainId === p.id}
-              />
+              <div key={p.id} className="flex-shrink-0">
+                <PlayerCard
+                  player={p}
+                  onClick={() => setSelectedPlayer(p)}
+                  showOpponent={getNextOpponent(p.nation?.code || '')}
+                  isCaptain={captainId === p.id}
+                  isViceCaptain={viceCaptainId === p.id}
+                />
+              </div>
             ))}
           </div>
 
           {/* MID */}
-          <div className="flex justify-center gap-4">
+          <div className="flex justify-center gap-2 sm:gap-4 overflow-x-auto pb-2 -mx-2 px-2">
             {mids.map(p => (
-              <PlayerCard
-                key={p.id}
-                player={p}
-                onClick={() => setSelectedPlayer(p)}
-                showOpponent={getNextOpponent(p.nation?.code || '')}
-                isCaptain={captainId === p.id}
-                isViceCaptain={viceCaptainId === p.id}
-              />
+              <div key={p.id} className="flex-shrink-0">
+                <PlayerCard
+                  player={p}
+                  onClick={() => setSelectedPlayer(p)}
+                  showOpponent={getNextOpponent(p.nation?.code || '')}
+                  isCaptain={captainId === p.id}
+                  isViceCaptain={viceCaptainId === p.id}
+                />
+              </div>
             ))}
           </div>
 
           {/* DEF */}
-          <div className="flex justify-center gap-4">
+          <div className="flex justify-center gap-2 sm:gap-4 overflow-x-auto pb-2 -mx-2 px-2">
             {defs.map(p => (
-              <PlayerCard
-                key={p.id}
-                player={p}
-                onClick={() => setSelectedPlayer(p)}
-                showOpponent={getNextOpponent(p.nation?.code || '')}
-                isCaptain={captainId === p.id}
-                isViceCaptain={viceCaptainId === p.id}
-              />
+              <div key={p.id} className="flex-shrink-0">
+                <PlayerCard
+                  player={p}
+                  onClick={() => setSelectedPlayer(p)}
+                  showOpponent={getNextOpponent(p.nation?.code || '')}
+                  isCaptain={captainId === p.id}
+                  isViceCaptain={viceCaptainId === p.id}
+                />
+              </div>
             ))}
           </div>
 
           {/* GK */}
-          <div className="flex justify-center">
+          <div className="flex justify-center gap-4 sm:gap-6 overflow-x-auto pb-2 -mx-2 px-2">
             {gks.map(p => (
-              <PlayerCard
-                key={p.id}
-                player={p}
-                onClick={() => setSelectedPlayer(p)}
-                showOpponent={getNextOpponent(p.nation?.code || '')}
-                isCaptain={captainId === p.id}
-                isViceCaptain={viceCaptainId === p.id}
-              />
+              <div key={p.id} className="flex-shrink-0">
+                <PlayerCard
+                  player={p}
+                  onClick={() => setSelectedPlayer(p)}
+                  showOpponent={getNextOpponent(p.nation?.code || '')}
+                  isCaptain={captainId === p.id}
+                  isViceCaptain={viceCaptainId === p.id}
+                />
+              </div>
             ))}
           </div>
         </div>
       </div>
 
       {/* Bench */}
-      <div className="bg-slate-900/50 rounded-2xl border border-white/10 p-4 mb-6">
-        <h2 className="text-lg font-bold text-white mb-4">Substitutes</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="bg-slate-900/50 rounded-2xl border border-white/10 p-3 sm:p-4 mb-6">
+        <h2 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Substitutes</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
           {bench.map((p, i) => (
             <div
               key={p.id}
@@ -762,15 +802,21 @@ export default function SquadPage() {
 
       {/* Player Detail Modal */}
       {selectedPlayer && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
-            {/* Modal Header */}
-            <div className="relative h-32 bg-gradient-to-br from-green-600 to-green-800 p-6 flex items-end">
+        <div 
+          className="fixed inset-0 bg-black/80 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 backdrop-blur-sm overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedPlayer(null);
+          }}
+        >
+          <div className="bg-slate-900 border border-white/10 rounded-t-3xl sm:rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl mt-auto sm:my-4 max-h-[95vh] overflow-y-auto">
+            {/* Modal Header - Sticky close button */}
+            <div className="sticky top-0 z-20 relative h-32 bg-gradient-to-br from-green-600 to-green-800 p-6 flex items-end">
               <button 
                 onClick={() => setSelectedPlayer(null)}
-                className="absolute top-4 right-4 text-white/60 hover:text-white bg-black/20 p-2 rounded-full backdrop-blur-md"
+                className="absolute top-3 right-3 text-white hover:text-white bg-black/50 hover:bg-black/70 p-3 rounded-full backdrop-blur-md z-30 transition-all touch-manipulation shadow-lg"
+                style={{ minWidth: '48px', minHeight: '48px' }}
               >
-                ✕
+                <span className="text-2xl font-bold leading-none">✕</span>
               </button>
               
               <div className="flex items-center gap-4">
@@ -864,12 +910,12 @@ export default function SquadPage() {
               <div>
                 <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest mb-4">World Cup 2026 Stats</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                  <StatItem label="Goals" value={Math.floor(Math.random() * 3)} />
-                  <StatItem label="Assists" value={Math.floor(Math.random() * 2)} />
-                  <StatItem label="Pass Accuracy" value={`${80 + Math.floor(Math.random() * 15)}%`} />
-                  <StatItem label="Interceptions" value={Math.floor(Math.random() * 5)} />
-                  <StatItem label="Tackles" value={Math.floor(Math.random() * 8)} />
-                  <StatItem label="Dribbles" value={Math.floor(Math.random() * 10)} />
+                  <StatItem label="Goals" value={selectedPlayer.stats?.goals || 0} />
+                  <StatItem label="Assists" value={selectedPlayer.stats?.assists || 0} />
+                  <StatItem label="Pass Accuracy" value={selectedPlayer.stats?.passAccuracy ? `${selectedPlayer.stats.passAccuracy}%` : '0%'} />
+                  <StatItem label="Interceptions" value={selectedPlayer.stats?.interceptions || 0} />
+                  <StatItem label="Tackles" value={selectedPlayer.stats?.tackles || 0} />
+                  <StatItem label="Dribbles" value={selectedPlayer.stats?.dribbles || 0} />
                 </div>
               </div>
             </div>
