@@ -78,9 +78,13 @@ const FLAG_SIZES = {
 
 export function getFlagUrl(nationCode: string | undefined | null, size: 'sm' | 'md' | 'lg' = 'md'): string {
   if (!nationCode) return '';
-  const isoCode = FLAG_CODES[nationCode.toUpperCase()] || nationCode.toLowerCase();
-  const dimensions = FLAG_SIZES[size];
-  return `https://flagcdn.com/${dimensions}/${isoCode}.png`;
+  try {
+    const isoCode = FLAG_CODES[nationCode.toUpperCase()] || nationCode.toLowerCase();
+    const dimensions = FLAG_SIZES[size];
+    return `https://flagcdn.com/${dimensions}/${isoCode}.png`;
+  } catch {
+    return '';
+  }
 }
 
 export function getFlagCode(nationCode: string | undefined | null): string {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getFlagUrl } from '@/lib/flags';
 
@@ -190,7 +190,7 @@ const FLAG_CODES: Record<string, string> = {
 
 type FilterOption = 'all' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'knockout';
 
-export default function FixturesPage() {
+function FixturesContent() {
   const searchParams = useSearchParams();
   const [filter, setFilter] = useState<FilterOption>('all');
   
@@ -330,6 +330,21 @@ export default function FixturesPage() {
   );
 }
 
+export default function FixturesPage() {
+  return (
+    <Suspense fallback={
+      <div className="max-w-5xl mx-auto">
+        <div className="mb-6">
+          <h1 className="text-2xl font-black text-white mb-2">Fixtures</h1>
+          <p className="text-white/40 text-sm">Loading...</p>
+        </div>
+      </div>
+    }>
+      <FixturesContent />
+    </Suspense>
+  );
+}
+
 function FilterButton({ children, active, onClick }: { children: React.ReactNode; active: boolean; onClick: () => void }) {
   return (
     <button
@@ -344,4 +359,3 @@ function FilterButton({ children, active, onClick }: { children: React.ReactNode
     </button>
   );
 }
-
