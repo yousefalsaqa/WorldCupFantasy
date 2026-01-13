@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { href: '/squad', label: 'Squad', icon: SquadIcon },
   { href: '/transfers', label: 'Transfers', icon: TransfersIcon },
   { href: '/fixtures', label: 'Fixtures', icon: FixturesIcon },
+  { href: '/standings', label: 'Standings', icon: StandingsIcon },
   { href: '/leagues', label: 'Leagues', icon: LeaguesIcon },
 ];
 
@@ -118,6 +119,16 @@ function FixturesIcon({ className }: { className?: string }) {
       <line x1="16" y1="2" x2="16" y2="6" />
       <line x1="8" y1="2" x2="8" y2="6" />
       <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  );
+}
+
+function StandingsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3h18v18H3z" />
+      <path d="M3 9h18" />
+      <path d="M9 3v18" />
     </svg>
   );
 }

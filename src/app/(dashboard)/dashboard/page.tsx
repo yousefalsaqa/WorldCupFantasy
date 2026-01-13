@@ -250,7 +250,7 @@ export default function DashboardPage() {
               {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'].map(group => (
                 <Link
                   key={group}
-                  href={`/fixtures?group=${group}`}
+                  href={`/standings?group=${group}`}
                   className="aspect-square bg-white/5 rounded-lg flex items-center justify-center font-bold text-white/60 hover:bg-rose-500/20 hover:text-rose-400 transition-all cursor-pointer border border-transparent hover:border-rose-500/30"
                 >
                   {group}
