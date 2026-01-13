@@ -42,22 +42,22 @@ function PlayerCard({ player }: { player: Player }) {
           secondaryColor={player.nation.kitColor2}
           number={player.shirtNumber}
           nationCode={player.nation.code}
-          size="md"
+          size="xs"
           isCaptain={player.isCaptain}
           isViceCaptain={player.isViceCaptain}
         />
       </div>
       
       {/* Name plate */}
-      <div className="mt-1 bg-gray-900/90 rounded px-3 py-0.5 min-w-[90px] text-center backdrop-blur-sm">
-        <div className="text-xs font-bold text-white truncate">
+      <div className="mt-1 bg-gray-900/90 rounded px-2 py-0.5 min-w-[60px] sm:min-w-[90px] text-center backdrop-blur-sm">
+        <div className="text-[9px] sm:text-xs font-bold text-white truncate">
           {player.displayName}
         </div>
       </div>
       
       {/* Points */}
-      <div className="mt-0.5 bg-emerald-500 rounded px-3 py-0.5 min-w-[90px] text-center">
-        <span className="text-white text-sm font-bold">{player.points}</span>
+      <div className="mt-0.5 bg-emerald-500 rounded px-2 py-0.5 min-w-[60px] sm:min-w-[90px] text-center">
+        <span className="text-white text-[10px] sm:text-sm font-bold">{player.points}</span>
       </div>
     </div>
   );
@@ -164,38 +164,38 @@ export default function TeamViewPage({ params }: { params: { teamId: string } })
           <div className="absolute top-1/2 left-0 right-0 border-t border-white" />
         </div>
 
-        <div className="relative p-4 sm:p-6 space-y-4 sm:space-y-5" style={{ overflow: 'visible' }}>
+        <div className="relative p-2 sm:p-6 space-y-3 sm:space-y-5" style={{ overflow: 'visible' }}>
           {/* Forwards */}
-          <div className="flex justify-center gap-4 sm:gap-8 overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingLeft: '12px', paddingRight: '12px' }}>
+          <div className="flex justify-center gap-1 sm:gap-8 overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             {forwards.map(player => (
-              <div key={player.id} className="flex-shrink-0" style={{ paddingLeft: '4px', paddingRight: '4px' }}>
+              <div key={player.id} className="flex-shrink-0">
                 <PlayerCard player={player} />
               </div>
             ))}
           </div>
 
           {/* Midfielders */}
-          <div className="flex justify-center gap-3 sm:gap-6 overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingLeft: '12px', paddingRight: '12px' }}>
+          <div className="flex justify-center gap-1 sm:gap-6 overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             {midfielders.map(player => (
-              <div key={player.id} className="flex-shrink-0" style={{ paddingLeft: '4px', paddingRight: '4px' }}>
+              <div key={player.id} className="flex-shrink-0">
                 <PlayerCard player={player} />
               </div>
             ))}
           </div>
 
           {/* Defenders */}
-          <div className="flex justify-center gap-3 sm:gap-6 overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingLeft: '12px', paddingRight: '12px' }}>
+          <div className="flex justify-center gap-1 sm:gap-6 overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             {defenders.map(player => (
-              <div key={player.id} className="flex-shrink-0" style={{ paddingLeft: '4px', paddingRight: '4px' }}>
+              <div key={player.id} className="flex-shrink-0">
                 <PlayerCard player={player} />
               </div>
             ))}
           </div>
 
           {/* Goalkeeper */}
-          <div className="flex justify-center overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingLeft: '12px', paddingRight: '12px' }}>
+          <div className="flex justify-center overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             {goalkeeper.map(player => (
-              <div key={player.id} className="flex-shrink-0" style={{ paddingLeft: '4px', paddingRight: '4px' }}>
+              <div key={player.id} className="flex-shrink-0">
                 <PlayerCard player={player} />
               </div>
             ))}

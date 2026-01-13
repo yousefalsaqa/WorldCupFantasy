@@ -234,7 +234,7 @@ interface PlayerCardProps {
   showPoints?: number;
   isCaptain?: boolean;
   isViceCaptain?: boolean;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
 }
 
 export function PlayerCard({
@@ -246,10 +246,9 @@ export function PlayerCard({
   isViceCaptain,
   size = 'md',
 }: PlayerCardProps) {
-  // On mobile, use 'sm' size, otherwise use provided size
-  const kitSize = size === 'sm' ? 'sm' : size === 'lg' ? 'lg' : 'md';
-  const nameSize = size === 'sm' ? 'text-[10px]' : size === 'lg' ? 'text-sm' : 'text-xs';
-  const plateWidth = size === 'sm' ? 'min-w-[70px]' : size === 'lg' ? 'min-w-[100px]' : 'min-w-[85px]';
+  const kitSize = size === 'xs' ? 'xs' : size === 'sm' ? 'sm' : size === 'lg' ? 'lg' : 'md';
+  const nameSize = size === 'xs' ? 'text-[9px]' : size === 'sm' ? 'text-[10px]' : size === 'lg' ? 'text-sm' : 'text-xs';
+  const plateWidth = size === 'xs' ? 'min-w-[60px]' : size === 'sm' ? 'min-w-[70px]' : size === 'lg' ? 'min-w-[100px]' : 'min-w-[85px]';
   
   return (
     <div 

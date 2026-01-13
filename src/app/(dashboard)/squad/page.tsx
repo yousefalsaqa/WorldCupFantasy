@@ -720,64 +720,64 @@ export default function SquadPage() {
 
         <div className="relative z-10 space-y-3 sm:space-y-5" style={{ overflow: 'visible' }}>
           {/* FWD */}
-          <div className="flex justify-center gap-1 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingLeft: '8px', paddingRight: '8px' }}>
+          <div className="flex justify-center gap-0.5 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             {fwds.map(p => (
-              <div key={p.id} className="flex-shrink-0" style={{ paddingLeft: '2px', paddingRight: '2px' }}>
+              <div key={p.id} className="flex-shrink-0">
                 <PlayerCard
                   player={p}
                   onClick={() => setSelectedPlayer(p)}
                   showOpponent={getNextOpponent(p.nation?.code || '')}
                   isCaptain={captainId === p.id}
                   isViceCaptain={viceCaptainId === p.id}
-                  size="sm"
+                  size="xs"
                 />
               </div>
             ))}
           </div>
 
           {/* MID */}
-          <div className="flex justify-center gap-1 sm:gap-4 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingLeft: '8px', paddingRight: '8px' }}>
+          <div className="flex justify-center gap-0.5 sm:gap-4 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             {mids.map(p => (
-              <div key={p.id} className="flex-shrink-0" style={{ paddingLeft: '2px', paddingRight: '2px' }}>
+              <div key={p.id} className="flex-shrink-0">
                 <PlayerCard
                   player={p}
                   onClick={() => setSelectedPlayer(p)}
                   showOpponent={getNextOpponent(p.nation?.code || '')}
                   isCaptain={captainId === p.id}
                   isViceCaptain={viceCaptainId === p.id}
-                  size="sm"
+                  size="xs"
                 />
               </div>
             ))}
           </div>
 
           {/* DEF */}
-          <div className="flex justify-center gap-1 sm:gap-4 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingLeft: '8px', paddingRight: '8px' }}>
+          <div className="flex justify-center gap-0.5 sm:gap-4 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             {defs.map(p => (
-              <div key={p.id} className="flex-shrink-0" style={{ paddingLeft: '2px', paddingRight: '2px' }}>
+              <div key={p.id} className="flex-shrink-0">
                 <PlayerCard
                   player={p}
                   onClick={() => setSelectedPlayer(p)}
                   showOpponent={getNextOpponent(p.nation?.code || '')}
                   isCaptain={captainId === p.id}
                   isViceCaptain={viceCaptainId === p.id}
-                  size="sm"
+                  size="xs"
                 />
               </div>
             ))}
           </div>
 
           {/* GK */}
-          <div className="flex justify-center gap-1.5 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingLeft: '8px', paddingRight: '8px' }}>
+          <div className="flex justify-center gap-1 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             {gks.map(p => (
-              <div key={p.id} className="flex-shrink-0" style={{ paddingLeft: '2px', paddingRight: '2px' }}>
+              <div key={p.id} className="flex-shrink-0">
                 <PlayerCard
                   player={p}
                   onClick={() => setSelectedPlayer(p)}
                   showOpponent={getNextOpponent(p.nation?.code || '')}
                   isCaptain={captainId === p.id}
                   isViceCaptain={viceCaptainId === p.id}
-                  size="sm"
+                  size="xs"
                 />
               </div>
             ))}
