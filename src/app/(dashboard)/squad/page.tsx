@@ -680,7 +680,7 @@ export default function SquadPage() {
   const fwds = startingXI.filter(p => p.position === 'FWD');
 
   return (
-    <div className="max-w-5xl mx-auto px-1 sm:px-4 py-6" style={{ overflowX: 'hidden', overflowY: 'visible' }}>
+    <div className="max-w-5xl mx-auto px-0 sm:px-4 py-6" style={{ overflowX: 'visible', overflowY: 'visible' }}>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
@@ -720,9 +720,9 @@ export default function SquadPage() {
 
         <div className="relative z-10 space-y-3 sm:space-y-5" style={{ overflow: 'visible' }}>
           {/* FWD */}
-          <div className="flex justify-center gap-1 sm:gap-6 overflow-x-auto pb-3 -mx-1 px-1 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div className="flex justify-center gap-1 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingLeft: '8px', paddingRight: '8px' }}>
             {fwds.map(p => (
-              <div key={p.id} className="flex-shrink-0">
+              <div key={p.id} className="flex-shrink-0" style={{ paddingLeft: '2px', paddingRight: '2px' }}>
                 <PlayerCard
                   player={p}
                   onClick={() => setSelectedPlayer(p)}
@@ -736,9 +736,9 @@ export default function SquadPage() {
           </div>
 
           {/* MID */}
-          <div className="flex justify-center gap-1 sm:gap-4 overflow-x-auto pb-3 -mx-1 px-1 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div className="flex justify-center gap-1 sm:gap-4 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingLeft: '8px', paddingRight: '8px' }}>
             {mids.map(p => (
-              <div key={p.id} className="flex-shrink-0">
+              <div key={p.id} className="flex-shrink-0" style={{ paddingLeft: '2px', paddingRight: '2px' }}>
                 <PlayerCard
                   player={p}
                   onClick={() => setSelectedPlayer(p)}
@@ -752,9 +752,9 @@ export default function SquadPage() {
           </div>
 
           {/* DEF */}
-          <div className="flex justify-center gap-1 sm:gap-4 overflow-x-auto pb-3 -mx-1 px-1 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div className="flex justify-center gap-1 sm:gap-4 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingLeft: '8px', paddingRight: '8px' }}>
             {defs.map(p => (
-              <div key={p.id} className="flex-shrink-0">
+              <div key={p.id} className="flex-shrink-0" style={{ paddingLeft: '2px', paddingRight: '2px' }}>
                 <PlayerCard
                   player={p}
                   onClick={() => setSelectedPlayer(p)}
@@ -768,9 +768,9 @@ export default function SquadPage() {
           </div>
 
           {/* GK */}
-          <div className="flex justify-center gap-1.5 sm:gap-6 overflow-x-auto pb-3 -mx-1 px-1 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div className="flex justify-center gap-1.5 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingLeft: '8px', paddingRight: '8px' }}>
             {gks.map(p => (
-              <div key={p.id} className="flex-shrink-0">
+              <div key={p.id} className="flex-shrink-0" style={{ paddingLeft: '2px', paddingRight: '2px' }}>
                 <PlayerCard
                   player={p}
                   onClick={() => setSelectedPlayer(p)}
@@ -827,7 +827,7 @@ export default function SquadPage() {
       {/* Player Detail Modal */}
       {selectedPlayer && (
         <div 
-          className="fixed inset-0 bg-black/80 z-[9999] p-0 sm:p-4 backdrop-blur-sm"
+          className="fixed inset-0 bg-black/80 z-[9999] backdrop-blur-sm"
           onClick={(e) => {
             if (e.target === e.currentTarget) setSelectedPlayer(null);
           }}
@@ -837,36 +837,49 @@ export default function SquadPage() {
             left: 0,
             right: 0,
             bottom: 0,
-            margin: 0,
-            padding: 0,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            overflow: 'auto'
+            padding: '16px',
+            overflow: 'hidden'
           }}
         >
           <div 
-            className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl max-h-[95vh] flex flex-col"
-            style={{ margin: 'auto' }}
+            className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col"
+            style={{ 
+              maxHeight: '90vh',
+              margin: '0 auto',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+            onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header - Fixed close button */}
-            <div className="relative bg-gradient-to-br from-green-600 to-green-800 p-4 sm:p-6 flex items-end flex-shrink-0 min-h-[100px] sm:min-h-[120px]">
+            {/* Modal Header - Fixed at top with X button */}
+            <div 
+              className="relative bg-gradient-to-br from-green-600 to-green-800 p-4 sm:p-6 flex items-end flex-shrink-0"
+              style={{ 
+                minHeight: '100px',
+                position: 'relative',
+                zIndex: 10
+              }}
+            >
               <button 
                 onClick={() => setSelectedPlayer(null)}
-                className="absolute top-3 right-3 sm:top-4 sm:right-4 text-white hover:text-white bg-black/80 hover:bg-black/95 p-3 rounded-full backdrop-blur-md z-[10000] transition-all touch-manipulation shadow-xl"
+                className="absolute text-white bg-black/90 hover:bg-black p-3 rounded-full backdrop-blur-md transition-all touch-manipulation shadow-xl"
                 style={{ 
+                  top: '8px',
+                  right: '8px',
                   minWidth: '48px', 
                   minHeight: '48px', 
                   WebkitTapHighlightColor: 'transparent',
-                  position: 'absolute',
-                  top: '12px',
-                  right: '12px'
+                  zIndex: 10001,
+                  position: 'absolute'
                 }}
               >
                 <span className="text-2xl font-bold leading-none block">✕</span>
               </button>
               
-              <div className="flex items-center gap-3 sm:gap-4 pr-12">
+              <div className="flex items-center gap-3 sm:gap-4 pr-14">
                 <Kit
                   primaryColor={selectedPlayer.nation?.kitColor1 || '#FFF'}
                   secondaryColor={selectedPlayer.nation?.kitColor2 || '#000'}
@@ -888,7 +901,15 @@ export default function SquadPage() {
               </div>
             </div>
 
-            <div className="p-6 space-y-6 overflow-y-auto flex-1">
+            <div 
+              className="p-6 space-y-6 overflow-y-auto"
+              style={{ 
+                flex: 1,
+                overflowY: 'auto',
+                WebkitOverflowScrolling: 'touch',
+                minHeight: 0
+              }}
+            >
               {/* Quick Actions */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <button

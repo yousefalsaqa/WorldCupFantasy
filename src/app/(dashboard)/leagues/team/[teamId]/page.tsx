@@ -35,16 +35,18 @@ interface TeamData {
 // Player Card Component
 function PlayerCard({ player }: { player: Player }) {
   return (
-    <div className="flex flex-col items-center">
-      <Kit
-        primaryColor={player.nation.kitColor1}
-        secondaryColor={player.nation.kitColor2}
-        number={player.shirtNumber}
-        nationCode={player.nation.code}
-        size="md"
-        isCaptain={player.isCaptain}
-        isViceCaptain={player.isViceCaptain}
-      />
+    <div className="flex flex-col items-center" style={{ overflow: 'visible' }}>
+      <div style={{ overflow: 'visible' }}>
+        <Kit
+          primaryColor={player.nation.kitColor1}
+          secondaryColor={player.nation.kitColor2}
+          number={player.shirtNumber}
+          nationCode={player.nation.code}
+          size="md"
+          isCaptain={player.isCaptain}
+          isViceCaptain={player.isViceCaptain}
+        />
+      </div>
       
       {/* Name plate */}
       <div className="mt-1 bg-gray-900/90 rounded px-3 py-0.5 min-w-[90px] text-center backdrop-blur-sm">
@@ -129,7 +131,7 @@ export default function TeamViewPage({ params }: { params: { teamId: string } })
   const goalkeeper = team.starting.filter(p => p.position === 'GK');
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-3xl mx-auto px-0 sm:px-4" style={{ overflowX: 'visible' }}>
       {/* Header */}
       <div className="bg-gradient-to-r from-rose-500 to-pink-500 p-4 flex items-center justify-between rounded-t-2xl">
         <Link 
@@ -153,7 +155,7 @@ export default function TeamViewPage({ params }: { params: { teamId: string } })
       </div>
 
       {/* Pitch */}
-      <div className="bg-gradient-to-b from-green-700 via-green-600 to-green-700 relative overflow-hidden">
+      <div className="bg-gradient-to-b from-green-700 via-green-600 to-green-700 relative" style={{ overflow: 'visible' }}>
         {/* Pitch markings */}
         <div className="absolute inset-0 opacity-20">
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-16 border-2 border-white border-t-0" />
@@ -162,32 +164,40 @@ export default function TeamViewPage({ params }: { params: { teamId: string } })
           <div className="absolute top-1/2 left-0 right-0 border-t border-white" />
         </div>
 
-        <div className="relative p-6 space-y-5">
+        <div className="relative p-4 sm:p-6 space-y-4 sm:space-y-5" style={{ overflow: 'visible' }}>
           {/* Forwards */}
-          <div className="flex justify-center gap-8">
+          <div className="flex justify-center gap-4 sm:gap-8 overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingLeft: '12px', paddingRight: '12px' }}>
             {forwards.map(player => (
-              <PlayerCard key={player.id} player={player} />
+              <div key={player.id} className="flex-shrink-0" style={{ paddingLeft: '4px', paddingRight: '4px' }}>
+                <PlayerCard player={player} />
+              </div>
             ))}
           </div>
 
           {/* Midfielders */}
-          <div className="flex justify-center gap-6">
+          <div className="flex justify-center gap-3 sm:gap-6 overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingLeft: '12px', paddingRight: '12px' }}>
             {midfielders.map(player => (
-              <PlayerCard key={player.id} player={player} />
+              <div key={player.id} className="flex-shrink-0" style={{ paddingLeft: '4px', paddingRight: '4px' }}>
+                <PlayerCard player={player} />
+              </div>
             ))}
           </div>
 
           {/* Defenders */}
-          <div className="flex justify-center gap-6">
+          <div className="flex justify-center gap-3 sm:gap-6 overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingLeft: '12px', paddingRight: '12px' }}>
             {defenders.map(player => (
-              <PlayerCard key={player.id} player={player} />
+              <div key={player.id} className="flex-shrink-0" style={{ paddingLeft: '4px', paddingRight: '4px' }}>
+                <PlayerCard player={player} />
+              </div>
             ))}
           </div>
 
           {/* Goalkeeper */}
-          <div className="flex justify-center">
+          <div className="flex justify-center overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingLeft: '12px', paddingRight: '12px' }}>
             {goalkeeper.map(player => (
-              <PlayerCard key={player.id} player={player} />
+              <div key={player.id} className="flex-shrink-0" style={{ paddingLeft: '4px', paddingRight: '4px' }}>
+                <PlayerCard player={player} />
+              </div>
             ))}
           </div>
         </div>
