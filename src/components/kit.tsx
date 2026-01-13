@@ -246,6 +246,7 @@ export function PlayerCard({
   isViceCaptain,
   size = 'md',
 }: PlayerCardProps) {
+  // On mobile, use 'sm' size, otherwise use provided size
   const kitSize = size === 'sm' ? 'sm' : size === 'lg' ? 'lg' : 'md';
   const nameSize = size === 'sm' ? 'text-[10px]' : size === 'lg' ? 'text-sm' : 'text-xs';
   const plateWidth = size === 'sm' ? 'min-w-[70px]' : size === 'lg' ? 'min-w-[100px]' : 'min-w-[85px]';
