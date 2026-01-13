@@ -252,18 +252,21 @@ export function PlayerCard({
   
   return (
     <div 
-      className={`flex flex-col items-center cursor-pointer group transition-transform hover:scale-105 hover:-translate-y-1`}
+      className={`flex flex-col items-center cursor-pointer group transition-transform hover:scale-105 hover:-translate-y-1 relative`}
       onClick={onClick}
+      style={{ overflow: 'visible' }}
     >
-      <Kit
-        primaryColor={player.nation?.kitColor1 || '#FFFFFF'}
-        secondaryColor={player.nation?.kitColor2 || '#000000'}
-        number={player.shirtNumber}
-        nationCode={player.nation?.code || ''}
-        size={kitSize}
-        isCaptain={isCaptain}
-        isViceCaptain={isViceCaptain}
-      />
+      <div className="relative" style={{ overflow: 'visible' }}>
+        <Kit
+          primaryColor={player.nation?.kitColor1 || '#FFFFFF'}
+          secondaryColor={player.nation?.kitColor2 || '#000000'}
+          number={player.shirtNumber}
+          nationCode={player.nation?.code || ''}
+          size={kitSize}
+          isCaptain={isCaptain}
+          isViceCaptain={isViceCaptain}
+        />
+      </div>
       
       {/* Name plate */}
       <div className={`mt-1 px-2 py-0.5 bg-gray-900/95 rounded ${plateWidth} text-center backdrop-blur-sm`}>

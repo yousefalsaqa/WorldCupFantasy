@@ -660,7 +660,7 @@ export default function SquadPage() {
   const fwds = startingXI.filter(p => p.position === 'FWD');
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6">
+    <div className="max-w-5xl mx-auto px-2 sm:px-4 py-6 overflow-x-hidden">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
@@ -691,8 +691,8 @@ export default function SquadPage() {
       </div>
 
       {/* Pitch */}
-      <div className="relative bg-gradient-to-b from-green-700 via-green-600 to-green-700 rounded-2xl p-6 mb-6 overflow-hidden">
-        <div className="absolute inset-0 opacity-20">
+      <div className="relative bg-gradient-to-b from-green-700 via-green-600 to-green-700 rounded-2xl p-3 sm:p-6 mb-6 overflow-visible">
+        <div className="absolute inset-0 opacity-20 rounded-2xl">
           <div className="absolute top-1/2 left-0 right-0 h-px bg-white" />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 border border-white rounded-full" />
           <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-40 h-14 border-t border-l border-r border-white" />
@@ -700,9 +700,9 @@ export default function SquadPage() {
 
         <div className="relative z-10 space-y-4 sm:space-y-5">
           {/* FWD */}
-          <div className="flex justify-center gap-3 sm:gap-6 overflow-x-auto pb-2 -mx-2 px-2">
+          <div className="flex justify-center gap-3 sm:gap-6 overflow-x-auto pb-2 -mx-3 sm:-mx-2 px-3 sm:px-2 scrollbar-hide">
             {fwds.map(p => (
-              <div key={p.id} className="flex-shrink-0">
+              <div key={p.id} className="flex-shrink-0 px-1">
                 <PlayerCard
                   player={p}
                   onClick={() => setSelectedPlayer(p)}
@@ -715,9 +715,9 @@ export default function SquadPage() {
           </div>
 
           {/* MID */}
-          <div className="flex justify-center gap-2 sm:gap-4 overflow-x-auto pb-2 -mx-2 px-2">
+          <div className="flex justify-center gap-2 sm:gap-4 overflow-x-auto pb-2 -mx-3 sm:-mx-2 px-3 sm:px-2 scrollbar-hide">
             {mids.map(p => (
-              <div key={p.id} className="flex-shrink-0">
+              <div key={p.id} className="flex-shrink-0 px-1">
                 <PlayerCard
                   player={p}
                   onClick={() => setSelectedPlayer(p)}
@@ -730,9 +730,9 @@ export default function SquadPage() {
           </div>
 
           {/* DEF */}
-          <div className="flex justify-center gap-2 sm:gap-4 overflow-x-auto pb-2 -mx-2 px-2">
+          <div className="flex justify-center gap-2 sm:gap-4 overflow-x-auto pb-2 -mx-3 sm:-mx-2 px-3 sm:px-2 scrollbar-hide">
             {defs.map(p => (
-              <div key={p.id} className="flex-shrink-0">
+              <div key={p.id} className="flex-shrink-0 px-1">
                 <PlayerCard
                   player={p}
                   onClick={() => setSelectedPlayer(p)}
@@ -745,9 +745,9 @@ export default function SquadPage() {
           </div>
 
           {/* GK */}
-          <div className="flex justify-center gap-4 sm:gap-6 overflow-x-auto pb-2 -mx-2 px-2">
+          <div className="flex justify-center gap-4 sm:gap-6 overflow-x-auto pb-2 -mx-3 sm:-mx-2 px-3 sm:px-2 scrollbar-hide">
             {gks.map(p => (
-              <div key={p.id} className="flex-shrink-0">
+              <div key={p.id} className="flex-shrink-0 px-1">
                 <PlayerCard
                   player={p}
                   onClick={() => setSelectedPlayer(p)}
@@ -803,23 +803,24 @@ export default function SquadPage() {
       {/* Player Detail Modal */}
       {selectedPlayer && (
         <div 
-          className="fixed inset-0 bg-black/80 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 backdrop-blur-sm overflow-y-auto"
+          className="fixed inset-0 bg-black/80 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 backdrop-blur-sm"
           onClick={(e) => {
             if (e.target === e.currentTarget) setSelectedPlayer(null);
           }}
+          style={{ position: 'fixed', overflow: 'hidden' }}
         >
-          <div className="bg-slate-900 border border-white/10 rounded-t-3xl sm:rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl mt-auto sm:my-4 max-h-[95vh] overflow-y-auto">
+          <div className="bg-slate-900 border border-white/10 rounded-t-3xl sm:rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl max-h-[90vh] sm:max-h-[95vh] flex flex-col">
             {/* Modal Header - Sticky close button */}
-            <div className="sticky top-0 z-20 relative h-32 bg-gradient-to-br from-green-600 to-green-800 p-6 flex items-end">
+            <div className="relative bg-gradient-to-br from-green-600 to-green-800 p-4 sm:p-6 flex items-end flex-shrink-0 min-h-[120px] sm:min-h-[128px]">
               <button 
                 onClick={() => setSelectedPlayer(null)}
-                className="absolute top-3 right-3 text-white hover:text-white bg-black/50 hover:bg-black/70 p-3 rounded-full backdrop-blur-md z-30 transition-all touch-manipulation shadow-lg"
-                style={{ minWidth: '48px', minHeight: '48px' }}
+                className="absolute top-3 right-3 sm:top-4 sm:right-4 text-white hover:text-white bg-black/60 hover:bg-black/80 p-2.5 sm:p-3 rounded-full backdrop-blur-md z-30 transition-all touch-manipulation shadow-lg"
+                style={{ minWidth: '44px', minHeight: '44px', WebkitTapHighlightColor: 'transparent' }}
               >
-                <span className="text-2xl font-bold leading-none">✕</span>
+                <span className="text-xl sm:text-2xl font-bold leading-none block">✕</span>
               </button>
               
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 sm:gap-4 pr-12">
                 <Kit
                   primaryColor={selectedPlayer.nation?.kitColor1 || '#FFF'}
                   secondaryColor={selectedPlayer.nation?.kitColor2 || '#000'}
@@ -841,7 +842,7 @@ export default function SquadPage() {
               </div>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-6 overflow-y-auto flex-1">
               {/* Quick Actions */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <button
