@@ -172,21 +172,23 @@ export const syncService = {
     const apiFixtures = await apiFootball.getFixtures(round);
     let added = 0, updated = 0;
 
-    // Get or create gameweek
+    // Get or create stage (World Cup uses Stage instead of Gameweek)
     const roundMatch = (round || 'Regular Season - 1').match(/(\d+)/);
-    const gwNumber = roundMatch ? parseInt(roundMatch[1]) : 1;
+    const stageNumber = roundMatch ? parseInt(roundMatch[1]) : 1;
+    const stageId = `GR${stageNumber}`; // Group stage ID format
 
-    let gameweek = await prisma.gameweek.findFirst({
-      where: { number: gwNumber },
+    let stage = await prisma.stage.findFirst({
+      where: { stageId },
     });
 
-    if (!gameweek) {
-      gameweek = await prisma.gameweek.create({
+    if (!stage) {
+      stage = await prisma.stage.create({
         data: {
-          number: gwNumber,
-          name: `Gameweek ${gwNumber}`,
+          stageId,
+          name: `Group Stage - Round ${stageNumber}`,
+          order: stageNumber,
           deadlineTime: new Date(apiFixtures[0]?.fixture.date || Date.now()),
-          isCurrent: true,
+          isActive: true,
         },
       });
     }
@@ -206,36 +208,37 @@ export const syncService = {
       }
 
       // Check if fixture exists
-      const existing = await prisma.fixture.findFirst({
+      // TODO: Update for World Cup - Match model uses homeNationId/awayNationId
+      const existing = await prisma.match.findFirst({
         where: {
-          gameweekId: gameweek.id,
-          homeClubId: homeClub.id,
-          awayClubId: awayClub.id,
+          stageId: stage.id,
+          homeNationId: homeClub?.id || '', // Placeholder - needs proper nation mapping
+          awayNationId: awayClub?.id || '', // Placeholder - needs proper nation mapping
         },
       });
 
-      const fixtureData = {
+      const matchData = {
         kickoffTime: new Date(apiFixture.fixture.date),
         homeScore: apiFixture.goals.home,
         awayScore: apiFixture.goals.away,
         isStarted: ['1H', 'HT', '2H', 'FT', 'AET', 'PEN'].includes(apiFixture.fixture.status.short),
         isFinished: ['FT', 'AET', 'PEN'].includes(apiFixture.fixture.status.short),
-        minutesPlayed: apiFixture.fixture.status.elapsed || 0,
       };
 
       if (existing) {
-        await prisma.fixture.update({
+        await prisma.match.update({
           where: { id: existing.id },
-          data: fixtureData,
+          data: matchData,
         });
         updated++;
-      } else {
-        await prisma.fixture.create({
+      } else if (homeClub && awayClub) {
+        // TODO: Update for World Cup - use homeNationId/awayNationId with proper nation mapping
+        await prisma.match.create({
           data: {
-            gameweekId: gameweek.id,
-            homeClubId: homeClub.id,
-            awayClubId: awayClub.id,
-            ...fixtureData,
+            stageId: stage.id,
+            homeNationId: homeClub.id, // Will need proper nation mapping
+            awayNationId: awayClub.id, // Will need proper nation mapping
+            ...matchData,
           },
         });
         added++;
@@ -262,7 +265,7 @@ export const syncService = {
     }
 
     // Get fixture details
-    const fixture = await prisma.fixture.findUnique({
+    const fixture = await prisma.match.findUnique({
       where: { id: dbFixtureId },
       include: { homeClub: true, awayClub: true },
     });
@@ -365,7 +368,7 @@ export const syncService = {
     }
 
     // Mark fixture as finished
-    await prisma.fixture.update({
+    await prisma.match.update({
       where: { id: dbFixtureId },
       data: { isFinished: true },
     });
@@ -391,7 +394,7 @@ export const syncService = {
     console.log(`[SmartSync] Remaining API requests: ${apiFootball.getRemainingRequests()}`);
 
     // Get current gameweek fixtures that aren't finished
-    const pendingFixtures = await prisma.fixture.findMany({
+    const pendingFixtures = await prisma.match.findMany({
       where: {
         isFinished: false,
         kickoffTime: { lte: new Date() }, // Match should have started
@@ -422,7 +425,7 @@ export const syncService = {
 
         if (dbFixture) {
           // Update score
-          await prisma.fixture.update({
+          await prisma.match.update({
             where: { id: dbFixture.id },
             data: {
               homeScore: live.goals.home,
