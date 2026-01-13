@@ -267,7 +267,7 @@ export const syncService = {
     // Get fixture details
     const fixture = await prisma.match.findUnique({
       where: { id: dbFixtureId },
-      include: { homeClub: true, awayClub: true },
+      include: { homeNation: true, awayNation: true },
     });
 
     if (!fixture) return { playersUpdated: 0 };
@@ -285,7 +285,7 @@ export const syncService = {
     let playersUpdated = 0;
 
     for (const teamStats of playerStatsData) {
-      const isHomeTeam = teamStats.team.id.toString() === fixture.homeClubId;
+      const isHomeTeam = teamStats.team.id.toString() === fixture.homeNationId;
       const goalsConceeded = isHomeTeam ? (fixture.awayScore || 0) : (fixture.homeScore || 0);
 
       for (const playerStat of teamStats.players) {
@@ -309,7 +309,7 @@ export const syncService = {
 
         // Calculate points
         const breakdown = calculatePerformancePoints({
-          position: ourPlayer.position,
+          position: ourPlayer.position as 'GK' | 'DEF' | 'MID' | 'FWD',
           minutesPlayed,
           goals,
           assists,
@@ -400,9 +400,9 @@ export const syncService = {
         kickoffTime: { lte: new Date() }, // Match should have started
       },
       include: {
-        gameweek: true,
-        homeClub: true,
-        awayClub: true,
+        stage: true,
+        homeNation: true,
+        awayNation: true,
       },
       take: 10, // Limit to save API calls
     });
@@ -419,8 +419,8 @@ export const syncService = {
 
       for (const live of liveFixtures) {
         const dbFixture = pendingFixtures.find(f => 
-          f.homeClub.name.toLowerCase().includes(live.teams.home.name.toLowerCase().split(' ')[0]) ||
-          live.teams.home.name.toLowerCase().includes(f.homeClub.name.toLowerCase().split(' ')[0])
+          f.homeNation.name.toLowerCase().includes(live.teams.home.name.toLowerCase().split(' ')[0]) ||
+          live.teams.home.name.toLowerCase().includes(f.homeNation.name.toLowerCase().split(' ')[0])
         );
 
         if (dbFixture) {
