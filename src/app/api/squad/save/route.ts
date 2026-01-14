@@ -20,7 +20,7 @@ interface SaveSquadRequest {
 
 // Helper to get session from request cookies
 async function getSessionFromRequest(request: NextRequest): Promise<JWTPayload | null> {
-  const token = request.cookies.get('fantasy-laliga-session')?.value;
+  const token = request.cookies.get('auth_token')?.value;
   
   if (!token) {
     console.log('No session cookie found');
@@ -124,11 +124,31 @@ export async function POST(request: NextRequest) {
       },
     });
     
-    // Join global league if not already
-    const globalLeague = await prisma.league.findFirst({
+    // Ensure global league exists and join if not already
+    let globalLeague = await prisma.league.findFirst({
       where: { isGlobal: true },
     });
     
+    // Create global league if it doesn't exist
+    if (!globalLeague) {
+      // Get admin user to be owner
+      const adminUser = await prisma.user.findFirst({
+        where: { isAdmin: true },
+      });
+      
+      if (adminUser) {
+        globalLeague = await prisma.league.create({
+          data: {
+            name: 'World Cup 2026 - Global League',
+            code: 'WC2026GL',
+            ownerId: adminUser.id,
+            isGlobal: true,
+          },
+        });
+      }
+    }
+    
+    // Join global league if it exists
     if (globalLeague) {
       const existing = await prisma.leagueMembership.findFirst({
         where: {

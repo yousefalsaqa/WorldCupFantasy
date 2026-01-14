@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 async function getUser() {
   const cookieStore = await cookies();
-  const token = cookieStore.get('fantasy-laliga-session')?.value;
+  const token = cookieStore.get('auth_token')?.value;
   if (!token) return null;
 
   const decoded = await verifyToken(token);
@@ -75,19 +75,48 @@ export async function POST(request: Request) {
       },
     });
 
-    // Auto-join global league
-    const globalLeague = await prisma.league.findFirst({
+    // Ensure global league exists and auto-join
+    let globalLeague = await prisma.league.findFirst({
       where: { isGlobal: true },
     });
+    
+    // Create global league if it doesn't exist
+    if (!globalLeague) {
+      // Get admin user to be owner
+      const adminUser = await prisma.user.findFirst({
+        where: { isAdmin: true },
+      });
+      
+      if (adminUser) {
+        globalLeague = await prisma.league.create({
+          data: {
+            name: 'World Cup 2026 - Global League',
+            code: 'WC2026GL',
+            ownerId: adminUser.id,
+            isGlobal: true,
+          },
+        });
+      }
+    }
 
+    // Join global league if it exists
     if (globalLeague) {
-      await prisma.leagueMembership.create({
-        data: {
+      const existing = await prisma.leagueMembership.findFirst({
+        where: {
           leagueId: globalLeague.id,
           teamId: team.id,
-          userId: user.id,
         },
       });
+      
+      if (!existing) {
+        await prisma.leagueMembership.create({
+          data: {
+            leagueId: globalLeague.id,
+            teamId: team.id,
+            userId: user.id,
+          },
+        });
+      }
     }
 
     return NextResponse.json({ team });

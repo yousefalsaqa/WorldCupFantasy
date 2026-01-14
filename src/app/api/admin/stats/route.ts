@@ -38,6 +38,8 @@ export async function GET() {
       prisma.match.count(),
     ]);
 
+    console.log('Admin stats:', { nations, players, users, teams, stages, matches });
+
     return NextResponse.json({
       nations,
       players,
