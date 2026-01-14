@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 async function getSessionFromRequest(request: NextRequest): Promise<JWTPayload | null> {
   try {
     const cookieStore = await cookies();
-    const token = cookieStore.get('fantasy-laliga-session')?.value || request.cookies.get('fantasy-laliga-session')?.value;
+    const token = cookieStore.get('auth_token')?.value || request.cookies.get('auth_token')?.value;
     if (!token) return null;
     return await verifyToken(token);
   } catch {

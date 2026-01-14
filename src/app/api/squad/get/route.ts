@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
-    const token = request.cookies.get('fantasy-laliga-session')?.value;
+    const token = request.cookies.get('auth_token')?.value;
     
     if (!token) {
       return NextResponse.json({ squad: [] }, { status: 200 });

@@ -15,7 +15,7 @@ interface TransferRequest {
 
 async function getSession() {
   const cookieStore = await cookies();
-  const token = cookieStore.get('fantasy-laliga-session')?.value;
+  const token = cookieStore.get('auth_token')?.value;
   
   if (!token) return null;
   

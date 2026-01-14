@@ -56,10 +56,16 @@ export default function DashboardPage() {
       const stageData = await stageRes.json();
 
       setUser(userData.user);
-      setTeam(teamData.team);
+      // Check if team exists (even if API returns error, team might be null)
+      if (teamRes.ok && teamData.team) {
+        setTeam(teamData.team);
+      } else {
+        setTeam(null);
+      }
       setCurrentStage(stageData.stage);
     } catch (error) {
       console.error('Load error:', error);
+      setTeam(null);
     }
     setLoading(false);
   }
@@ -75,11 +81,15 @@ export default function DashboardPage() {
       });
 
       if (res.ok) {
-        loadData();
-        setShowCreateTeam(false);
+        // Redirect to squad builder after creating team
+        window.location.href = '/squad';
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to create team');
       }
     } catch (error) {
       console.error('Create team error:', error);
+      alert('Failed to create team. Please try again.');
     }
   }
 
