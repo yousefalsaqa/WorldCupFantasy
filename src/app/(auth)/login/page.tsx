@@ -124,13 +124,6 @@ export default function LoginPage() {
             </p>
           </div>
         </div>
-
-        {/* Demo hint */}
-        <div className="mt-6 text-center">
-          <p className="text-white/30 text-xs">
-            Demo: admin@worldcupfantasy.com / admin123
-          </p>
-        </div>
       </div>
     </div>
   );

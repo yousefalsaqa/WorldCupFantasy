@@ -271,8 +271,8 @@ async function main() {
   console.log('🏆 World Cup 2026 Fantasy - Database Seed');
   console.log('=========================================\n');
 
-  // Clear existing data
-  console.log('🗑️  Clearing existing data...');
+  // Clear existing data (but preserve admin users)
+  console.log('🗑️  Clearing existing data (preserving admin users)...');
   await prisma.auditLog.deleteMany();
   await prisma.leagueMembership.deleteMany();
   await prisma.league.deleteMany();
@@ -281,24 +281,43 @@ async function main() {
   await prisma.squadPlayer.deleteMany();
   await prisma.team.deleteMany();
   await prisma.session.deleteMany();
-  await prisma.user.deleteMany();
+  // Only delete non-admin users
+  await prisma.user.deleteMany({
+    where: { isAdmin: false },
+  });
   await prisma.playerPerformance.deleteMany();
   await prisma.player.deleteMany();
   await prisma.match.deleteMany();
   await prisma.stage.deleteMany();
   await prisma.nation.deleteMany();
 
-  // Create admin user
-  console.log('👤 Creating admin user...');
-  const adminUser = await prisma.user.create({
-    data: {
-      email: 'admin@worldcupfantasy.com',
-      username: 'admin',
-      passwordHash: await hashPassword('admin123'),
-      isAdmin: true,
-    },
+  // Create or update admin user
+  console.log('👤 Ensuring admin user exists...');
+  const adminEmail = 'admin@worldcupfantasy.com';
+  const existingAdmin = await prisma.user.findUnique({
+    where: { email: adminEmail },
   });
-  console.log('   ✓ Admin: admin@worldcupfantasy.com / admin123\n');
+  
+  let adminUser;
+  if (existingAdmin) {
+    // Update existing admin to ensure isAdmin is true
+    adminUser = await prisma.user.update({
+      where: { email: adminEmail },
+      data: { isAdmin: true },
+    });
+    console.log('   ✓ Admin user already exists: admin@worldcupfantasy.com\n');
+  } else {
+    // Create new admin user
+    adminUser = await prisma.user.create({
+      data: {
+        email: adminEmail,
+        username: 'admin',
+        passwordHash: await hashPassword('admin123'),
+        isAdmin: true,
+      },
+    });
+    console.log('   ✓ Admin created: admin@worldcupfantasy.com / admin123\n');
+  }
 
   // Create nations
   console.log('🌍 Creating nations...');

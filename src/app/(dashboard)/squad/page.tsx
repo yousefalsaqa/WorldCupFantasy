@@ -440,7 +440,7 @@ export default function SquadPage() {
     const fwds = squad.filter(p => p.position === 'FWD');
 
     return (
-      <div className="max-w-5xl mx-auto px-4 py-6">
+      <div className="max-w-5xl mx-auto px-0 sm:px-4 py-6" style={{ overflowX: 'auto', overflowY: 'visible', width: '100%' }}>
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
@@ -462,20 +462,20 @@ export default function SquadPage() {
         </div>
 
         {/* Pitch */}
-        <div className="relative bg-gradient-to-b from-green-700 via-green-600 to-green-700 rounded-2xl p-6 mb-6 overflow-hidden">
+        <div className="relative bg-gradient-to-b from-green-700 via-green-600 to-green-700 rounded-2xl p-1 sm:p-6 mb-6 overflow-x-auto" style={{ overflowY: 'visible' }}>
           {/* Pitch markings */}
-          <div className="absolute inset-0 opacity-20">
+          <div className="absolute inset-0 opacity-20 rounded-2xl">
             <div className="absolute top-1/2 left-0 right-0 h-px bg-white" />
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 border border-white rounded-full" />
           </div>
 
-          <div className="relative z-10 space-y-4">
+          <div className="relative z-10 space-y-3 sm:space-y-5 min-w-max sm:min-w-0" style={{ overflow: 'visible' }}>
             {/* FWD row */}
-            <div className="flex justify-center gap-2 sm:gap-3 overflow-x-auto pb-2 -mx-2 px-2">
+            <div className="flex justify-center gap-0.5 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
               {[...Array(3)].map((_, i) => (
                 fwds[i] ? (
                   <div key={fwds[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(fwds[i].id)}>
-                    <PlayerCard player={fwds[i]} showOpponent={getNextOpponent(fwds[i].nation?.code || '')} />
+                    <PlayerCard player={fwds[i]} showOpponent={getNextOpponent(fwds[i].nation?.code || '')} size="xs" />
                   </div>
                 ) : (
                   <div key={`fwd-${i}`} className="flex-shrink-0">
@@ -486,11 +486,11 @@ export default function SquadPage() {
             </div>
 
             {/* MID row */}
-            <div className="flex justify-center gap-2 sm:gap-3 overflow-x-auto pb-2 -mx-2 px-2">
+            <div className="flex justify-center gap-0.5 sm:gap-4 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
               {[...Array(5)].map((_, i) => (
                 mids[i] ? (
                   <div key={mids[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(mids[i].id)}>
-                    <PlayerCard player={mids[i]} showOpponent={getNextOpponent(mids[i].nation?.code || '')} />
+                    <PlayerCard player={mids[i]} showOpponent={getNextOpponent(mids[i].nation?.code || '')} size="xs" />
                   </div>
                 ) : (
                   <div key={`mid-${i}`} className="flex-shrink-0">
@@ -501,11 +501,11 @@ export default function SquadPage() {
             </div>
 
             {/* DEF row */}
-            <div className="flex justify-center gap-2 sm:gap-3 overflow-x-auto pb-2 -mx-2 px-2">
+            <div className="flex justify-center gap-0.5 sm:gap-4 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
               {[...Array(5)].map((_, i) => (
                 defs[i] ? (
                   <div key={defs[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(defs[i].id)}>
-                    <PlayerCard player={defs[i]} showOpponent={getNextOpponent(defs[i].nation?.code || '')} />
+                    <PlayerCard player={defs[i]} showOpponent={getNextOpponent(defs[i].nation?.code || '')} size="xs" />
                   </div>
                 ) : (
                   <div key={`def-${i}`} className="flex-shrink-0">
@@ -516,11 +516,11 @@ export default function SquadPage() {
             </div>
 
             {/* GK row */}
-            <div className="flex justify-center gap-4 sm:gap-6 overflow-x-auto pb-2 -mx-2 px-2">
+            <div className="flex justify-center gap-1 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
               {[...Array(2)].map((_, i) => (
                 gks[i] ? (
                   <div key={gks[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(gks[i].id)}>
-                    <PlayerCard player={gks[i]} showOpponent={getNextOpponent(gks[i].nation?.code || '')} />
+                    <PlayerCard player={gks[i]} showOpponent={getNextOpponent(gks[i].nation?.code || '')} size="xs" />
                   </div>
                 ) : (
                   <div key={`gk-${i}`} className="flex-shrink-0">

@@ -307,12 +307,12 @@ export function EmptySlot({ position, onClick }: EmptySlotProps) {
       className={`flex flex-col items-center cursor-pointer group transition-transform hover:scale-105 active:scale-95 touch-manipulation`}
       onClick={onClick}
     >
-      {/* Larger touch target on mobile, normal on desktop */}
-      <div className={`w-16 h-20 sm:w-16 sm:h-20 md:w-16 md:h-20 rounded-xl bg-gradient-to-b ${posColors[position]} border-2 border-dashed flex items-center justify-center min-w-[64px] min-h-[80px]`}>
-        <span className="text-4xl sm:text-3xl text-white/60 group-hover:text-white/90 group-active:text-white transition-colors font-light">+</span>
+      {/* Smaller size to match xs player cards */}
+      <div className={`w-8 h-10 sm:w-12 sm:h-14 rounded-xl bg-gradient-to-b ${posColors[position]} border-2 border-dashed flex items-center justify-center`}>
+        <span className="text-2xl sm:text-3xl text-white/60 group-hover:text-white/90 group-active:text-white transition-colors font-light">+</span>
       </div>
-      <div className="mt-1 px-3 py-0.5 bg-gray-900/50 rounded">
-        <span className="text-white/60 text-xs font-medium">{position}</span>
+      <div className="mt-1 px-2 py-0.5 bg-gray-900/50 rounded">
+        <span className="text-white/60 text-[8px] sm:text-xs font-medium">{position}</span>
       </div>
     </div>
   );
