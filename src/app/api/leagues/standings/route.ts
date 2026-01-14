@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
+// This route is dynamic to ensure fresh data
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     // Get global league standings
