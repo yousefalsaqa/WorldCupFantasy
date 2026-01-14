@@ -885,7 +885,7 @@ export default function SquadPage() {
                   secondaryColor={selectedPlayer.nation?.kitColor2 || '#000'}
                   number={selectedPlayer.shirtNumber}
                   nationCode={selectedPlayer.nation?.code || ''}
-                  size="sm"
+                  size="xs"
                   isCaptain={captainId === selectedPlayer.id}
                   isViceCaptain={viceCaptainId === selectedPlayer.id}
                 />
