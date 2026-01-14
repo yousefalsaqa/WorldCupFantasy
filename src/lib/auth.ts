@@ -11,7 +11,7 @@ const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || 'fallback-secret-for-dev-only'
 );
 
-const COOKIE_NAME = 'fantasy-laliga-session';
+const COOKIE_NAME = 'auth_token';
 const SALT_ROUNDS = 12;
 const TOKEN_EXPIRY = '7d'; // 7 days
 
