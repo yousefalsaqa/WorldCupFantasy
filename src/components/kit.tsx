@@ -247,8 +247,8 @@ export function PlayerCard({
   size = 'md',
 }: PlayerCardProps) {
   const kitSize = size === 'xs' ? 'xs' : size === 'sm' ? 'sm' : size === 'lg' ? 'lg' : 'md';
-  const nameSize = size === 'xs' ? 'text-[9px]' : size === 'sm' ? 'text-[10px]' : size === 'lg' ? 'text-sm' : 'text-xs';
-  const plateWidth = size === 'xs' ? 'min-w-[60px]' : size === 'sm' ? 'min-w-[70px]' : size === 'lg' ? 'min-w-[100px]' : 'min-w-[85px]';
+  const nameSize = size === 'xs' ? 'text-[8px]' : size === 'sm' ? 'text-[9px]' : size === 'lg' ? 'text-sm' : 'text-xs';
+  const plateWidth = size === 'xs' ? 'min-w-[50px]' : size === 'sm' ? 'min-w-[60px]' : size === 'lg' ? 'min-w-[100px]' : 'min-w-[75px]';
   
   return (
     <div 
