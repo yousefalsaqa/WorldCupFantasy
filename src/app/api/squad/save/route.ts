@@ -165,7 +165,12 @@ export async function POST(request: NextRequest) {
             userId: session.userId,
           },
         });
+        console.log(`Team ${team.id} added to global league ${globalLeague.id}`);
+      } else {
+        console.log(`Team ${team.id} already in global league`);
       }
+    } else {
+      console.log('Warning: Global league not found, team not added to league');
     }
     
     console.log('Squad saved successfully for team:', team.id);
