@@ -37,24 +37,158 @@ interface Player {
 
 type Position = 'GK' | 'DEF' | 'MID' | 'FWD';
 
-// Group Stage fixtures
-const GROUP_FIXTURES: Record<string, string[]> = {
-  'MEX': ['RSA', 'KOR'], 'RSA': ['MEX', 'KOR'], 'KOR': ['MEX', 'RSA'],
-  'CAN': ['QAT', 'SUI'], 'QAT': ['CAN', 'SUI'], 'SUI': ['CAN', 'QAT'],
-  'BRA': ['MAR', 'HAI', 'SCO'], 'MAR': ['BRA', 'HAI', 'SCO'], 'HAI': ['BRA', 'MAR', 'SCO'], 'SCO': ['BRA', 'MAR', 'HAI'],
-  'USA': ['PAR', 'AUS'], 'PAR': ['USA', 'AUS'], 'AUS': ['USA', 'PAR'],
-  'GER': ['CUW', 'CIV', 'ECU'], 'CUW': ['GER', 'CIV', 'ECU'], 'CIV': ['GER', 'CUW', 'ECU'], 'ECU': ['GER', 'CUW', 'CIV'],
-  'NED': ['JPN', 'TUN'], 'JPN': ['NED', 'TUN'], 'TUN': ['NED', 'JPN'],
-  'BEL': ['EGY', 'IRN', 'NZL'], 'EGY': ['BEL', 'IRN', 'NZL'], 'IRN': ['BEL', 'EGY', 'NZL'], 'NZL': ['BEL', 'EGY', 'IRN'],
-  'ESP': ['CPV', 'KSA', 'URU'], 'CPV': ['ESP', 'KSA', 'URU'], 'KSA': ['ESP', 'CPV', 'URU'], 'URU': ['ESP', 'CPV', 'KSA'],
-  'FRA': ['SEN', 'NOR'], 'SEN': ['FRA', 'NOR'], 'NOR': ['FRA', 'SEN'],
-  'ARG': ['ALG', 'JOR'], 'ALG': ['ARG', 'JOR'], 'JOR': ['ARG', 'ALG'],
-  'POR': ['UZB', 'COL'], 'UZB': ['POR', 'COL'], 'COL': ['POR', 'UZB'],
-  'ENG': ['CRO', 'GHA', 'PAN'], 'CRO': ['ENG', 'GHA', 'PAN'], 'GHA': ['ENG', 'CRO', 'PAN'], 'PAN': ['ENG', 'CRO', 'GHA'],
+// World Cup 2026 Fixtures (Group Stage)
+interface Fixture {
+  id: string;
+  home: string;
+  away: string;
+  date: string;
+  time: string;
+  stage: string;
+  isPlayed?: boolean;
+  homeScore?: number;
+  awayScore?: number;
+}
+
+const WORLD_CUP_FIXTURES: Fixture[] = [
+  // Group A
+  { id: '1', home: 'MEX', away: 'RSA', date: '2026-06-11', time: '20:00', stage: 'Group A' },
+  { id: '2', home: 'KOR', away: 'TBD', date: '2026-06-12', time: '14:00', stage: 'Group A' },
+  { id: '3', home: 'RSA', away: 'KOR', date: '2026-06-16', time: '14:00', stage: 'Group A' },
+  { id: '4', home: 'TBD', away: 'MEX', date: '2026-06-16', time: '17:00', stage: 'Group A' },
+  { id: '5', home: 'MEX', away: 'KOR', date: '2026-06-20', time: '17:00', stage: 'Group A' },
+  { id: '6', home: 'TBD', away: 'RSA', date: '2026-06-20', time: '17:00', stage: 'Group A' },
+  // Group B
+  { id: '7', home: 'CAN', away: 'QAT', date: '2026-06-12', time: '17:00', stage: 'Group B' },
+  { id: '8', home: 'SUI', away: 'TBD', date: '2026-06-12', time: '20:00', stage: 'Group B' },
+  { id: '9', home: 'QAT', away: 'SUI', date: '2026-06-17', time: '14:00', stage: 'Group B' },
+  { id: '10', home: 'TBD', away: 'CAN', date: '2026-06-17', time: '17:00', stage: 'Group B' },
+  { id: '11', home: 'CAN', away: 'SUI', date: '2026-06-21', time: '14:00', stage: 'Group B' },
+  { id: '12', home: 'TBD', away: 'QAT', date: '2026-06-21', time: '14:00', stage: 'Group B' },
+  // Group C
+  { id: '13', home: 'BRA', away: 'MAR', date: '2026-06-13', time: '14:00', stage: 'Group C' },
+  { id: '14', home: 'HAI', away: 'SCO', date: '2026-06-13', time: '17:00', stage: 'Group C' },
+  { id: '15', home: 'MAR', away: 'HAI', date: '2026-06-18', time: '14:00', stage: 'Group C' },
+  { id: '16', home: 'SCO', away: 'BRA', date: '2026-06-18', time: '17:00', stage: 'Group C' },
+  { id: '17', home: 'BRA', away: 'HAI', date: '2026-06-23', time: '17:00', stage: 'Group C' },
+  { id: '18', home: 'SCO', away: 'MAR', date: '2026-06-23', time: '17:00', stage: 'Group C' },
+  // Group D
+  { id: '19', home: 'USA', away: 'PAR', date: '2026-06-13', time: '20:00', stage: 'Group D' },
+  { id: '20', home: 'AUS', away: 'TBD', date: '2026-06-14', time: '14:00', stage: 'Group D' },
+  { id: '21', home: 'PAR', away: 'AUS', date: '2026-06-18', time: '20:00', stage: 'Group D' },
+  { id: '22', home: 'TBD', away: 'USA', date: '2026-06-19', time: '14:00', stage: 'Group D' },
+  { id: '23', home: 'USA', away: 'AUS', date: '2026-06-23', time: '20:00', stage: 'Group D' },
+  { id: '24', home: 'TBD', away: 'PAR', date: '2026-06-23', time: '20:00', stage: 'Group D' },
+  // Group E
+  { id: '25', home: 'GER', away: 'CUW', date: '2026-06-14', time: '14:00', stage: 'Group E' },
+  { id: '26', home: 'CIV', away: 'ECU', date: '2026-06-14', time: '17:00', stage: 'Group E' },
+  { id: '27', home: 'ECU', away: 'GER', date: '2026-06-19', time: '14:00', stage: 'Group E' },
+  { id: '28', home: 'CUW', away: 'CIV', date: '2026-06-19', time: '17:00', stage: 'Group E' },
+  { id: '29', home: 'GER', away: 'CIV', date: '2026-06-24', time: '17:00', stage: 'Group E' },
+  { id: '30', home: 'ECU', away: 'CUW', date: '2026-06-24', time: '17:00', stage: 'Group E' },
+  // Group F
+  { id: '31', home: 'NED', away: 'JPN', date: '2026-06-14', time: '20:00', stage: 'Group F' },
+  { id: '32', home: 'TUN', away: 'TBD', date: '2026-06-15', time: '14:00', stage: 'Group F' },
+  { id: '33', home: 'JPN', away: 'TUN', date: '2026-06-19', time: '20:00', stage: 'Group F' },
+  { id: '34', home: 'TBD', away: 'NED', date: '2026-06-20', time: '14:00', stage: 'Group F' },
+  { id: '35', home: 'NED', away: 'TUN', date: '2026-06-24', time: '20:00', stage: 'Group F' },
+  { id: '36', home: 'TBD', away: 'JPN', date: '2026-06-24', time: '20:00', stage: 'Group F' },
+  // Group G
+  { id: '37', home: 'BEL', away: 'EGY', date: '2026-06-15', time: '17:00', stage: 'Group G' },
+  { id: '38', home: 'IRN', away: 'NZL', date: '2026-06-15', time: '20:00', stage: 'Group G' },
+  { id: '39', home: 'EGY', away: 'IRN', date: '2026-06-20', time: '17:00', stage: 'Group G' },
+  { id: '40', home: 'NZL', away: 'BEL', date: '2026-06-20', time: '20:00', stage: 'Group G' },
+  { id: '41', home: 'BEL', away: 'IRN', date: '2026-06-25', time: '14:00', stage: 'Group G' },
+  { id: '42', home: 'NZL', away: 'EGY', date: '2026-06-25', time: '14:00', stage: 'Group G' },
+  // Group H
+  { id: '43', home: 'ESP', away: 'CPV', date: '2026-06-16', time: '14:00', stage: 'Group H' },
+  { id: '44', home: 'KSA', away: 'URU', date: '2026-06-16', time: '17:00', stage: 'Group H' },
+  { id: '45', home: 'URU', away: 'ESP', date: '2026-06-21', time: '14:00', stage: 'Group H' },
+  { id: '46', home: 'CPV', away: 'KSA', date: '2026-06-21', time: '17:00', stage: 'Group H' },
+  { id: '47', home: 'ESP', away: 'KSA', date: '2026-06-26', time: '14:00', stage: 'Group H' },
+  { id: '48', home: 'URU', away: 'CPV', date: '2026-06-26', time: '14:00', stage: 'Group H' },
+  // Group I
+  { id: '49', home: 'FRA', away: 'SEN', date: '2026-06-16', time: '20:00', stage: 'Group I' },
+  { id: '50', home: 'NOR', away: 'TBD', date: '2026-06-17', time: '14:00', stage: 'Group I' },
+  { id: '51', home: 'SEN', away: 'NOR', date: '2026-06-21', time: '20:00', stage: 'Group I' },
+  { id: '52', home: 'TBD', away: 'FRA', date: '2026-06-22', time: '14:00', stage: 'Group I' },
+  { id: '53', home: 'FRA', away: 'NOR', date: '2026-06-26', time: '20:00', stage: 'Group I' },
+  { id: '54', home: 'TBD', away: 'SEN', date: '2026-06-26', time: '20:00', stage: 'Group I' },
+  // Group J
+  { id: '55', home: 'ARG', away: 'ALG', date: '2026-06-17', time: '17:00', stage: 'Group J' },
+  { id: '56', home: 'AUT', away: 'JOR', date: '2026-06-17', time: '20:00', stage: 'Group J' },
+  { id: '57', home: 'ALG', away: 'AUT', date: '2026-06-22', time: '14:00', stage: 'Group J' },
+  { id: '58', home: 'ARG', away: 'JOR', date: '2026-06-22', time: '17:00', stage: 'Group J' },
+  { id: '59', home: 'JOR', away: 'ALG', date: '2026-06-27', time: '14:00', stage: 'Group J' },
+  { id: '60', home: 'AUT', away: 'ARG', date: '2026-06-27', time: '14:00', stage: 'Group J' },
+  // Group K
+  { id: '61', home: 'POR', away: 'UZB', date: '2026-06-18', time: '14:00', stage: 'Group K' },
+  { id: '62', home: 'COL', away: 'TBD', date: '2026-06-18', time: '17:00', stage: 'Group K' },
+  { id: '63', home: 'UZB', away: 'COL', date: '2026-06-23', time: '14:00', stage: 'Group K' },
+  { id: '64', home: 'TBD', away: 'POR', date: '2026-06-23', time: '17:00', stage: 'Group K' },
+  { id: '65', home: 'POR', away: 'COL', date: '2026-06-28', time: '17:00', stage: 'Group K' },
+  { id: '66', home: 'TBD', away: 'UZB', date: '2026-06-28', time: '17:00', stage: 'Group K' },
+  // Group L
+  { id: '67', home: 'ENG', away: 'CRO', date: '2026-06-18', time: '20:00', stage: 'Group L' },
+  { id: '68', home: 'GHA', away: 'PAN', date: '2026-06-19', time: '14:00', stage: 'Group L' },
+  { id: '69', home: 'CRO', away: 'GHA', date: '2026-06-23', time: '20:00', stage: 'Group L' },
+  { id: '70', home: 'PAN', away: 'ENG', date: '2026-06-24', time: '14:00', stage: 'Group L' },
+  { id: '71', home: 'ENG', away: 'GHA', date: '2026-06-28', time: '20:00', stage: 'Group L' },
+  { id: '72', home: 'CRO', away: 'PAN', date: '2026-06-28', time: '20:00', stage: 'Group L' },
+];
+
+// Nation names for display
+const NATION_NAMES: Record<string, string> = {
+  'MEX': 'Mexico', 'RSA': 'South Africa', 'KOR': 'Korea Republic',
+  'CAN': 'Canada', 'QAT': 'Qatar', 'SUI': 'Switzerland',
+  'BRA': 'Brazil', 'MAR': 'Morocco', 'HAI': 'Haiti', 'SCO': 'Scotland',
+  'USA': 'USA', 'PAR': 'Paraguay', 'AUS': 'Australia',
+  'GER': 'Germany', 'CUW': 'Curaçao', 'CIV': 'Ivory Coast', 'ECU': 'Ecuador',
+  'NED': 'Netherlands', 'JPN': 'Japan', 'TUN': 'Tunisia',
+  'BEL': 'Belgium', 'EGY': 'Egypt', 'IRN': 'Iran', 'NZL': 'New Zealand',
+  'ESP': 'Spain', 'CPV': 'Cabo Verde', 'KSA': 'Saudi Arabia', 'URU': 'Uruguay',
+  'FRA': 'France', 'SEN': 'Senegal', 'NOR': 'Norway',
+  'ARG': 'Argentina', 'ALG': 'Algeria', 'JOR': 'Jordan', 'AUT': 'Austria',
+  'POR': 'Portugal', 'UZB': 'Uzbekistan', 'COL': 'Colombia',
+  'ENG': 'England', 'CRO': 'Croatia', 'GHA': 'Ghana', 'PAN': 'Panama',
+  'TBD': 'TBD',
 };
 
+// Get fixtures for a nation
+function getNationFixtures(nationCode: string): Fixture[] {
+  return WORLD_CUP_FIXTURES.filter(f => f.home === nationCode || f.away === nationCode)
+    .sort((a, b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
+}
+
+// Get next opponent for a nation (first upcoming unplayed game)
 function getNextOpponent(nationCode: string): string {
-  return GROUP_FIXTURES[nationCode]?.[0] || '-';
+  const now = new Date();
+  const fixtures = getNationFixtures(nationCode);
+  
+  // Find the next unplayed game
+  const nextFixture = fixtures.find(f => {
+    const fixtureDate = new Date(`${f.date}T${f.time}`);
+    return fixtureDate > now && !f.isPlayed;
+  });
+  
+  if (!nextFixture) {
+    // If no upcoming games, show last opponent or dash
+    const lastFixture = fixtures[fixtures.length - 1];
+    if (lastFixture) {
+      const opponent = lastFixture.home === nationCode ? lastFixture.away : lastFixture.home;
+      return opponent;
+    }
+    return '-';
+  }
+  
+  const opponent = nextFixture.home === nationCode ? nextFixture.away : nextFixture.home;
+  return opponent;
+}
+
+// Format fixture date for display
+function formatFixtureDate(dateStr: string): string {
+  const date = new Date(dateStr + 'T00:00:00');
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 // Position limits
@@ -958,6 +1092,55 @@ export default function SquadPage() {
                   <StatItem label="Inter" value={selectedPlayer.stats?.interceptions || 0} />
                   <StatItem label="Tackles" value={selectedPlayer.stats?.tackles || 0} />
                   <StatItem label="Dribbles" value={selectedPlayer.stats?.dribbles || 0} />
+                </div>
+              </div>
+
+              {/* Upcoming Games */}
+              <div>
+                <h3 className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2">Fixtures</h3>
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {getNationFixtures(selectedPlayer.nation?.code || '').map((fixture) => {
+                    const isHome = fixture.home === selectedPlayer.nation?.code;
+                    const opponent = isHome ? fixture.away : fixture.home;
+                    const opponentName = NATION_NAMES[opponent] || opponent;
+                    const fixtureDate = new Date(`${fixture.date}T${fixture.time}`);
+                    const isPast = fixtureDate < new Date();
+                    const isPlayed = fixture.isPlayed;
+                    
+                    return (
+                      <div 
+                        key={fixture.id} 
+                        className={`flex items-center justify-between p-2 rounded-lg border ${
+                          isPast ? 'bg-white/5 border-white/5' : 'bg-white/10 border-white/10'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] font-medium ${isPast ? 'text-white/30' : 'text-white/60'}`}>
+                            {formatFixtureDate(fixture.date)}
+                          </span>
+                          <span className={`text-xs ${isPast ? 'text-white/40' : 'text-white'}`}>
+                            {isHome ? 'vs' : '@'} {opponentName}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {isPlayed ? (
+                            <span className="text-xs font-bold text-emerald-400">
+                              {fixture.homeScore}-{fixture.awayScore}
+                            </span>
+                          ) : isPast ? (
+                            <span className="text-[10px] text-white/30">-</span>
+                          ) : (
+                            <span className="text-[10px] text-amber-400 font-medium">
+                              {fixture.time.replace(':00', '')} EST
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {getNationFixtures(selectedPlayer.nation?.code || '').length === 0 && (
+                    <div className="text-center text-white/30 text-xs py-2">No fixtures found</div>
+                  )}
                 </div>
               </div>
             </div>
