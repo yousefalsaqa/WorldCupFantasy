@@ -1,112 +1,117 @@
-# 🏆 World Cup 2026 Fantasy
+# World Cup 2026 Fantasy
 
-A fantasy football web application for the FIFA World Cup 2026, built with Next.js, TypeScript, and Tailwind CSS.
+A full-stack fantasy football application for the FIFA World Cup 2026. Built with Next.js, TypeScript, Prisma, and Tailwind CSS.
 
-## Features
+## Overview
 
-- **Squad Building**: Pick 15 players (16 in knockouts) from 48 nations
-- **Stage-Based Format**: Group stage rounds + knockout stages
-- **Transfers**: 2-3 free transfers per stage + mercy rule for eliminated players
-- **Chips**: Wildcard, Triple Captain, Bench Boost
-- **Private Leagues**: Create and join leagues with friends
-- **Admin Panel**: Manage players, fixtures, results, and prices
-- **Near-Live Scoring**: Updates during/after matches via API-Football
+This application allows users to build fantasy squads from all 48 participating nations, compete in private leagues, and earn points based on real match performances.
 
-## Quick Start
+## Key Features
 
-### 1. Install Dependencies
-```bash
-npm install
-```
+- **Squad Management** - Build a squad of 15 players (16 in knockouts) with a £100m budget
+- **Stage-Based Gameplay** - Follows the tournament structure from groups through finals
+- **Transfer System** - Strategic transfers with free allowances and mercy rules
+- **Chips** - Wildcard, Triple Captain, and Bench Boost for tactical advantages
+- **Private Leagues** - Create and join leagues with friends
+- **Live Scoring** - Real-time point updates during matches via API-Football integration
 
-### 2. Setup Environment
-Create a `.env` file:
-```env
-DATABASE_URL="file:./dev.db"
-JWT_SECRET="your-super-secret-key-change-me"
-API_FOOTBALL_KEY="optional-api-key-for-live-data"
-```
+## Tech Stack
 
-### 3. Initialize Database
-```bash
-npx prisma generate
-npx prisma db push
-npx tsx prisma/seed.ts
-```
-
-### 4. Run Development Server
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000)
-
-## Default Admin Account
-- **Email**: admin@worldcupfantasy.com
-- **Password**: admin123
+| Layer | Technology |
+|-------|------------|
+| Framework | Next.js 14 (App Router) |
+| Language | TypeScript |
+| Database | PostgreSQL via Prisma ORM |
+| Styling | Tailwind CSS |
+| Authentication | JWT with httpOnly cookies |
+| Deployment | Vercel |
+| Live Data | API-Football |
 
 ## Project Structure
 
 ```
 src/
 ├── app/
-│   ├── (auth)/           # Login/Register pages
-│   ├── (dashboard)/      # Main app pages
-│   │   ├── admin/        # Admin panel
+│   ├── (auth)/           # Authentication pages
+│   ├── (dashboard)/      # Protected app pages
+│   │   ├── admin/        # Administration panel
 │   │   ├── dashboard/    # User dashboard
 │   │   ├── squad/        # Squad builder
 │   │   ├── transfers/    # Transfer market
-│   │   ├── leagues/      # Private leagues
-│   │   └── points/       # Points breakdown
-│   └── api/              # API routes
-├── components/           # Reusable components
-└── lib/                  # Utilities and constants
-    └── wc-constants.ts   # Game rules (easy to tweak!)
+│   │   ├── leagues/      # League management
+│   │   └── fixtures/     # Match schedule
+│   └── api/              # REST API routes
+├── components/           # Reusable UI components
+├── hooks/                # Custom React hooks
+└── lib/                  # Core utilities
+    ├── wc-constants.ts   # Game rules configuration
+    ├── api-football.ts   # External API client
+    └── live-scoring.ts   # Points calculation engine
 ```
-
-## Admin Panel Features
-
-- **📊 Dashboard**: Overview stats
-- **🌍 Nations**: View all 48 teams
-- **👥 Players**: Add/edit players and prices
-- **📅 Fixtures**: Manage match schedule
-- **⚽ Results**: Enter match scores and player performances
-- **🔄 API Sync**: Connect to API-Football for live data
 
 ## Game Rules
 
-### Squad
+### Squad Composition
 - 15 players (Group Stage) / 16 players (Knockouts)
-- 11 starting + 4-5 bench
-- Max 3 players from same nation
+- Starting XI + 4-5 substitutes
+- Maximum 3 players per nation
 - Budget: £100m
 
 ### Transfers
 - 2 free transfers per group round
 - 3 free transfers per knockout stage
-- **Mercy Rule**: If eliminated players > free transfers, you get extra
+- Mercy Rule: Additional transfers granted when players are eliminated
 
-### Chips
-- **Wildcard 1**: Available from day 1
-- **Wildcard 2**: Available after Round of 32
-- **Triple Captain**: Captain scores 3x
-- **Bench Boost**: Bench players score
+### Chips (One-Time Use)
+- **Wildcard 1** - Unlimited free transfers (available from start)
+- **Wildcard 2** - Unlimited free transfers (available after Round of 32)
+- **Triple Captain** - Captain earns 3x points
+- **Bench Boost** - All bench players score points
 
-### Scoring
-- Minutes played: 1-2 points
-- Goals: 4-10 points (varies by position)
-- Assists: 3 points
-- Clean sheets: 1-4 points
-- Cards: -1 to -3 points
+### Points System
+| Action | Points |
+|--------|--------|
+| Playing 1-59 mins | 1 |
+| Playing 60+ mins | 2 |
+| Goal (Forward) | 4 |
+| Goal (Midfielder) | 5 |
+| Goal (Defender/GK) | 6-10 |
+| Assist | 3 |
+| Clean Sheet (GK/DEF) | 4 |
+| Clean Sheet (MID) | 1 |
+| Yellow Card | -1 |
+| Red Card | -3 |
 
-## Tech Stack
+## Development
 
-- **Framework**: Next.js 14
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **Database**: SQLite (Prisma ORM)
-- **Auth**: JWT with httpOnly cookies
-- **API**: API-Football (optional)
+### Prerequisites
+- Node.js 18+
+- PostgreSQL database (or Neon serverless)
+
+### Setup
+```bash
+# Install dependencies
+npm install
+
+# Configure environment variables
+cp .env.example .env
+
+# Generate Prisma client
+npx prisma generate
+
+# Push database schema
+npx prisma db push
+
+# Seed initial data
+npx tsx prisma/seed.ts
+
+# Start development server
+npm run dev
+```
+
+## Deployment
+
+The application is configured for deployment on Vercel with automatic builds from the main branch.
 
 ## License
 
