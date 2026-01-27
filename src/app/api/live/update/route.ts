@@ -20,16 +20,19 @@ interface UpdateResult {
   error?: string;
 }
 
+// Support both GET and POST for cron services
+export async function GET() {
+  return handleUpdate();
+}
+
 export async function POST() {
+  return handleUpdate();
+}
+
+async function handleUpdate() {
   try {
-    // Require admin for manual updates (cron job can use a secret)
-    try {
-      await requireAdmin();
-    } catch {
-      // Check for cron secret
-      // In production, you'd verify a secret header here
-      console.log('[Live Update] Running without admin (cron job)');
-    }
+    // Cron jobs don't have auth, so we allow unauthenticated calls
+    console.log('[Live Update] Running update...');
 
     const results: UpdateResult[] = [];
 
