@@ -5,7 +5,11 @@
 // ============================================
 
 import { prisma } from './db';
-import { apiFootball, ApiFixture, ApiPlayerStats } from './api-football';
+import { apiFootball, APIFixture, APIPlayerStats } from './api-football';
+
+// Type aliases for backward compatibility
+type ApiFixture = APIFixture;
+type ApiPlayerStats = APIPlayerStats;
 import { calculatePerformancePoints } from './scoring';
 
 // Map API-Football positions to our positions

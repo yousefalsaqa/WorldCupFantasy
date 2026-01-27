@@ -324,6 +324,40 @@ class APIFootballClient {
   isMatchNotStarted(status: string): boolean {
     return MATCH_STATUS.NOT_STARTED.includes(status as any);
   }
+
+  // ============================================
+  // BACKWARD COMPATIBILITY ALIASES
+  // (for legacy sync-service.ts)
+  // ============================================
+
+  getRemainingRequests(): number {
+    return this.rateLimitRemaining;
+  }
+
+  async getTeams(): Promise<APITeam[]> {
+    return this.getWorldCupTeams();
+  }
+
+  async getFixtures(_round?: string): Promise<APIFixture[]> {
+    // Round parameter ignored - we fetch all WC fixtures
+    return this.getWorldCupFixtures();
+  }
+
+  async getSquad(teamId: number) {
+    return this.getTeamSquad(teamId);
+  }
+
+  async getCurrentRound(): Promise<string> {
+    // Stub - returns current round from fixtures if available
+    try {
+      const fixtures = await this.getWorldCupFixtures();
+      const now = new Date();
+      const upcoming = fixtures.find(f => new Date(f.fixture.date) > now);
+      return upcoming?.league.round || 'Group Stage - Round 1';
+    } catch {
+      return 'Group Stage - Round 1';
+    }
+  }
 }
 
 // Export singleton instance
