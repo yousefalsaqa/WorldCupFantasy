@@ -8,6 +8,9 @@ export const dynamic = 'force-dynamic';
 
 const TRANSFER_HIT_COST = 4;
 
+// Set to true to allow unlimited free transfers (for testing before first gameweek)
+const UNLIMITED_TRANSFERS = true;
+
 interface TransferRequest {
   playerOutId: string;
   playerInId: string;
@@ -121,8 +124,8 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Calculate hits
-    const extraTransfers = Math.max(0, transfers.length - team.freeTransfers);
+    // Calculate hits (bypass if unlimited transfers mode is enabled)
+    const extraTransfers = UNLIMITED_TRANSFERS ? 0 : Math.max(0, transfers.length - team.freeTransfers);
     const hitPoints = extraTransfers * TRANSFER_HIT_COST;
 
     // Execute transfers in a transaction
@@ -165,8 +168,8 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Update team
-      const newFreeTransfers = Math.max(0, team.freeTransfers - transfers.length);
+      // Update team (don't decrement free transfers if unlimited mode is on)
+      const newFreeTransfers = UNLIMITED_TRANSFERS ? team.freeTransfers : Math.max(0, team.freeTransfers - transfers.length);
       const newBankBalance = team.bankBalance - netCost;
       
       // Recalculate team value

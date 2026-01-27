@@ -299,7 +299,7 @@ export default function TransfersPage() {
         <div className="flex items-center gap-4">
           <div className="px-4 py-2 rounded-lg bg-white/5 border border-white/10">
             <p className="text-xs text-white/40">Free Transfers</p>
-            <p className="text-lg font-bold text-white">{team.freeTransfers}</p>
+            <p className="text-lg font-bold text-white">{team.freeTransfers >= 999 ? '∞' : team.freeTransfers}</p>
           </div>
           <div className="px-4 py-2 rounded-lg bg-white/5 border border-white/10">
             <p className="text-xs text-white/40">Budget</p>

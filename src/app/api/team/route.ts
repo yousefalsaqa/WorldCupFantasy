@@ -6,6 +6,9 @@ import { verifyToken } from '@/lib/auth';
 // This route is dynamic because it reads cookies for authentication
 export const dynamic = 'force-dynamic';
 
+// Set to true to allow unlimited free transfers (for testing before first gameweek)
+const UNLIMITED_TRANSFERS = true;
+
 async function getUser() {
   const cookieStore = await cookies();
   const token = cookieStore.get('auth_token')?.value;
@@ -36,6 +39,14 @@ export async function GET() {
       },
     },
   });
+
+  // If unlimited transfers mode is enabled, override free transfers to a high number
+  if (team && UNLIMITED_TRANSFERS) {
+    return NextResponse.json({ 
+      team: { ...team, freeTransfers: 999 },
+      unlimitedTransfers: true 
+    });
+  }
 
   return NextResponse.json({ team });
 }
