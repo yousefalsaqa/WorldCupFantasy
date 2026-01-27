@@ -1147,41 +1147,23 @@ export default function SquadPage() {
                           
                           {/* Goals */}
                           <div className="col-span-2 text-center">
-                            {isPlayed ? (
-                              <span className={`text-[10px] font-bold ${goals && goals > 0 ? 'text-emerald-400' : 'text-white/40'}`}>
-                                {goals}
-                              </span>
-                            ) : isPast ? (
-                              <span className="text-[10px] text-white/20">-</span>
-                            ) : (
-                              <span className="text-[10px] text-white/20">-</span>
-                            )}
+                            <span className={`text-[10px] font-bold ${goals && goals > 0 ? 'text-emerald-400' : 'text-white/40'}`}>
+                              {goals ?? 0}
+                            </span>
                           </div>
                           
                           {/* Assists */}
                           <div className="col-span-2 text-center">
-                            {isPlayed ? (
-                              <span className={`text-[10px] font-bold ${assists && assists > 0 ? 'text-emerald-400' : 'text-white/40'}`}>
-                                {assists}
-                              </span>
-                            ) : isPast ? (
-                              <span className="text-[10px] text-white/20">-</span>
-                            ) : (
-                              <span className="text-[10px] text-white/20">-</span>
-                            )}
+                            <span className={`text-[10px] font-bold ${assists && assists > 0 ? 'text-emerald-400' : 'text-white/40'}`}>
+                              {assists ?? 0}
+                            </span>
                           </div>
                           
-                          {/* Points or Time */}
+                          {/* Points */}
                           <div className="col-span-1 text-center">
-                            {isPlayed ? (
-                              <span className="text-[10px] font-bold text-emerald-400">{points}</span>
-                            ) : isPast ? (
-                              <span className="text-[10px] text-white/20">-</span>
-                            ) : (
-                              <span className="text-[9px] text-amber-400 font-medium">
-                                {fixture.time.split(':')[0]}
-                              </span>
-                            )}
+                            <span className={`text-[10px] font-bold ${points && points > 0 ? 'text-emerald-400' : 'text-white/40'}`}>
+                              {points ?? 0}
+                            </span>
                           </div>
                         </div>
                       );
