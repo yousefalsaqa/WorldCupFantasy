@@ -48,6 +48,12 @@ interface Fixture {
   isPlayed?: boolean;
   homeScore?: number;
   awayScore?: number;
+  // Player-specific stats (populated when viewing a player's fixtures)
+  playerGoals?: number;
+  playerAssists?: number;
+  playerPoints?: number;
+  playerMinutes?: number;
+  playerSubbedOff?: boolean;
 }
 
 const WORLD_CUP_FIXTURES: Fixture[] = [
@@ -1095,52 +1101,95 @@ export default function SquadPage() {
                 </div>
               </div>
 
-              {/* Upcoming Games */}
+              {/* Fixtures Table */}
               <div>
                 <h3 className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2">Fixtures</h3>
-                <div className="space-y-2 max-h-32 overflow-y-auto">
-                  {getNationFixtures(selectedPlayer.nation?.code || '').map((fixture) => {
-                    const isHome = fixture.home === selectedPlayer.nation?.code;
-                    const opponent = isHome ? fixture.away : fixture.home;
-                    const opponentName = NATION_NAMES[opponent] || opponent;
-                    const fixtureDate = new Date(`${fixture.date}T${fixture.time}`);
-                    const isPast = fixtureDate < new Date();
-                    const isPlayed = fixture.isPlayed;
-                    
-                    return (
-                      <div 
-                        key={fixture.id} 
-                        className={`flex items-center justify-between p-2 rounded-lg border ${
-                          isPast ? 'bg-white/5 border-white/5' : 'bg-white/10 border-white/10'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className={`text-[10px] font-medium ${isPast ? 'text-white/30' : 'text-white/60'}`}>
+                <div className="rounded-lg border border-white/10 overflow-hidden">
+                  {/* Table Header */}
+                  <div className="grid grid-cols-12 gap-1 bg-white/5 px-2 py-1.5 text-[9px] font-bold text-white/40 uppercase tracking-wider">
+                    <div className="col-span-3">Date</div>
+                    <div className="col-span-4">Opponent</div>
+                    <div className="col-span-2 text-center">G</div>
+                    <div className="col-span-2 text-center">A</div>
+                    <div className="col-span-1 text-center">Pts</div>
+                  </div>
+                  
+                  {/* Table Body */}
+                  <div className="max-h-28 overflow-y-auto">
+                    {getNationFixtures(selectedPlayer.nation?.code || '').map((fixture) => {
+                      const opponent = fixture.home === selectedPlayer.nation?.code ? fixture.away : fixture.home;
+                      const opponentName = NATION_NAMES[opponent] || opponent;
+                      const fixtureDate = new Date(`${fixture.date}T${fixture.time}`);
+                      const isPast = fixtureDate < new Date();
+                      const isPlayed = fixture.isPlayed;
+                      
+                      // Mock stats for played games (would come from API)
+                      const goals = isPlayed ? (fixture.playerGoals || 0) : null;
+                      const assists = isPlayed ? (fixture.playerAssists || 0) : null;
+                      const points = isPlayed ? (fixture.playerPoints || 0) : null;
+                      
+                      return (
+                        <div 
+                          key={fixture.id} 
+                          className={`grid grid-cols-12 gap-1 px-2 py-1.5 border-t border-white/5 items-center ${
+                            isPast && !isPlayed ? 'opacity-40' : ''
+                          }`}
+                        >
+                          {/* Date */}
+                          <div className="col-span-3 text-[10px] text-white/60">
                             {formatFixtureDate(fixture.date)}
-                          </span>
-                          <span className={`text-xs ${isPast ? 'text-white/40' : 'text-white'}`}>
-                            {isHome ? 'vs' : '@'} {opponentName}
-                          </span>
+                          </div>
+                          
+                          {/* Opponent */}
+                          <div className="col-span-4 text-[10px] text-white font-medium truncate">
+                            vs {opponentName}
+                          </div>
+                          
+                          {/* Goals */}
+                          <div className="col-span-2 text-center">
+                            {isPlayed ? (
+                              <span className={`text-[10px] font-bold ${goals && goals > 0 ? 'text-emerald-400' : 'text-white/40'}`}>
+                                {goals}
+                              </span>
+                            ) : isPast ? (
+                              <span className="text-[10px] text-white/20">-</span>
+                            ) : (
+                              <span className="text-[10px] text-white/20">-</span>
+                            )}
+                          </div>
+                          
+                          {/* Assists */}
+                          <div className="col-span-2 text-center">
+                            {isPlayed ? (
+                              <span className={`text-[10px] font-bold ${assists && assists > 0 ? 'text-emerald-400' : 'text-white/40'}`}>
+                                {assists}
+                              </span>
+                            ) : isPast ? (
+                              <span className="text-[10px] text-white/20">-</span>
+                            ) : (
+                              <span className="text-[10px] text-white/20">-</span>
+                            )}
+                          </div>
+                          
+                          {/* Points or Time */}
+                          <div className="col-span-1 text-center">
+                            {isPlayed ? (
+                              <span className="text-[10px] font-bold text-emerald-400">{points}</span>
+                            ) : isPast ? (
+                              <span className="text-[10px] text-white/20">-</span>
+                            ) : (
+                              <span className="text-[9px] text-amber-400 font-medium">
+                                {fixture.time.split(':')[0]}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {isPlayed ? (
-                            <span className="text-xs font-bold text-emerald-400">
-                              {fixture.homeScore}-{fixture.awayScore}
-                            </span>
-                          ) : isPast ? (
-                            <span className="text-[10px] text-white/30">-</span>
-                          ) : (
-                            <span className="text-[10px] text-amber-400 font-medium">
-                              {fixture.time.replace(':00', '')} EST
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {getNationFixtures(selectedPlayer.nation?.code || '').length === 0 && (
-                    <div className="text-center text-white/30 text-xs py-2">No fixtures found</div>
-                  )}
+                      );
+                    })}
+                    {getNationFixtures(selectedPlayer.nation?.code || '').length === 0 && (
+                      <div className="text-center text-white/30 text-xs py-3">No fixtures</div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
