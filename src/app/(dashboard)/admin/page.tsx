@@ -9,20 +9,28 @@ interface Stats {
   teams: number;
   stages: number;
   matches: number;
+  error?: string;
 }
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/admin/stats')
       .then(res => res.json())
       .then(data => {
+        if (data.error) {
+          setError(data.error);
+        }
         setStats(data);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch((err) => {
+        setError(err.message || 'Failed to load stats');
+        setLoading(false);
+      });
   }, []);
 
   if (loading) {
@@ -39,6 +47,13 @@ export default function AdminDashboard() {
           Manage nations, players, fixtures, and results
         </p>
       </div>
+
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
+          <p className="text-red-400 text-sm">Error loading stats: {error}</p>
+          <p className="text-white/40 text-xs mt-1">Check database connection or try refreshing</p>
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">

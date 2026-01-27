@@ -56,6 +56,7 @@ const FLAG_CODES: Record<string, string> = {
   ARG: 'ar',
   ALG: 'dz',
   JOR: 'jo',
+  AUT: 'at', // Austria
   
   // Group K
   POR: 'pt',
