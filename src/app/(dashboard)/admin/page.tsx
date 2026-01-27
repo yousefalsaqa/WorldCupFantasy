@@ -12,12 +12,37 @@ interface Stats {
   error?: string;
 }
 
+interface SyncStatus {
+  nations: { mapped: number; total: number };
+  matches: { mapped: number; total: number };
+  players: { mapped: number; total: number };
+}
+
+interface LiveUpdateResult {
+  message: string;
+  matchesProcessed?: number;
+  results?: Array<{
+    matchId: string;
+    status: string;
+    playersUpdated: number;
+    error?: string;
+  }>;
+  rateLimit?: number;
+}
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Live update state
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [updating, setUpdating] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [updateResult, setUpdateResult] = useState<LiveUpdateResult | null>(null);
 
   useEffect(() => {
+    // Fetch stats
     fetch('/api/admin/stats')
       .then(res => res.json())
       .then(data => {
@@ -31,7 +56,58 @@ export default function AdminDashboard() {
         setError(err.message || 'Failed to load stats');
         setLoading(false);
       });
+    
+    // Fetch sync status
+    fetch('/api/live/sync')
+      .then(res => res.json())
+      .then(data => {
+        if (data.sync) {
+          setSyncStatus(data.sync);
+        }
+      })
+      .catch(() => {
+        // Silently fail - sync status is optional
+      });
   }, []);
+
+  const handleLiveUpdate = async () => {
+    setUpdating(true);
+    setUpdateResult(null);
+    try {
+      const res = await fetch('/api/live/update', { method: 'POST' });
+      const data = await res.json();
+      setUpdateResult(data);
+    } catch (err) {
+      setUpdateResult({ message: 'Failed to update: ' + (err instanceof Error ? err.message : 'Unknown error') });
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleSync = async (syncType: string) => {
+    setSyncing(true);
+    try {
+      const res = await fetch('/api/live/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ syncType }),
+      });
+      const data = await res.json();
+      if (data.result) {
+        // Refresh sync status
+        const statusRes = await fetch('/api/live/sync');
+        const statusData = await statusRes.json();
+        if (statusData.sync) {
+          setSyncStatus(statusData.sync);
+        }
+      }
+      alert(`Sync completed: ${JSON.stringify(data.result || data.error)}`);
+    } catch (err) {
+      alert('Sync failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   if (loading) {
     return <div className="text-white/50">Loading stats...</div>;
@@ -74,6 +150,87 @@ export default function AdminDashboard() {
           <ActionCard href="/admin/fixtures" icon="📅" label="Manage Fixtures" />
           <ActionCard href="/admin/sync" icon="🔄" label="Sync API" />
         </div>
+      </div>
+
+      {/* Live Data Controls */}
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+        <h3 className="font-bold text-white mb-4">Live Data (API-Football)</h3>
+        
+        {/* Sync Status */}
+        {syncStatus && (
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="bg-white/5 rounded-lg p-3 text-center">
+              <div className="text-lg font-bold text-white">
+                {syncStatus.nations.mapped}/{syncStatus.nations.total}
+              </div>
+              <div className="text-xs text-white/40">Nations Mapped</div>
+            </div>
+            <div className="bg-white/5 rounded-lg p-3 text-center">
+              <div className="text-lg font-bold text-white">
+                {syncStatus.matches.mapped}/{syncStatus.matches.total}
+              </div>
+              <div className="text-xs text-white/40">Matches Mapped</div>
+            </div>
+            <div className="bg-white/5 rounded-lg p-3 text-center">
+              <div className="text-lg font-bold text-white">
+                {syncStatus.players.mapped}/{syncStatus.players.total}
+              </div>
+              <div className="text-xs text-white/40">Players Mapped</div>
+            </div>
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div className="flex flex-wrap gap-3 mb-4">
+          <button
+            onClick={handleLiveUpdate}
+            disabled={updating}
+            className="px-4 py-2 bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 
+                       text-green-400 rounded-lg font-medium transition-all disabled:opacity-50"
+          >
+            {updating ? '⏳ Updating...' : '▶️ Update Live Scores'}
+          </button>
+          
+          <button
+            onClick={() => handleSync('nations')}
+            disabled={syncing}
+            className="px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 
+                       text-blue-400 rounded-lg font-medium transition-all disabled:opacity-50"
+          >
+            {syncing ? '⏳ Syncing...' : '🌍 Sync Nations'}
+          </button>
+          
+          <button
+            onClick={() => handleSync('players')}
+            disabled={syncing}
+            className="px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/30 
+                       text-purple-400 rounded-lg font-medium transition-all disabled:opacity-50"
+          >
+            {syncing ? '⏳ Syncing...' : '👥 Sync Players'}
+          </button>
+        </div>
+
+        {/* Update Result */}
+        {updateResult && (
+          <div className={`p-3 rounded-lg text-sm ${
+            updateResult.matchesProcessed !== undefined 
+              ? 'bg-green-500/10 border border-green-500/30 text-green-400'
+              : 'bg-yellow-500/10 border border-yellow-500/30 text-yellow-400'
+          }`}>
+            <p className="font-medium">{updateResult.message}</p>
+            {updateResult.matchesProcessed !== undefined && (
+              <p className="text-xs mt-1 opacity-70">
+                Processed {updateResult.matchesProcessed} matches • 
+                Rate limit: {updateResult.rateLimit} requests remaining
+              </p>
+            )}
+          </div>
+        )}
+
+        <p className="text-white/30 text-xs mt-4">
+          Note: Live updates run automatically via cron during matches. 
+          Use this button for manual testing or immediate updates.
+        </p>
       </div>
 
       {/* Setup Checklist */}

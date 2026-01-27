@@ -66,6 +66,9 @@ model Nation {
   kitColor1     String   @default("#FFFFFF")  // Primary kit color
   kitColor2     String   @default("#000000")  // Secondary/number color
   
+  // API-Football integration
+  apiFootballId Int?     @unique  // External team ID from API-Football
+  
   players       Player[]
   homeMatches   Match[]  @relation("HomeNation")
   awayMatches   Match[]  @relation("AwayNation")
@@ -73,6 +76,7 @@ model Nation {
   @@index([code])
   @@index([group])
   @@index([isEliminated])
+  @@index([apiFootballId])
 }
 
 model Player {
@@ -88,6 +92,9 @@ model Player {
   isAvailable   Boolean  @default(true)
   availabilityNote String?
   
+  // API-Football integration
+  apiFootballId Int?     @unique  // External player ID from API-Football
+  
   nation        Nation   @relation(fields: [nationId], references: [id])
   
   squadPlayers  SquadPlayer[]
@@ -96,6 +103,7 @@ model Player {
   @@index([nationId])
   @@index([position])
   @@index([currentPrice])
+  @@index([apiFootballId])
 }
 
 // Position values: GK, DEF, MID, FWD
@@ -138,6 +146,13 @@ model Match {
   awayPenalties Int?
   winnerId      String?  // Nation that won (for knockouts)
   
+  // API-Football integration
+  apiFootballId Int?     @unique  // External fixture ID from API-Football
+  
+  // Live match tracking
+  currentMinute Int?     // Current minute (for live updates)
+  lastUpdated   DateTime? // Last time live data was fetched
+  
   stage         Stage    @relation(fields: [stageId], references: [id])
   homeNation    Nation   @relation("HomeNation", fields: [homeNationId], references: [id])
   awayNation    Nation   @relation("AwayNation", fields: [awayNationId], references: [id])
@@ -146,6 +161,8 @@ model Match {
   
   @@index([stageId])
   @@index([kickoffTime])
+  @@index([apiFootballId])
+  @@index([isStarted])
 }
 
 // ============================================
@@ -172,12 +189,17 @@ model PlayerPerformance {
   
   totalPoints           Int      @default(0)
   
+  // Live tracking
+  isLive                Boolean  @default(false)  // Currently in a live match
+  lastUpdated           DateTime? // Last time stats were fetched from API
+  
   player  Player @relation(fields: [playerId], references: [id])
   match   Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
   
   @@unique([playerId, matchId])
   @@index([playerId])
   @@index([matchId])
+  @@index([isLive])
 }
 
 // ============================================

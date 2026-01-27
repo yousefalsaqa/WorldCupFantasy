@@ -14,7 +14,7 @@ export async function GET() {
           include: {
             team: {
               include: {
-                user: { select: { username: true } }
+                user: { select: { username: true, isAdmin: true } }
               }
             }
           }
@@ -27,8 +27,9 @@ export async function GET() {
     }
 
     // Sort by total points descending
+    // Filter out admin teams so they don't appear in public standings
     const standings = globalLeague.memberships
-      .filter(m => m.team)
+      .filter(m => m.team && !m.team.user.isAdmin)  // Exclude admin teams
       .map(m => ({
         rank: 0,
         teamId: m.team!.id,
