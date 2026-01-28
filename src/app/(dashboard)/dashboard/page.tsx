@@ -104,9 +104,9 @@ export default function DashboardPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-black text-white">
+          <h1 className="text-xl sm:text-2xl font-black text-white">
             {team ? `Welcome, ${user?.username}` : 'Get Started'}
           </h1>
           <p className="text-white/40 text-sm">
@@ -114,26 +114,26 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {/* Host flags */}
-          <div className="flex -space-x-2">
+          {/* Host flags - hidden on very small screens */}
+          <div className="hidden sm:flex -space-x-2">
             {HOST_FLAGS.map(code => (
               <img
                 key={code}
                 src={getFlagUrl(code, 'md')}
                 alt=""
-                className="w-8 h-6 rounded shadow-md ring-2 ring-[#0a0e17]"
+                className="w-7 h-5 sm:w-8 sm:h-6 rounded shadow-md ring-2 ring-[#0a0e17]"
               />
             ))}
           </div>
           {user?.isAdmin && (
             <Link
               href="/admin"
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-500/20 to-blue-500/20 border border-white/10 rounded-xl text-white/80 hover:text-white hover:border-white/20 transition-all"
+              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-red-500/20 to-blue-500/20 border border-white/10 rounded-xl text-white/80 hover:text-white hover:border-white/20 transition-all"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
-              <span className="font-semibold text-sm">Admin</span>
+              <span className="font-semibold text-xs sm:text-sm">Admin</span>
             </Link>
           )}
         </div>

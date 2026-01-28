@@ -249,11 +249,11 @@ export default function AdminDashboard() {
       {/* Quick Actions */}
       <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
         <h3 className="font-bold text-white mb-4">Quick Actions</h3>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
           <ActionCard href="/admin/players" icon="➕" label="Add Player" />
           <ActionCard href="/admin/results" icon="📝" label="Enter Results" />
-          <ActionCard href="/admin/fixtures" icon="📅" label="Manage Fixtures" />
-          <ActionCard href="/admin/users" icon="👥" label="Manage Users" />
+          <ActionCard href="/admin/fixtures" icon="📅" label="Fixtures" />
+          <ActionCard href="/admin/users" icon="👥" label="Users" />
           <ActionCard href="/admin/audit" icon="📋" label="Audit Log" />
         </div>
       </div>
