@@ -30,6 +30,25 @@ interface LiveUpdateResult {
   rateLimit?: number;
 }
 
+interface SearchPlayer {
+  id: string;
+  displayName: string;
+  position: string;
+  nation: { name: string; code: string };
+}
+
+interface PlayerMatch {
+  id: string;
+  match: {
+    id: string;
+    matchDate: string;
+    homeNation: { name: string; code: string };
+    awayNation: { name: string; code: string };
+  };
+  totalPoints: number;
+  bonusPoints: number;
+}
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,6 +59,18 @@ export default function AdminDashboard() {
   const [updating, setUpdating] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [updateResult, setUpdateResult] = useState<LiveUpdateResult | null>(null);
+
+  // Emergency Override state
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchPlayer[]>([]);
+  const [selectedPlayer, setSelectedPlayer] = useState<SearchPlayer | null>(null);
+  const [playerMatches, setPlayerMatches] = useState<PlayerMatch[]>([]);
+  const [selectedMatch, setSelectedMatch] = useState<string>('');
+  const [overridePoints, setOverridePoints] = useState<string>('');
+  const [overrideReason, setOverrideReason] = useState('');
+  const [overrideLoading, setOverrideLoading] = useState(false);
+  const [overrideResult, setOverrideResult] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
     // Fetch stats
@@ -109,6 +140,80 @@ export default function AdminDashboard() {
     }
   };
 
+  // Emergency Override handlers
+  const handlePlayerSearch = async (query: string) => {
+    setSearchQuery(query);
+    if (query.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/override?search=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      setSearchResults(data.players || []);
+    } catch {
+      setSearchResults([]);
+    }
+  };
+
+  const handleSelectPlayer = async (player: SearchPlayer) => {
+    setSelectedPlayer(player);
+    setSearchResults([]);
+    setSearchQuery(player.displayName);
+    setSelectedMatch('');
+    setOverrideResult(null);
+    
+    // Fetch player's matches
+    try {
+      const res = await fetch(`/api/admin/override?playerId=${player.id}`);
+      const data = await res.json();
+      if (data.player?.performances) {
+        setPlayerMatches(data.player.performances);
+      }
+    } catch {
+      setPlayerMatches([]);
+    }
+  };
+
+  const handleApplyOverride = async () => {
+    if (!selectedPlayer || !overridePoints) return;
+    
+    setOverrideLoading(true);
+    setOverrideResult(null);
+    
+    try {
+      const res = await fetch('/api/admin/override', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playerId: selectedPlayer.id,
+          matchId: selectedMatch || undefined,
+          points: parseInt(overridePoints),
+          reason: overrideReason,
+        }),
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        setOverrideResult({ 
+          success: true, 
+          message: `Added ${overridePoints} points to ${selectedPlayer.displayName}${selectedMatch ? ' (match-specific)' : ' (total)'}` 
+        });
+        // Reset form
+        setOverridePoints('');
+        setOverrideReason('');
+        // Refresh player matches
+        handleSelectPlayer(selectedPlayer);
+      } else {
+        setOverrideResult({ success: false, message: data.error || 'Failed to apply override' });
+      }
+    } catch {
+      setOverrideResult({ success: false, message: 'Network error' });
+    } finally {
+      setOverrideLoading(false);
+    }
+  };
+
   if (loading) {
     return <div className="text-white/50">Loading stats...</div>;
   }
@@ -144,11 +249,10 @@ export default function AdminDashboard() {
       {/* Quick Actions */}
       <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
         <h3 className="font-bold text-white mb-4">Quick Actions</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <ActionCard href="/admin/players" icon="➕" label="Add Player" />
           <ActionCard href="/admin/results" icon="📝" label="Enter Results" />
           <ActionCard href="/admin/fixtures" icon="📅" label="Manage Fixtures" />
-          <ActionCard href="/admin/sync" icon="🔄" label="Sync API" />
         </div>
       </div>
 
@@ -231,6 +335,142 @@ export default function AdminDashboard() {
           Note: Live updates run automatically via cron during matches. 
           Use this button for manual testing or immediate updates.
         </p>
+      </div>
+
+      {/* Emergency Override */}
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+        <button
+          onClick={() => setOverrideOpen(!overrideOpen)}
+          className="w-full flex items-center justify-between"
+        >
+          <h3 className="font-bold text-white">Emergency Override</h3>
+          <span className="text-white/40">{overrideOpen ? '▼' : '▶'}</span>
+        </button>
+        
+        {overrideOpen && (
+          <div className="mt-4 space-y-4">
+            <p className="text-white/40 text-sm">
+              Manually add/subtract points if API-Football missed something.
+            </p>
+            
+            {/* Player Search */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search player by name..."
+                value={searchQuery}
+                onChange={(e) => handlePlayerSearch(e.target.value)}
+                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg 
+                           text-white placeholder-white/30 focus:outline-none focus:border-white/30"
+              />
+              {searchResults.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-slate-900 border border-white/10 
+                                rounded-lg shadow-xl z-10 max-h-48 overflow-y-auto">
+                  {searchResults.map((player) => (
+                    <button
+                      key={player.id}
+                      onClick={() => handleSelectPlayer(player)}
+                      className="w-full px-4 py-2 text-left hover:bg-white/10 flex items-center gap-3"
+                    >
+                      <span className="text-xs px-2 py-0.5 rounded bg-white/10 text-white/60">
+                        {player.position}
+                      </span>
+                      <span className="text-white">{player.displayName}</span>
+                      <span className="text-white/40 text-sm">{player.nation.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Selected Player Info */}
+            {selectedPlayer && (
+              <div className="bg-white/5 rounded-lg p-4 space-y-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs px-2 py-0.5 rounded bg-white/10 text-white/60">
+                    {selectedPlayer.position}
+                  </span>
+                  <span className="text-white font-medium">{selectedPlayer.displayName}</span>
+                  <span className="text-white/40 text-sm">{selectedPlayer.nation.name}</span>
+                </div>
+
+                {/* Match Selection (optional) */}
+                <div>
+                  <label className="block text-white/40 text-sm mb-2">
+                    Match (optional - leave empty for total adjustment)
+                  </label>
+                  <select
+                    value={selectedMatch}
+                    onChange={(e) => setSelectedMatch(e.target.value)}
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg 
+                               text-white focus:outline-none focus:border-white/30"
+                  >
+                    <option value="">Total Points Adjustment</option>
+                    {playerMatches.map((pm) => (
+                      <option key={pm.id} value={pm.match.id}>
+                        {pm.match.homeNation.code} vs {pm.match.awayNation.code} 
+                        ({new Date(pm.match.matchDate).toLocaleDateString()}) 
+                        - {pm.totalPoints} pts
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Points Input */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-white/40 text-sm mb-2">
+                      Points (+/-)
+                    </label>
+                    <input
+                      type="number"
+                      value={overridePoints}
+                      onChange={(e) => setOverridePoints(e.target.value)}
+                      placeholder="e.g. 4 or -2"
+                      className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg 
+                                 text-white placeholder-white/30 focus:outline-none focus:border-white/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-white/40 text-sm mb-2">
+                      Reason (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={overrideReason}
+                      onChange={(e) => setOverrideReason(e.target.value)}
+                      placeholder="e.g. Missed goal"
+                      className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg 
+                                 text-white placeholder-white/30 focus:outline-none focus:border-white/30"
+                    />
+                  </div>
+                </div>
+
+                {/* Apply Button */}
+                <button
+                  onClick={handleApplyOverride}
+                  disabled={overrideLoading || !overridePoints}
+                  className="w-full px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 
+                             border border-amber-500/30 text-amber-400 rounded-lg 
+                             font-medium transition-all disabled:opacity-50"
+                >
+                  {overrideLoading ? 'Applying...' : 'Apply Override'}
+                </button>
+
+                {/* Result Message */}
+                {overrideResult && (
+                  <div className={`p-3 rounded-lg text-sm ${
+                    overrideResult.success 
+                      ? 'bg-green-500/10 border border-green-500/30 text-green-400'
+                      : 'bg-red-500/10 border border-red-500/30 text-red-400'
+                  }`}>
+                    {overrideResult.message}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Setup Checklist */}
