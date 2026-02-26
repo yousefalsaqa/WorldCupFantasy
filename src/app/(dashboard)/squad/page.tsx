@@ -1,9 +1,19 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Kit, { PlayerCard, EmptySlot } from '@/components/kit';
 import { getFlagUrl } from '@/lib/flags';
+
+// Chips
+interface ChipData {
+  id: string;
+  name: string;
+  description: string;
+  used: boolean;
+  available: boolean;
+  active: boolean;
+}
 
 // Types
 interface Nation {
@@ -229,6 +239,50 @@ export default function SquadPage() {
   // View mode state
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [playerToSub, setPlayerToSub] = useState<Player | null>(null);
+
+  // Chips state
+  const [chips, setChips] = useState<ChipData[]>([]);
+  const [chipConfirm, setChipConfirm] = useState<ChipData | null>(null);
+  const [chipLoading, setChipLoading] = useState(false);
+
+  const fetchChips = useCallback(async () => {
+    try {
+      const res = await fetch('/api/chips', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setChips(data.chips || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch chips:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (mode === 'view') fetchChips();
+  }, [mode, fetchChips]);
+
+  const activateChip = async (chipId: string) => {
+    setChipLoading(true);
+    try {
+      const res = await fetch('/api/chips', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ chipId }),
+      });
+      if (res.ok) {
+        await fetchChips();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to activate chip');
+      }
+    } catch {
+      alert('Failed to activate chip');
+    } finally {
+      setChipLoading(false);
+      setChipConfirm(null);
+    }
+  };
 
   // Prevent body scroll when modal is open and lock scroll position
   useEffect(() => {
@@ -849,6 +903,87 @@ export default function SquadPage() {
           </div>
         </div>
       </div>
+
+      {/* Chips Bar */}
+      {chips.length > 0 && (
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-3 sm:p-4 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-bold text-white/40 uppercase tracking-wider">Chips</h3>
+            {chips.some(c => c.active) && (
+              <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                Active
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {chips.map(chip => (
+              <button
+                key={chip.id}
+                onClick={() => chip.available ? setChipConfirm(chip) : undefined}
+                disabled={!chip.available || chipLoading}
+                className={`relative p-3 rounded-xl border text-left transition-all ${
+                  chip.active
+                    ? 'bg-emerald-500/15 border-emerald-500/50 shadow-lg shadow-emerald-500/10'
+                    : chip.used
+                    ? 'bg-white/[0.02] border-white/5 opacity-40'
+                    : chip.available
+                    ? 'bg-white/5 border-white/10 hover:border-white/30 hover:bg-white/10 cursor-pointer'
+                    : 'bg-white/[0.02] border-white/5 opacity-60'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`text-xs font-black ${
+                    chip.active ? 'text-emerald-400' : chip.used ? 'text-white/30' : 'text-white/80'
+                  }`}>
+                    {chip.name}
+                  </span>
+                  {chip.used && !chip.active && (
+                    <svg className="w-3.5 h-3.5 text-white/30" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                  {chip.active && (
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  )}
+                </div>
+                <p className="text-[10px] text-white/40 leading-tight">{chip.description}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Chip Confirmation Modal */}
+      {chipConfirm && (
+        <div
+          className="fixed inset-0 bg-black/80 z-[9999] backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setChipConfirm(null)}
+        >
+          <div
+            className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm p-6 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold text-white mb-2">Activate {chipConfirm.name}?</h3>
+            <p className="text-white/60 text-sm mb-1">{chipConfirm.description}</p>
+            <p className="text-amber-400 text-xs mb-6">This cannot be undone.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setChipConfirm(null)}
+                className="flex-1 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white/70 font-medium hover:bg-white/10 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => activateChip(chipConfirm.id)}
+                disabled={chipLoading}
+                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl text-white font-bold hover:from-emerald-600 hover:to-emerald-700 disabled:opacity-50 transition-all"
+              >
+                {chipLoading ? 'Activating...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Pitch */}
       <div className="relative bg-gradient-to-b from-green-700 via-green-600 to-green-700 rounded-2xl p-1 sm:p-6 mb-6 overflow-x-auto" style={{ overflowY: 'visible' }}>

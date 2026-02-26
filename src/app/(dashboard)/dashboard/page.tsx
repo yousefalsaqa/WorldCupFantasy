@@ -241,12 +241,15 @@ export default function DashboardPage() {
           )}
 
           {/* Quick Actions */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 gap-4">
             <QuickAction href="/squad" icon={<SquadIcon />} label="My Squad" />
             <QuickAction href="/fixtures" icon={<CalendarIcon />} label="Fixtures" />
             <QuickAction href="/standings" icon={<StandingsIcon />} label="Standings" />
             <QuickAction href="/transfers" icon={<TransferIcon />} label="Transfers" />
             <QuickAction href="/leagues" icon={<TrophyIcon />} label="Leagues" />
+            <QuickAction href="/history" icon={<HistoryIcon />} label="History" />
+            <QuickAction href="/trends" icon={<TrendsIcon />} label="Trends" />
+            <QuickAction href="/dream-team" icon={<StarIcon />} label="Dream Team" />
           </div>
 
           {/* Groups Preview */}
@@ -346,6 +349,22 @@ function StandingsIcon() {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h18v18H3z" />
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9h18" />
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v18" />
+    </svg>
+  );
+}
+
+function HistoryIcon() {
+  return (
+    <svg className="w-6 h-6 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+
+function TrendsIcon() {
+  return (
+    <svg className="w-6 h-6 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
     </svg>
   );
 }

@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 const TRANSFER_HIT_COST = 4;
 
-// Set to true to allow unlimited free transfers (for testing before first gameweek)
+// Set to true for testing until first gameweek - allows unlimited free transfers
 const UNLIMITED_TRANSFERS = true;
 
 interface TransferRequest {
@@ -124,8 +124,28 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Calculate hits (bypass if unlimited transfers mode is enabled)
-    const extraTransfers = UNLIMITED_TRANSFERS ? 0 : Math.max(0, transfers.length - team.freeTransfers);
+    // Check for unlimited transfers: pre-tournament or wildcard active
+    const activeStage = await prisma.stage.findFirst({ where: { isActive: true } });
+    let unlimitedTransfers = false;
+    let isWildcardActive = false;
+
+    if (UNLIMITED_TRANSFERS) {
+      unlimitedTransfers = true;
+    } else if (!activeStage) {
+      // No active stage = pre-tournament, allow unlimited
+      unlimitedTransfers = true;
+    } else {
+      const teamStage = await prisma.teamStage.findUnique({
+        where: { teamId_stageId: { teamId: team.id, stageId: activeStage.id } },
+        select: { chipUsed: true },
+      });
+      if (teamStage?.chipUsed === 'WILDCARD_1' || teamStage?.chipUsed === 'WILDCARD_2') {
+        unlimitedTransfers = true;
+        isWildcardActive = true;
+      }
+    }
+
+    const extraTransfers = unlimitedTransfers ? 0 : Math.max(0, transfers.length - team.freeTransfers);
     const hitPoints = extraTransfers * TRANSFER_HIT_COST;
 
     // Execute transfers in a transaction
@@ -163,13 +183,13 @@ export async function POST(request: NextRequest) {
             playerOutId: transfer.playerOutId,
             priceIn: playerIn!.currentPrice,
             priceOut: squadPlayer.purchasePrice,
-            isFreeTransfer: extraTransfers === 0
+            isFreeTransfer: extraTransfers === 0,
+            isWildcard: isWildcardActive
           }
         });
       }
 
-      // Update team (don't decrement free transfers if unlimited mode is on)
-      const newFreeTransfers = UNLIMITED_TRANSFERS ? team.freeTransfers : Math.max(0, team.freeTransfers - transfers.length);
+      const newFreeTransfers = unlimitedTransfers ? team.freeTransfers : Math.max(0, team.freeTransfers - transfers.length);
       const newBankBalance = team.bankBalance - netCost;
       
       // Recalculate team value

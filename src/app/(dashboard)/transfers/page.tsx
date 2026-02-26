@@ -62,6 +62,7 @@ export default function TransfersPage() {
   // Transfer state
   const [transfers, setTransfers] = useState<TransferItem[]>([]);
   const [selectedOut, setSelectedOut] = useState<SquadPlayer | null>(null);
+  const [wildcardActive, setWildcardActive] = useState(false);
   
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -106,6 +107,15 @@ export default function TransfersPage() {
             }
           });
           setNations(Array.from(nationMap.values()).sort((a, b) => a.name.localeCompare(b.name)));
+        }
+        // Fetch chip status
+        const chipsRes = await fetch('/api/chips', { credentials: 'include' });
+        if (chipsRes.ok) {
+          const chipsData = await chipsRes.json();
+          const active = chipsData.activeChip;
+          if (active === 'WILDCARD_1' || active === 'WILDCARD_2') {
+            setWildcardActive(true);
+          }
         }
       } catch (err) {
         console.error('Failed to fetch data:', err);
@@ -309,6 +319,16 @@ export default function TransfersPage() {
           </div>
         </div>
       </div>
+
+      {/* Wildcard Banner */}
+      {wildcardActive && (
+        <div className="flex items-center gap-3 p-4 mb-6 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+          <svg className="w-5 h-5 text-emerald-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <p className="text-sm text-emerald-400 font-medium">Wildcard Active &mdash; Unlimited Free Transfers</p>
+        </div>
+      )}
 
       {/* Error Alert */}
       {error && (
