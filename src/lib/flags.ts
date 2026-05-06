@@ -1,70 +1,77 @@
 // Flag CDN URL generator
 // Using flagcdn.com - free and reliable
 
-// Map our 3-letter codes to 2-letter ISO codes for flags
+// 3-letter FIFA-style code → 2-letter ISO code (or special slugs)
+// Official 2026 FIFA World Cup qualified nations.
 const FLAG_CODES: Record<string, string> = {
   // Group A
   MEX: 'mx',
   RSA: 'za',
   KOR: 'kr',
-  
+  CZE: 'cz', // Czechia – UEFA Playoff D winner
+
   // Group B
   CAN: 'ca',
+  BIH: 'ba', // Bosnia & Herzegovina – UEFA Playoff A winner
   QAT: 'qa',
   SUI: 'ch',
-  
+
   // Group C
   BRA: 'br',
   MAR: 'ma',
   HAI: 'ht',
-  SCO: 'gb-sct', // Scotland
-  
+  SCO: 'gb-sct',
+
   // Group D
   USA: 'us',
   PAR: 'py',
   AUS: 'au',
-  
+  TUR: 'tr', // Türkiye – UEFA Playoff C winner
+
   // Group E
   GER: 'de',
   CUW: 'cw',
   CIV: 'ci',
   ECU: 'ec',
-  
+
   // Group F
   NED: 'nl',
   JPN: 'jp',
+  SWE: 'se', // Sweden – UEFA Playoff B winner
   TUN: 'tn',
-  
+
   // Group G
   BEL: 'be',
   EGY: 'eg',
   IRN: 'ir',
   NZL: 'nz',
-  
+
   // Group H
   ESP: 'es',
   CPV: 'cv',
   KSA: 'sa',
   URU: 'uy',
-  
+
   // Group I
   FRA: 'fr',
   SEN: 'sn',
+  IRQ: 'iq', // Iraq – FIFA Inter-Confederation Playoff 2 winner
   NOR: 'no',
-  
+
   // Group J
   ARG: 'ar',
   ALG: 'dz',
+  AUT: 'at',
   JOR: 'jo',
-  AUT: 'at', // Austria
-  
+
   // Group K
   POR: 'pt',
+  COD: 'cd', // DR Congo – FIFA Inter-Confederation Playoff 1 winner
   UZB: 'uz',
   COL: 'co',
-  
+
   // Group L
-  ENG: 'gb-eng', // England
+  ENG: 'gb-eng',
   CRO: 'hr',
   GHA: 'gh',
   PAN: 'pa',

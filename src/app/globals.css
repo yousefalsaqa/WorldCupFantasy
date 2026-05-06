@@ -54,6 +54,20 @@ body {
   animation: fadeIn 0.3s ease-out;
 }
 
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+  animation: spinSlow 3s linear infinite;
+}
+
+/* Hide native drag preview shadow on the dragged element so our highlight is the focal point */
+[draggable="true"]:active {
+  cursor: grabbing;
+}
+
 /* Input autofill styling */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,

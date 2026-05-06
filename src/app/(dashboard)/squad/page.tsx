@@ -1,9 +1,13 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Kit, { PlayerCard, EmptySlot } from '@/components/kit';
+import PitchBg from '@/components/pitch-bg';
+import FormationPicker from '@/components/formation-picker';
 import { getFlagUrl } from '@/lib/flags';
+import { getFixtureDifficulty } from '@/lib/fdr';
+import { Trophy, Wallet, Coins, Sparkles, Zap, RefreshCw, Crown, Users, Save, X, Search } from 'lucide-react';
 
 // Chips
 interface ChipData {
@@ -67,84 +71,84 @@ interface Fixture {
 }
 
 const WORLD_CUP_FIXTURES: Fixture[] = [
-  // Group A
+  // Group A — Mexico, South Africa, South Korea, Czechia
   { id: '1', home: 'MEX', away: 'RSA', date: '2026-06-11', time: '20:00', stage: 'Group A' },
-  { id: '2', home: 'KOR', away: 'TBD', date: '2026-06-12', time: '14:00', stage: 'Group A' },
+  { id: '2', home: 'KOR', away: 'CZE', date: '2026-06-12', time: '14:00', stage: 'Group A' },
   { id: '3', home: 'RSA', away: 'KOR', date: '2026-06-16', time: '14:00', stage: 'Group A' },
-  { id: '4', home: 'TBD', away: 'MEX', date: '2026-06-16', time: '17:00', stage: 'Group A' },
+  { id: '4', home: 'CZE', away: 'MEX', date: '2026-06-16', time: '17:00', stage: 'Group A' },
   { id: '5', home: 'MEX', away: 'KOR', date: '2026-06-20', time: '17:00', stage: 'Group A' },
-  { id: '6', home: 'TBD', away: 'RSA', date: '2026-06-20', time: '17:00', stage: 'Group A' },
-  // Group B
+  { id: '6', home: 'CZE', away: 'RSA', date: '2026-06-20', time: '17:00', stage: 'Group A' },
+  // Group B — Canada, Bosnia & Herzegovina, Qatar, Switzerland
   { id: '7', home: 'CAN', away: 'QAT', date: '2026-06-12', time: '17:00', stage: 'Group B' },
-  { id: '8', home: 'SUI', away: 'TBD', date: '2026-06-12', time: '20:00', stage: 'Group B' },
+  { id: '8', home: 'SUI', away: 'BIH', date: '2026-06-12', time: '20:00', stage: 'Group B' },
   { id: '9', home: 'QAT', away: 'SUI', date: '2026-06-17', time: '14:00', stage: 'Group B' },
-  { id: '10', home: 'TBD', away: 'CAN', date: '2026-06-17', time: '17:00', stage: 'Group B' },
+  { id: '10', home: 'BIH', away: 'CAN', date: '2026-06-17', time: '17:00', stage: 'Group B' },
   { id: '11', home: 'CAN', away: 'SUI', date: '2026-06-21', time: '14:00', stage: 'Group B' },
-  { id: '12', home: 'TBD', away: 'QAT', date: '2026-06-21', time: '14:00', stage: 'Group B' },
-  // Group C
+  { id: '12', home: 'BIH', away: 'QAT', date: '2026-06-21', time: '14:00', stage: 'Group B' },
+  // Group C — Brazil, Morocco, Haiti, Scotland
   { id: '13', home: 'BRA', away: 'MAR', date: '2026-06-13', time: '14:00', stage: 'Group C' },
   { id: '14', home: 'HAI', away: 'SCO', date: '2026-06-13', time: '17:00', stage: 'Group C' },
   { id: '15', home: 'MAR', away: 'HAI', date: '2026-06-18', time: '14:00', stage: 'Group C' },
   { id: '16', home: 'SCO', away: 'BRA', date: '2026-06-18', time: '17:00', stage: 'Group C' },
   { id: '17', home: 'BRA', away: 'HAI', date: '2026-06-23', time: '17:00', stage: 'Group C' },
   { id: '18', home: 'SCO', away: 'MAR', date: '2026-06-23', time: '17:00', stage: 'Group C' },
-  // Group D
+  // Group D — USA, Paraguay, Australia, Türkiye
   { id: '19', home: 'USA', away: 'PAR', date: '2026-06-13', time: '20:00', stage: 'Group D' },
-  { id: '20', home: 'AUS', away: 'TBD', date: '2026-06-14', time: '14:00', stage: 'Group D' },
+  { id: '20', home: 'AUS', away: 'TUR', date: '2026-06-14', time: '14:00', stage: 'Group D' },
   { id: '21', home: 'PAR', away: 'AUS', date: '2026-06-18', time: '20:00', stage: 'Group D' },
-  { id: '22', home: 'TBD', away: 'USA', date: '2026-06-19', time: '14:00', stage: 'Group D' },
+  { id: '22', home: 'TUR', away: 'USA', date: '2026-06-19', time: '14:00', stage: 'Group D' },
   { id: '23', home: 'USA', away: 'AUS', date: '2026-06-23', time: '20:00', stage: 'Group D' },
-  { id: '24', home: 'TBD', away: 'PAR', date: '2026-06-23', time: '20:00', stage: 'Group D' },
-  // Group E
+  { id: '24', home: 'TUR', away: 'PAR', date: '2026-06-23', time: '20:00', stage: 'Group D' },
+  // Group E — Germany, Curaçao, Ivory Coast, Ecuador
   { id: '25', home: 'GER', away: 'CUW', date: '2026-06-14', time: '14:00', stage: 'Group E' },
   { id: '26', home: 'CIV', away: 'ECU', date: '2026-06-14', time: '17:00', stage: 'Group E' },
   { id: '27', home: 'ECU', away: 'GER', date: '2026-06-19', time: '14:00', stage: 'Group E' },
   { id: '28', home: 'CUW', away: 'CIV', date: '2026-06-19', time: '17:00', stage: 'Group E' },
   { id: '29', home: 'GER', away: 'CIV', date: '2026-06-24', time: '17:00', stage: 'Group E' },
   { id: '30', home: 'ECU', away: 'CUW', date: '2026-06-24', time: '17:00', stage: 'Group E' },
-  // Group F
+  // Group F — Netherlands, Japan, Sweden, Tunisia
   { id: '31', home: 'NED', away: 'JPN', date: '2026-06-14', time: '20:00', stage: 'Group F' },
-  { id: '32', home: 'TUN', away: 'TBD', date: '2026-06-15', time: '14:00', stage: 'Group F' },
+  { id: '32', home: 'TUN', away: 'SWE', date: '2026-06-15', time: '14:00', stage: 'Group F' },
   { id: '33', home: 'JPN', away: 'TUN', date: '2026-06-19', time: '20:00', stage: 'Group F' },
-  { id: '34', home: 'TBD', away: 'NED', date: '2026-06-20', time: '14:00', stage: 'Group F' },
+  { id: '34', home: 'SWE', away: 'NED', date: '2026-06-20', time: '14:00', stage: 'Group F' },
   { id: '35', home: 'NED', away: 'TUN', date: '2026-06-24', time: '20:00', stage: 'Group F' },
-  { id: '36', home: 'TBD', away: 'JPN', date: '2026-06-24', time: '20:00', stage: 'Group F' },
-  // Group G
+  { id: '36', home: 'SWE', away: 'JPN', date: '2026-06-24', time: '20:00', stage: 'Group F' },
+  // Group G — Belgium, Egypt, Iran, New Zealand
   { id: '37', home: 'BEL', away: 'EGY', date: '2026-06-15', time: '17:00', stage: 'Group G' },
   { id: '38', home: 'IRN', away: 'NZL', date: '2026-06-15', time: '20:00', stage: 'Group G' },
   { id: '39', home: 'EGY', away: 'IRN', date: '2026-06-20', time: '17:00', stage: 'Group G' },
   { id: '40', home: 'NZL', away: 'BEL', date: '2026-06-20', time: '20:00', stage: 'Group G' },
   { id: '41', home: 'BEL', away: 'IRN', date: '2026-06-25', time: '14:00', stage: 'Group G' },
   { id: '42', home: 'NZL', away: 'EGY', date: '2026-06-25', time: '14:00', stage: 'Group G' },
-  // Group H
+  // Group H — Spain, Cabo Verde, Saudi Arabia, Uruguay
   { id: '43', home: 'ESP', away: 'CPV', date: '2026-06-16', time: '14:00', stage: 'Group H' },
   { id: '44', home: 'KSA', away: 'URU', date: '2026-06-16', time: '17:00', stage: 'Group H' },
   { id: '45', home: 'URU', away: 'ESP', date: '2026-06-21', time: '14:00', stage: 'Group H' },
   { id: '46', home: 'CPV', away: 'KSA', date: '2026-06-21', time: '17:00', stage: 'Group H' },
   { id: '47', home: 'ESP', away: 'KSA', date: '2026-06-26', time: '14:00', stage: 'Group H' },
   { id: '48', home: 'URU', away: 'CPV', date: '2026-06-26', time: '14:00', stage: 'Group H' },
-  // Group I
+  // Group I — France, Senegal, Iraq, Norway
   { id: '49', home: 'FRA', away: 'SEN', date: '2026-06-16', time: '20:00', stage: 'Group I' },
-  { id: '50', home: 'NOR', away: 'TBD', date: '2026-06-17', time: '14:00', stage: 'Group I' },
+  { id: '50', home: 'NOR', away: 'IRQ', date: '2026-06-17', time: '14:00', stage: 'Group I' },
   { id: '51', home: 'SEN', away: 'NOR', date: '2026-06-21', time: '20:00', stage: 'Group I' },
-  { id: '52', home: 'TBD', away: 'FRA', date: '2026-06-22', time: '14:00', stage: 'Group I' },
+  { id: '52', home: 'IRQ', away: 'FRA', date: '2026-06-22', time: '14:00', stage: 'Group I' },
   { id: '53', home: 'FRA', away: 'NOR', date: '2026-06-26', time: '20:00', stage: 'Group I' },
-  { id: '54', home: 'TBD', away: 'SEN', date: '2026-06-26', time: '20:00', stage: 'Group I' },
-  // Group J
+  { id: '54', home: 'IRQ', away: 'SEN', date: '2026-06-26', time: '20:00', stage: 'Group I' },
+  // Group J — Argentina, Algeria, Austria, Jordan
   { id: '55', home: 'ARG', away: 'ALG', date: '2026-06-17', time: '17:00', stage: 'Group J' },
   { id: '56', home: 'AUT', away: 'JOR', date: '2026-06-17', time: '20:00', stage: 'Group J' },
   { id: '57', home: 'ALG', away: 'AUT', date: '2026-06-22', time: '14:00', stage: 'Group J' },
   { id: '58', home: 'ARG', away: 'JOR', date: '2026-06-22', time: '17:00', stage: 'Group J' },
   { id: '59', home: 'JOR', away: 'ALG', date: '2026-06-27', time: '14:00', stage: 'Group J' },
   { id: '60', home: 'AUT', away: 'ARG', date: '2026-06-27', time: '14:00', stage: 'Group J' },
-  // Group K
+  // Group K — Portugal, DR Congo, Uzbekistan, Colombia
   { id: '61', home: 'POR', away: 'UZB', date: '2026-06-18', time: '14:00', stage: 'Group K' },
-  { id: '62', home: 'COL', away: 'TBD', date: '2026-06-18', time: '17:00', stage: 'Group K' },
+  { id: '62', home: 'COL', away: 'COD', date: '2026-06-18', time: '17:00', stage: 'Group K' },
   { id: '63', home: 'UZB', away: 'COL', date: '2026-06-23', time: '14:00', stage: 'Group K' },
-  { id: '64', home: 'TBD', away: 'POR', date: '2026-06-23', time: '17:00', stage: 'Group K' },
+  { id: '64', home: 'COD', away: 'POR', date: '2026-06-23', time: '17:00', stage: 'Group K' },
   { id: '65', home: 'POR', away: 'COL', date: '2026-06-28', time: '17:00', stage: 'Group K' },
-  { id: '66', home: 'TBD', away: 'UZB', date: '2026-06-28', time: '17:00', stage: 'Group K' },
-  // Group L
+  { id: '66', home: 'COD', away: 'UZB', date: '2026-06-28', time: '17:00', stage: 'Group K' },
+  // Group L — England, Croatia, Ghana, Panama
   { id: '67', home: 'ENG', away: 'CRO', date: '2026-06-18', time: '20:00', stage: 'Group L' },
   { id: '68', home: 'GHA', away: 'PAN', date: '2026-06-19', time: '14:00', stage: 'Group L' },
   { id: '69', home: 'CRO', away: 'GHA', date: '2026-06-23', time: '20:00', stage: 'Group L' },
@@ -153,21 +157,32 @@ const WORLD_CUP_FIXTURES: Fixture[] = [
   { id: '72', home: 'CRO', away: 'PAN', date: '2026-06-28', time: '20:00', stage: 'Group L' },
 ];
 
-// Nation names for display
+// Nation names for display – all 48 qualified nations
 const NATION_NAMES: Record<string, string> = {
-  'MEX': 'Mexico', 'RSA': 'South Africa', 'KOR': 'Korea Republic',
-  'CAN': 'Canada', 'QAT': 'Qatar', 'SUI': 'Switzerland',
-  'BRA': 'Brazil', 'MAR': 'Morocco', 'HAI': 'Haiti', 'SCO': 'Scotland',
-  'USA': 'USA', 'PAR': 'Paraguay', 'AUS': 'Australia',
-  'GER': 'Germany', 'CUW': 'Curaçao', 'CIV': 'Ivory Coast', 'ECU': 'Ecuador',
-  'NED': 'Netherlands', 'JPN': 'Japan', 'TUN': 'Tunisia',
-  'BEL': 'Belgium', 'EGY': 'Egypt', 'IRN': 'Iran', 'NZL': 'New Zealand',
-  'ESP': 'Spain', 'CPV': 'Cabo Verde', 'KSA': 'Saudi Arabia', 'URU': 'Uruguay',
-  'FRA': 'France', 'SEN': 'Senegal', 'NOR': 'Norway',
-  'ARG': 'Argentina', 'ALG': 'Algeria', 'JOR': 'Jordan', 'AUT': 'Austria',
-  'POR': 'Portugal', 'UZB': 'Uzbekistan', 'COL': 'Colombia',
-  'ENG': 'England', 'CRO': 'Croatia', 'GHA': 'Ghana', 'PAN': 'Panama',
-  'TBD': 'TBD',
+  // Group A
+  MEX: 'Mexico', RSA: 'South Africa', KOR: 'Korea Republic', CZE: 'Czechia',
+  // Group B
+  CAN: 'Canada', BIH: 'Bosnia & Herzegovina', QAT: 'Qatar', SUI: 'Switzerland',
+  // Group C
+  BRA: 'Brazil', MAR: 'Morocco', HAI: 'Haiti', SCO: 'Scotland',
+  // Group D
+  USA: 'USA', PAR: 'Paraguay', AUS: 'Australia', TUR: 'Türkiye',
+  // Group E
+  GER: 'Germany', CUW: 'Curaçao', CIV: 'Ivory Coast', ECU: 'Ecuador',
+  // Group F
+  NED: 'Netherlands', JPN: 'Japan', SWE: 'Sweden', TUN: 'Tunisia',
+  // Group G
+  BEL: 'Belgium', EGY: 'Egypt', IRN: 'Iran', NZL: 'New Zealand',
+  // Group H
+  ESP: 'Spain', CPV: 'Cabo Verde', KSA: 'Saudi Arabia', URU: 'Uruguay',
+  // Group I
+  FRA: 'France', SEN: 'Senegal', IRQ: 'Iraq', NOR: 'Norway',
+  // Group J
+  ARG: 'Argentina', ALG: 'Algeria', AUT: 'Austria', JOR: 'Jordan',
+  // Group K
+  POR: 'Portugal', COD: 'DR Congo', UZB: 'Uzbekistan', COL: 'Colombia',
+  // Group L
+  ENG: 'England', CRO: 'Croatia', GHA: 'Ghana', PAN: 'Panama',
 };
 
 // Get fixtures for a nation
@@ -523,56 +538,114 @@ export default function SquadPage() {
     }
   };
 
-  // Swap player between starting/bench (view mode)
+  // Pure check: would swapping p1 and p2 produce a valid formation?
+  const isSwapValid = (p1: Player, p2: Player): boolean => {
+    if (p1.id === p2.id) return false;
+    if (p1.isStarting === p2.isStarting) return false;
+
+    const playerOut = p1.isStarting ? p1 : p2;
+    const playerIn = p1.isStarting ? p2 : p1;
+
+    const nextStarting = startingXI.map(p => p.id === playerOut.id ? { ...playerIn, isStarting: true } : p);
+    const counts: Record<Position, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+    nextStarting.forEach(p => counts[p.position as Position]++);
+
+    return (
+      counts.GK === 1 &&
+      counts.DEF >= 3 && counts.DEF <= 5 &&
+      counts.MID >= 2 && counts.MID <= 5 &&
+      counts.FWD >= 1 && counts.FWD <= 3
+    );
+  };
+
+  // Set of valid swap target IDs given the currently picked player
+  const validSwapTargets = useMemo(() => {
+    if (!playerToSub) return new Set<string>();
+    const out = new Set<string>();
+    [...startingXI, ...bench].forEach(p => {
+      if (isSwapValid(playerToSub, p)) out.add(p.id);
+    });
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerToSub, startingXI, bench]);
+
+  // Drag-and-drop ref (sync with state for HTML5 DnD)
+  const draggingRef = useRef<Player | null>(null);
+
+  // Core swap routine used by both tap-to-sub and drag-and-drop
+  const performSwap = (p1: Player, p2: Player) => {
+    if (!isSwapValid(p1, p2)) {
+      alert('Invalid formation!\n\n• 1 Goalkeeper\n• 3–5 Defenders\n• 2–5 Midfielders\n• 1–3 Forwards');
+      setPlayerToSub(null);
+      return;
+    }
+
+    const playerOut = p1.isStarting ? p1 : p2;
+    const playerIn = p1.isStarting ? p2 : p1;
+
+    const nextStarting = startingXI.map(p => p.id === playerOut.id ? { ...playerIn, isStarting: true } : p);
+    const nextBench = bench.map(p => p.id === playerIn.id ? { ...playerOut, isStarting: false } : p);
+
+    setStartingXI(nextStarting);
+    setBench(nextBench);
+
+    // Captain / vice transfer rules
+    // The armband stays with the starting slot — the incoming player inherits it.
+    if (captainId === playerOut.id) {
+      setCaptainId(playerIn.id);
+    }
+    if (viceCaptainId === playerOut.id) {
+      setViceCaptainId(playerIn.id);
+    }
+
+    // Update formation string
+    const counts: Record<Position, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+    nextStarting.forEach(p => counts[p.position as Position]++);
+    setFormation(`${counts.DEF}-${counts.MID}-${counts.FWD}`);
+
+    setPlayerToSub(null);
+    setSelectedPlayer(null);
+  };
+
+  // Tap-based selection: first tap selects, second tap swaps
   const swapPlayer = (player: Player) => {
     if (!playerToSub) {
       setPlayerToSub(player);
       return;
     }
-
-    // Try to swap playerToSub with player
-    const p1 = playerToSub;
-    const p2 = player;
-
-    // Can't swap if they are both starting or both on bench
-    if (p1.isStarting === p2.isStarting) {
-      setPlayerToSub(p2); // Just switch focus
-      return;
-    }
-
-    // Determine who is coming OUT and who is coming IN
-    const playerOut = p1.isStarting ? p1 : p2;
-    const playerIn = p1.isStarting ? p2 : p1;
-
-    // Check formation rules
-    const currentStarting = [...startingXI];
-    const nextStarting = currentStarting.map(p => p.id === playerOut.id ? { ...playerIn, isStarting: true } : p);
-    
-    // Position counts in potential new formation
-    const counts = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
-    nextStarting.forEach(p => counts[p.position as Position]++);
-
-    // Formation Rules
-    const isValid = 
-      counts.GK === 1 &&
-      counts.DEF >= 3 && counts.DEF <= 5 &&
-      counts.MID >= 2 && counts.MID <= 5 &&
-      counts.FWD >= 1 && counts.FWD <= 3;
-
-    if (!isValid) {
-      alert(`Invalid formation! A valid squad needs:\n- 1 Goalkeeper\n- 3-5 Defenders\n- 2-5 Midfielders\n- 1-3 Forwards`);
+    if (playerToSub.id === player.id) {
       setPlayerToSub(null);
       return;
     }
+    if (playerToSub.isStarting === player.isStarting) {
+      setPlayerToSub(player); // Just switch focus
+      return;
+    }
+    performSwap(playerToSub, player);
+  };
 
-    // Apply the swap
-    setStartingXI(nextStarting);
-    setBench(prev => prev.map(p => p.id === playerIn.id ? { ...playerOut, isStarting: false } : p));
-    setPlayerToSub(null);
-    setSelectedPlayer(null);
-
-    // Update formation string
-    setFormation(`${counts.DEF}-${counts.MID}-${counts.FWD}`);
+  // Drag handlers
+  const handleDragStart = (player: Player) => (e: React.DragEvent) => {
+    draggingRef.current = player;
+    setPlayerToSub(player);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', player.id);
+  };
+  const handleDragEnd = () => {
+    draggingRef.current = null;
+  };
+  const handleDragOver = (target: Player) => (e: React.DragEvent) => {
+    const dragged = draggingRef.current;
+    if (!dragged || !isSwapValid(dragged, target)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+  const handleDrop = (target: Player) => (e: React.DragEvent) => {
+    e.preventDefault();
+    const dragged = draggingRef.current;
+    if (!dragged) return;
+    performSwap(dragged, target);
+    draggingRef.current = null;
   };
 
   const setCaptain = (playerId: string) => {
@@ -633,43 +706,47 @@ export default function SquadPage() {
     const mids = squad.filter(p => p.position === 'MID');
     const fwds = squad.filter(p => p.position === 'FWD');
 
+    const progress = (squad.length / 15) * 100;
     return (
-      <div className="max-w-5xl mx-auto px-0 sm:px-4 py-6" style={{ overflowX: 'auto', overflowY: 'visible', width: '100%' }}>
+      <div className="max-w-5xl mx-auto px-0 sm:px-4 py-4 sm:py-6 pb-24 sm:pb-6" style={{ overflowX: 'auto', overflowY: 'visible', width: '100%' }}>
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-white">Build Your Squad</h1>
-            <p className="text-white/60">Select 15 players within your £100m budget</p>
+        <div className="px-3 sm:px-0 mb-5 sm:mb-6">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center shadow-[0_0_20px_rgba(244,63,94,0.45)]">
+              <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">Build Your Squad</h1>
+              <p className="text-white/50 text-xs sm:text-sm">Pick 15 players within your £100m budget</p>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-center">
-              <p className="text-[10px] text-white/40 uppercase">Players</p>
-              <p className="text-lg font-bold text-white">{squad.length}/15</p>
-            </div>
-            <div className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-center">
-              <p className="text-[10px] text-white/40 uppercase">Budget</p>
-              <p className={`text-lg font-bold ${remainingBudget >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                £{remainingBudget.toFixed(1)}m
-              </p>
-            </div>
+
+          {/* Stat strip */}
+          <div className="grid grid-cols-3 gap-2">
+            <StatCard icon={<Users className="w-4 h-4" />} label="Players" value={`${squad.length}/15`} accent="text-white" />
+            <StatCard icon={<Wallet className="w-4 h-4" />} label="Budget" value={`£${remainingBudget.toFixed(1)}m`} accent={remainingBudget >= 0 ? 'text-emerald-400' : 'text-red-400'} />
+            <StatCard icon={<Coins className="w-4 h-4" />} label="Spent" value={`£${squadValue.toFixed(1)}m`} accent="text-amber-300" />
+          </div>
+
+          {/* Progress bar */}
+          <div className="mt-3 h-1.5 bg-white/5 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-pink-500 via-rose-500 to-amber-400 transition-all duration-500"
+              style={{ width: `${progress}%` }}
+            />
           </div>
         </div>
 
         {/* Pitch */}
-        <div className="relative bg-gradient-to-b from-green-700 via-green-600 to-green-700 rounded-2xl p-1 sm:p-6 mb-6 overflow-x-auto" style={{ overflowY: 'visible' }}>
-          {/* Pitch markings */}
-          <div className="absolute inset-0 opacity-20 rounded-2xl">
-            <div className="absolute top-1/2 left-0 right-0 h-px bg-white" />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 border border-white rounded-full" />
-          </div>
-
-          <div className="relative z-10 space-y-3 sm:space-y-5 min-w-max sm:min-w-0" style={{ overflow: 'visible' }}>
+        <div className="relative rounded-2xl mb-6 overflow-hidden shadow-[0_20px_60px_-20px_rgba(0,0,0,0.6)] ring-1 ring-white/10">
+          <PitchBg />
+          <div className="relative z-10 p-2 sm:p-6 space-y-4 sm:space-y-6 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
             {/* FWD row */}
-            <div className="flex justify-center gap-0.5 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
+            <div className="flex justify-center gap-1.5 sm:gap-6 min-w-max sm:min-w-0 animate-slide-down">
               {[...Array(3)].map((_, i) => (
                 fwds[i] ? (
                   <div key={fwds[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(fwds[i].id)}>
-                    <PlayerCard player={fwds[i]} showOpponent={getNextOpponent(fwds[i].nation?.code || '')} size="xs" />
+                    <PlayerCard player={fwds[i]} showOpponent={getNextOpponent(fwds[i].nation?.code || '')} difficulty={getFixtureDifficulty(fwds[i].nation?.code || '', getNextOpponent(fwds[i].nation?.code || ''))} size="xs" />
                   </div>
                 ) : (
                   <div key={`fwd-${i}`} className="flex-shrink-0">
@@ -680,11 +757,11 @@ export default function SquadPage() {
             </div>
 
             {/* MID row */}
-            <div className="flex justify-center gap-0.5 sm:gap-4 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
+            <div className="flex justify-center gap-1 sm:gap-4 min-w-max sm:min-w-0 animate-slide-down" style={{ animationDelay: '60ms' }}>
               {[...Array(5)].map((_, i) => (
                 mids[i] ? (
                   <div key={mids[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(mids[i].id)}>
-                    <PlayerCard player={mids[i]} showOpponent={getNextOpponent(mids[i].nation?.code || '')} size="xs" />
+                    <PlayerCard player={mids[i]} showOpponent={getNextOpponent(mids[i].nation?.code || '')} difficulty={getFixtureDifficulty(mids[i].nation?.code || '', getNextOpponent(mids[i].nation?.code || ''))} size="xs" />
                   </div>
                 ) : (
                   <div key={`mid-${i}`} className="flex-shrink-0">
@@ -695,11 +772,11 @@ export default function SquadPage() {
             </div>
 
             {/* DEF row */}
-            <div className="flex justify-center gap-0.5 sm:gap-4 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
+            <div className="flex justify-center gap-1 sm:gap-4 min-w-max sm:min-w-0 animate-slide-down" style={{ animationDelay: '120ms' }}>
               {[...Array(5)].map((_, i) => (
                 defs[i] ? (
                   <div key={defs[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(defs[i].id)}>
-                    <PlayerCard player={defs[i]} showOpponent={getNextOpponent(defs[i].nation?.code || '')} size="xs" />
+                    <PlayerCard player={defs[i]} showOpponent={getNextOpponent(defs[i].nation?.code || '')} difficulty={getFixtureDifficulty(defs[i].nation?.code || '', getNextOpponent(defs[i].nation?.code || ''))} size="xs" />
                   </div>
                 ) : (
                   <div key={`def-${i}`} className="flex-shrink-0">
@@ -710,11 +787,11 @@ export default function SquadPage() {
             </div>
 
             {/* GK row */}
-            <div className="flex justify-center gap-1 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
+            <div className="flex justify-center gap-2 sm:gap-6 min-w-max sm:min-w-0 animate-slide-down" style={{ animationDelay: '180ms' }}>
               {[...Array(2)].map((_, i) => (
                 gks[i] ? (
                   <div key={gks[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(gks[i].id)}>
-                    <PlayerCard player={gks[i]} showOpponent={getNextOpponent(gks[i].nation?.code || '')} size="xs" />
+                    <PlayerCard player={gks[i]} showOpponent={getNextOpponent(gks[i].nation?.code || '')} difficulty={getFixtureDifficulty(gks[i].nation?.code || '', getNextOpponent(gks[i].nation?.code || ''))} size="xs" />
                   </div>
                 ) : (
                   <div key={`gk-${i}`} className="flex-shrink-0">
@@ -726,8 +803,8 @@ export default function SquadPage() {
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center justify-between">
+        {/* Desktop actions */}
+        <div className="hidden sm:flex items-center justify-between px-3 sm:px-0">
           <button
             onClick={() => setSquad([])}
             className="px-4 py-2 text-white/60 hover:text-white transition-colors"
@@ -737,44 +814,78 @@ export default function SquadPage() {
           <button
             onClick={saveSquad}
             disabled={saving || squad.length !== 15 || remainingBudget < 0}
-            className="px-8 py-3 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-xl font-bold hover:from-pink-600 hover:to-rose-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="px-8 py-3 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-xl font-bold hover:from-pink-600 hover:to-rose-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-[0_10px_30px_-10px_rgba(244,63,94,0.6)]"
           >
             {saving ? 'Saving...' : 'Save Squad'}
           </button>
         </div>
 
+        {/* Mobile sticky bottom bar */}
+        <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-white/10 px-3 py-2.5 flex items-center justify-between gap-3">
+          <button
+            onClick={() => setSquad([])}
+            className="px-3 py-2 text-white/60 hover:text-white text-sm font-medium"
+          >
+            Clear
+          </button>
+          <button
+            onClick={saveSquad}
+            disabled={saving || squad.length !== 15 || remainingBudget < 0}
+            className="flex-1 px-4 py-3 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-xl font-black text-sm hover:from-pink-600 hover:to-rose-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg flex items-center justify-center gap-2"
+          >
+            <Save className="w-4 h-4" />
+            {saving ? 'Saving...' : `Save Squad (${squad.length}/15)`}
+          </button>
+        </div>
+
         {/* Player Selection Modal */}
         {showModal && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-900 rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
-              <div className="p-4 border-b border-white/10 flex items-center justify-between">
-                <h2 className="text-xl font-bold text-white">Select {selectingPosition}</h2>
-                <button onClick={() => { setShowModal(false); setSelectingPosition(null); }} className="text-white/60 hover:text-white">
-                  ✕
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+            <div className="bg-slate-900 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden border border-white/10 shadow-2xl">
+              <div className="p-4 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-black text-sm ${
+                    selectingPosition === 'GK' ? 'bg-amber-500/20 text-amber-300' :
+                    selectingPosition === 'DEF' ? 'bg-sky-500/20 text-sky-300' :
+                    selectingPosition === 'MID' ? 'bg-emerald-500/20 text-emerald-300' :
+                    'bg-rose-500/20 text-rose-300'
+                  }`}>
+                    {selectingPosition}
+                  </div>
+                  <div>
+                    <h2 className="text-lg sm:text-xl font-bold text-white">Select {selectingPosition}</h2>
+                    <p className="text-xs text-white/40">Budget remaining: £{remainingBudget.toFixed(1)}m</p>
+                  </div>
+                </div>
+                <button onClick={() => { setShowModal(false); setSelectingPosition(null); }} className="text-white/60 hover:text-white p-2 rounded-lg hover:bg-white/5">
+                  <X className="w-5 h-5" />
                 </button>
               </div>
-              
+
               {/* Filters */}
               <div className="p-4 border-b border-white/10 flex gap-3">
-                <input
-                  type="text"
-                  placeholder="Search players..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="flex-1 px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40"
-                />
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                  <input
+                    type="text"
+                    placeholder="Search players..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-white/30 focus:bg-white/10 transition-colors"
+                  />
+                </div>
                 <select
                   value={sortBy}
                   onChange={e => setSortBy(e.target.value as 'price' | 'name')}
-                  className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                  className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm cursor-pointer"
                 >
                   <option value="price">By Price</option>
                   <option value="name">By Name</option>
                 </select>
               </div>
-              
+
               {/* Player List */}
-              <div className="max-h-[50vh] overflow-y-auto">
+              <div className="max-h-[55vh] overflow-y-auto">
                 {availablePlayers.length === 0 ? (
                   <div className="p-8 text-center text-white/40">No players available</div>
                 ) : (
@@ -782,7 +893,7 @@ export default function SquadPage() {
                     <button
                       key={player.id}
                       onClick={() => addPlayer(player)}
-                      className="w-full p-4 flex items-center gap-4 hover:bg-white/5 border-b border-white/5 text-left"
+                      className="w-full p-3 sm:p-4 flex items-center gap-3 sm:gap-4 hover:bg-white/5 border-b border-white/5 text-left group transition-colors"
                     >
                       <Kit
                         primaryColor={player.nation?.kitColor1 || '#FFF'}
@@ -792,11 +903,11 @@ export default function SquadPage() {
                         size="sm"
                       />
                       <img src={getFlagUrl(player.nation?.code || '')} alt="" className="w-6 h-4 rounded-sm object-cover" />
-                      <div className="flex-1">
-                        <p className="text-white font-medium">{player.displayName}</p>
-                        <p className="text-white/40 text-sm">{player.nation?.name}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white font-semibold truncate">{player.displayName}</p>
+                        <p className="text-white/40 text-xs">{player.nation?.name}</p>
                       </div>
-                      <p className="text-emerald-400 font-bold">£{player.currentPrice.toFixed(1)}m</p>
+                      <p className="text-emerald-400 font-bold whitespace-nowrap">£{player.currentPrice.toFixed(1)}m</p>
                     </button>
                   ))
                 )}
@@ -873,82 +984,160 @@ export default function SquadPage() {
   const mids = startingXI.filter(p => p.position === 'MID');
   const fwds = startingXI.filter(p => p.position === 'FWD');
 
+  // Render helper for pitch player cards (DRY) – includes drag/drop + highlight logic
+  const renderPitchPlayer = (p: Player) => {
+    const opponent = getNextOpponent(p.nation?.code || '');
+    const difficulty = getFixtureDifficulty(p.nation?.code || '', opponent);
+    const isSelected = playerToSub?.id === p.id;
+    const isValid = !!playerToSub && !isSelected && validSwapTargets.has(p.id);
+    const isDimmed = !!playerToSub && !isSelected && !validSwapTargets.has(p.id);
+    return (
+      <div key={p.id} className="flex-shrink-0">
+        <PlayerCard
+          player={p}
+          onClick={() => {
+            if (playerToSub) {
+              if (isValid || isSelected) {
+                swapPlayer(p);
+              } else {
+                // Just refocus to a same-side selection – or open detail
+                setSelectedPlayer(p);
+              }
+            } else {
+              setSelectedPlayer(p);
+            }
+          }}
+          showOpponent={opponent}
+          difficulty={difficulty}
+          livePoints={p.points}
+          isCaptain={captainId === p.id}
+          isViceCaptain={viceCaptainId === p.id}
+          selectedForSub={isSelected}
+          validTarget={isValid}
+          dimmed={isDimmed}
+          draggable
+          onDragStart={handleDragStart(p)}
+          onDragEnd={handleDragEnd}
+          onDragOver={handleDragOver(p)}
+          onDrop={handleDrop(p)}
+          size="xs"
+        />
+      </div>
+    );
+  };
+
+  // Total points across squad
+  const totalPoints = allSquadPlayers.reduce((sum, p) => sum + (p.points || 0), 0);
+
+  // Next gameweek countdown – first upcoming fixture across whole tournament
+  const nextFixture = WORLD_CUP_FIXTURES
+    .map(f => ({ ...f, dt: new Date(`${f.date}T${f.time}`) }))
+    .filter(f => f.dt > new Date())
+    .sort((a, b) => a.dt.getTime() - b.dt.getTime())[0];
+
+  let countdownStr = '—';
+  if (nextFixture) {
+    const ms = nextFixture.dt.getTime() - Date.now();
+    const days = Math.floor(ms / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((ms / (1000 * 60 * 60)) % 24);
+    countdownStr = days > 0 ? `${days}d ${hours}h` : `${hours}h`;
+  }
+
   return (
-    <div className="max-w-5xl mx-auto px-0 sm:px-4 py-6" style={{ overflowX: 'auto', overflowY: 'visible', width: '100%' }}>
+    <div className="max-w-5xl mx-auto px-0 sm:px-4 py-4 sm:py-6 pb-24 sm:pb-6" style={{ overflowX: 'auto', overflowY: 'visible', width: '100%' }}>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white">My Squad</h1>
-          <div className="flex items-center gap-3 mt-1">
-            <span className="text-white/40 text-sm">Formation:</span>
-            <select
-              value={formation}
-              onChange={(e) => changeFormation(e.target.value)}
-              className="bg-white/10 border border-white/20 rounded-lg px-3 py-1 text-white text-sm font-bold cursor-pointer hover:bg-white/20 transition-colors"
-            >
-              {validFormations.map(f => (
-                <option key={f} value={f} className="bg-slate-900">{f}</option>
-              ))}
-            </select>
+      <div className="px-3 sm:px-0 mb-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.45)]">
+              <Trophy className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">My Squad</h1>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[10px] sm:text-xs uppercase tracking-wider text-white/40 font-bold">Next match in</span>
+                <span className="text-[11px] sm:text-xs text-amber-300 font-black">{countdownStr}</span>
+              </div>
+            </div>
           </div>
+          <FormationPicker formations={validFormations} current={formation} onChange={changeFormation} />
         </div>
-        <div className="flex items-center gap-3">
-          <div className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-center">
-            <p className="text-[10px] text-white/40 uppercase">Value</p>
-            <p className="text-lg font-bold text-white">£{teamValue.toFixed(1)}m</p>
-          </div>
-          <div className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-center">
-            <p className="text-[10px] text-white/40 uppercase">Bank</p>
-            <p className="text-lg font-bold text-emerald-400">£{bankBalance.toFixed(1)}m</p>
-          </div>
+
+        {/* Stats strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <StatCard icon={<Trophy className="w-4 h-4" />} label="Total Pts" value={`${totalPoints}`} accent="text-emerald-400" highlight />
+          <StatCard icon={<Coins className="w-4 h-4" />} label="Value" value={`£${teamValue.toFixed(1)}m`} accent="text-white" />
+          <StatCard icon={<Wallet className="w-4 h-4" />} label="Bank" value={`£${bankBalance.toFixed(1)}m`} accent="text-emerald-300" />
+          <StatCard icon={<Zap className="w-4 h-4" />} label="Form" value={countdownStr} accent="text-amber-300" />
         </div>
       </div>
 
       {/* Chips Bar */}
       {chips.length > 0 && (
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-3 sm:p-4 mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-bold text-white/40 uppercase tracking-wider">Chips</h3>
-            {chips.some(c => c.active) && (
-              <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                Active
-              </span>
-            )}
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {chips.map(chip => (
-              <button
-                key={chip.id}
-                onClick={() => chip.available ? setChipConfirm(chip) : undefined}
-                disabled={!chip.available || chipLoading}
-                className={`relative p-3 rounded-xl border text-left transition-all ${
-                  chip.active
-                    ? 'bg-emerald-500/15 border-emerald-500/50 shadow-lg shadow-emerald-500/10'
-                    : chip.used
-                    ? 'bg-white/[0.02] border-white/5 opacity-40'
-                    : chip.available
-                    ? 'bg-white/5 border-white/10 hover:border-white/30 hover:bg-white/10 cursor-pointer'
-                    : 'bg-white/[0.02] border-white/5 opacity-60'
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={`text-xs font-black ${
-                    chip.active ? 'text-emerald-400' : chip.used ? 'text-white/30' : 'text-white/80'
-                  }`}>
-                    {chip.name}
-                  </span>
-                  {chip.used && !chip.active && (
-                    <svg className="w-3.5 h-3.5 text-white/30" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  )}
-                  {chip.active && (
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  )}
-                </div>
-                <p className="text-[10px] text-white/40 leading-tight">{chip.description}</p>
-              </button>
-            ))}
+        <div className="px-3 sm:px-0 mb-5">
+          <div className="bg-gradient-to-br from-slate-900/80 to-slate-950/80 border border-white/10 rounded-2xl p-3 sm:p-4 backdrop-blur-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-black text-white/50 uppercase tracking-widest flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5" />
+                Power-Up Chips
+              </h3>
+              {chips.some(c => c.active) && (
+                <span className="text-[10px] font-black text-emerald-300 bg-emerald-500/15 ring-1 ring-emerald-500/40 px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Active
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {chips.map(chip => {
+                const Icon = chipIcon(chip.name);
+                return (
+                  <button
+                    key={chip.id}
+                    onClick={() => chip.available ? setChipConfirm(chip) : undefined}
+                    disabled={!chip.available || chipLoading}
+                    className={`relative p-3 rounded-xl border text-left transition-all overflow-hidden group ${
+                      chip.active
+                        ? 'bg-gradient-to-br from-emerald-500/20 to-emerald-700/10 border-emerald-500/60 shadow-[0_0_20px_rgba(16,185,129,0.25)]'
+                        : chip.used
+                        ? 'bg-white/[0.02] border-white/5 opacity-50'
+                        : chip.available
+                        ? 'bg-white/5 border-white/10 hover:border-white/30 hover:bg-white/10 hover:-translate-y-0.5 cursor-pointer'
+                        : 'bg-white/[0.02] border-white/5 opacity-60'
+                    }`}
+                  >
+                    {/* Active glow */}
+                    {chip.active && (
+                      <div className="absolute -inset-px rounded-xl opacity-30 pointer-events-none animate-pulse-slow"
+                        style={{ boxShadow: 'inset 0 0 30px rgba(16,185,129,0.4)' }} />
+                    )}
+
+                    <div className="flex items-center justify-between mb-1.5 relative">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                          chip.active
+                            ? 'bg-emerald-500/30 text-emerald-200'
+                            : chip.used
+                            ? 'bg-white/5 text-white/30'
+                            : 'bg-white/10 text-white/80 group-hover:bg-white/15'
+                        }`}>
+                          <Icon className="w-4 h-4" />
+                        </div>
+                        <span className={`text-[11px] sm:text-xs font-black tracking-tight ${
+                          chip.active ? 'text-emerald-200' : chip.used ? 'text-white/30 line-through' : 'text-white/90'
+                        }`}>
+                          {chip.name}
+                        </span>
+                      </div>
+                      {chip.used && !chip.active && (
+                        <span className="text-[8px] font-black text-white/30 bg-white/5 px-1.5 py-0.5 rounded">USED</span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-white/40 leading-tight relative">{chip.description}</p>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -986,116 +1175,156 @@ export default function SquadPage() {
       )}
 
       {/* Pitch */}
-      <div className="relative bg-gradient-to-b from-green-700 via-green-600 to-green-700 rounded-2xl p-1 sm:p-6 mb-6 overflow-x-auto" style={{ overflowY: 'visible' }}>
-        <div className="absolute inset-0 opacity-20 rounded-2xl">
-          <div className="absolute top-1/2 left-0 right-0 h-px bg-white" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 border border-white rounded-full" />
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-40 h-14 border-t border-l border-r border-white" />
-        </div>
-
-        <div className="relative z-10 space-y-3 sm:space-y-5 min-w-max sm:min-w-0" style={{ overflow: 'visible' }}>
+      <div className="relative rounded-2xl mb-5 sm:mb-6 overflow-hidden shadow-[0_20px_60px_-20px_rgba(0,0,0,0.65)] ring-1 ring-white/10">
+        <PitchBg />
+        <div className="relative z-10 p-2 sm:p-6 space-y-4 sm:space-y-7 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
           {/* FWD */}
-          <div className="flex justify-center gap-0.5 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
-            {fwds.map(p => (
-              <div key={p.id} className="flex-shrink-0">
-                <PlayerCard
-                  player={p}
-                  onClick={() => setSelectedPlayer(p)}
-                  showOpponent={getNextOpponent(p.nation?.code || '')}
-                  isCaptain={captainId === p.id}
-                  isViceCaptain={viceCaptainId === p.id}
-                  size="xs"
-                />
-              </div>
-            ))}
+          <div className="flex justify-center gap-1.5 sm:gap-6 min-w-max sm:min-w-0 animate-slide-down">
+            {fwds.map(renderPitchPlayer)}
           </div>
 
           {/* MID */}
-          <div className="flex justify-center gap-0.5 sm:gap-4 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
-            {mids.map(p => (
-              <div key={p.id} className="flex-shrink-0">
-                <PlayerCard
-                  player={p}
-                  onClick={() => setSelectedPlayer(p)}
-                  showOpponent={getNextOpponent(p.nation?.code || '')}
-                  isCaptain={captainId === p.id}
-                  isViceCaptain={viceCaptainId === p.id}
-                  size="xs"
-                />
-              </div>
-            ))}
+          <div className="flex justify-center gap-1 sm:gap-4 min-w-max sm:min-w-0 animate-slide-down" style={{ animationDelay: '60ms' }}>
+            {mids.map(renderPitchPlayer)}
           </div>
 
           {/* DEF */}
-          <div className="flex justify-center gap-0.5 sm:gap-4 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
-            {defs.map(p => (
-              <div key={p.id} className="flex-shrink-0">
-                <PlayerCard
-                  player={p}
-                  onClick={() => setSelectedPlayer(p)}
-                  showOpponent={getNextOpponent(p.nation?.code || '')}
-                  isCaptain={captainId === p.id}
-                  isViceCaptain={viceCaptainId === p.id}
-                  size="xs"
-                />
-              </div>
-            ))}
+          <div className="flex justify-center gap-1 sm:gap-4 min-w-max sm:min-w-0 animate-slide-down" style={{ animationDelay: '120ms' }}>
+            {defs.map(renderPitchPlayer)}
           </div>
 
           {/* GK */}
-          <div className="flex justify-center gap-1 sm:gap-6 overflow-x-auto pb-3 scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
-            {gks.map(p => (
-              <div key={p.id} className="flex-shrink-0">
-                <PlayerCard
-                  player={p}
-                  onClick={() => setSelectedPlayer(p)}
-                  showOpponent={getNextOpponent(p.nation?.code || '')}
-                  isCaptain={captainId === p.id}
-                  isViceCaptain={viceCaptainId === p.id}
-                  size="xs"
-                />
-              </div>
-            ))}
+          <div className="flex justify-center gap-2 sm:gap-6 min-w-max sm:min-w-0 animate-slide-down" style={{ animationDelay: '180ms' }}>
+            {gks.map(renderPitchPlayer)}
+          </div>
+        </div>
+
+        {/* Sub-mode floating banner */}
+        {playerToSub && (
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 px-3 py-1.5 rounded-full bg-amber-500/95 text-black text-[11px] sm:text-xs font-black shadow-lg flex items-center gap-2 backdrop-blur-sm">
+            <RefreshCw className="w-3 h-3 animate-spin-slow" />
+            <span>Pick a player to swap with <span className="underline">{playerToSub.displayName}</span></span>
+            <button
+              onClick={() => setPlayerToSub(null)}
+              className="ml-1 w-4 h-4 rounded-full bg-black/20 flex items-center justify-center hover:bg-black/30"
+            >
+              <X className="w-2.5 h-2.5" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Bench / Dugout */}
+      <div className="px-3 sm:px-0 mb-5">
+        <div className="relative rounded-2xl overflow-hidden ring-1 ring-white/10 shadow-xl">
+          {/* Dugout roof */}
+          <div className="h-2 bg-gradient-to-b from-slate-700 to-slate-900" />
+          <div className="bg-gradient-to-b from-slate-900 via-slate-950 to-black p-3 sm:p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xs sm:text-sm font-black text-white/70 uppercase tracking-widest flex items-center gap-2">
+                <Users className="w-3.5 h-3.5" />
+                Substitutes Bench
+              </h2>
+              <span className="text-[10px] text-white/30 uppercase tracking-wider">Auto-sub priority →</span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+              {bench.map((p, i) => {
+                const isSelected = playerToSub?.id === p.id;
+                const isValid = !!playerToSub && !isSelected && validSwapTargets.has(p.id);
+                const isDimmed = !!playerToSub && !isSelected && !validSwapTargets.has(p.id);
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => {
+                      if (playerToSub) {
+                        if (isValid || isSelected) {
+                          swapPlayer(p);
+                        } else {
+                          setSelectedPlayer(p);
+                        }
+                      } else {
+                        setSelectedPlayer(p);
+                      }
+                    }}
+                    draggable
+                    onDragStart={handleDragStart(p)}
+                    onDragEnd={handleDragEnd}
+                    onDragOver={handleDragOver(p)}
+                    onDrop={handleDrop(p)}
+                    className={`relative flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-xl cursor-pointer transition-all group overflow-hidden ${
+                      isSelected
+                        ? 'bg-amber-500/15 ring-2 ring-amber-400 animate-pulse'
+                        : isValid
+                        ? 'bg-emerald-500/10 ring-2 ring-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.4)] animate-pulse'
+                        : isDimmed
+                        ? 'bg-white/[0.02] ring-1 ring-white/5 opacity-30 grayscale'
+                        : 'bg-white/[0.04] hover:bg-white/[0.08] ring-1 ring-white/5 hover:ring-white/15'
+                    }`}
+                  >
+                    {/* Sub-priority number badge */}
+                    <div className="flex flex-col items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-md bg-gradient-to-br from-pink-500 to-rose-600 text-white font-black text-xs shadow-md shrink-0">
+                      {i + 1}
+                    </div>
+                    <Kit
+                      primaryColor={p.nation?.kitColor1 || '#FFF'}
+                      secondaryColor={p.nation?.kitColor2 || '#000'}
+                      number={p.shirtNumber}
+                      nationCode={p.nation?.code || ''}
+                      size="xs"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-xs sm:text-sm font-bold truncate leading-tight">{p.displayName}</p>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className={`px-1 py-[1px] rounded-sm text-[8px] font-black ${
+                          p.position === 'GK' ? 'bg-amber-500/20 text-amber-300' :
+                          p.position === 'DEF' ? 'bg-sky-500/20 text-sky-300' :
+                          p.position === 'MID' ? 'bg-emerald-500/20 text-emerald-300' :
+                          'bg-rose-500/20 text-rose-300'
+                        }`}>{p.position}</span>
+                        <span className="text-white/40 text-[10px]">{p.points || 0} pts</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Bench */}
-      <div className="bg-slate-900/50 rounded-2xl border border-white/10 p-3 sm:p-4 mb-6">
-        <h2 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Substitutes</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
-          {bench.map((p, i) => (
-            <div
-              key={p.id}
-              onClick={() => setSelectedPlayer(p)}
-              className="flex items-center gap-3 p-3 bg-white/5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors"
-            >
-              <div className="text-white/40 font-bold">{i + 1}</div>
-              <Kit
-                primaryColor={p.nation?.kitColor1 || '#FFF'}
-                secondaryColor={p.nation?.kitColor2 || '#000'}
-                number={p.shirtNumber}
-                nationCode={p.nation?.code || ''}
-                size="xs"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-white text-sm font-medium truncate">{p.displayName}</p>
-                <p className="text-white/40 text-xs">{p.position}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center justify-between">
-        <p className="text-white/40 text-sm">Click players to manage your team</p>
+      {/* Desktop actions */}
+      <div className="hidden sm:flex items-center justify-between px-3 sm:px-0">
+        <p className="text-white/40 text-sm">Tap players to manage your team. Coloured badges show fixture difficulty.</p>
         <button
           onClick={saveChanges}
           disabled={saving}
-          className="px-8 py-3 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-xl font-bold hover:from-pink-600 hover:to-rose-600 disabled:opacity-50 transition-all"
+          className="px-8 py-3 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-xl font-bold hover:from-pink-600 hover:to-rose-600 disabled:opacity-50 transition-all shadow-[0_10px_30px_-10px_rgba(244,63,94,0.6)] flex items-center gap-2"
         >
+          <Save className="w-4 h-4" />
           {saving ? 'Saving...' : 'Save Squad'}
+        </button>
+      </div>
+
+      {/* Mobile sticky bottom bar */}
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-white/10 px-3 py-2.5 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="text-center">
+            <p className="text-[9px] text-white/40 uppercase font-bold leading-none">Pts</p>
+            <p className="text-emerald-400 font-black text-sm leading-tight">{totalPoints}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-[9px] text-white/40 uppercase font-bold leading-none">Bank</p>
+            <p className="text-white font-black text-sm leading-tight">£{bankBalance.toFixed(1)}m</p>
+          </div>
+        </div>
+        <button
+          onClick={saveChanges}
+          disabled={saving}
+          className="flex-1 max-w-[200px] px-4 py-3 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-xl font-black text-sm hover:from-pink-600 hover:to-rose-600 disabled:opacity-50 transition-all shadow-lg flex items-center justify-center gap-2"
+        >
+          <Save className="w-4 h-4" />
+          {saving ? 'Saving...' : 'Save'}
         </button>
       </div>
 
@@ -1124,20 +1353,28 @@ export default function SquadPage() {
             onClick={(e) => e.stopPropagation()}
           >
             {/* Compact Header with X button */}
-            <div className="relative bg-gradient-to-br from-green-600 to-green-800 p-4 rounded-t-2xl">
-              <button 
+            <div className="relative bg-gradient-to-br from-emerald-600 via-emerald-700 to-emerald-900 p-4 rounded-t-2xl overflow-hidden">
+              {/* Subtle pitch stripes background */}
+              <div
+                className="absolute inset-0 opacity-20 pointer-events-none"
+                style={{
+                  backgroundImage: 'repeating-linear-gradient(to bottom, rgba(255,255,255,0.06) 0 8%, rgba(0,0,0,0.10) 8% 16%)',
+                }}
+              />
+
+              <button
                 onClick={() => setSelectedPlayer(null)}
-                className="absolute top-3 right-3 text-white bg-black/80 hover:bg-black p-2 rounded-full transition-all touch-manipulation shadow-lg"
-                style={{ 
-                  minWidth: '36px', 
+                className="absolute top-3 right-3 z-10 text-white bg-black/70 hover:bg-black p-2 rounded-full transition-all touch-manipulation shadow-lg"
+                style={{
+                  minWidth: '36px',
                   minHeight: '36px',
                   WebkitTapHighlightColor: 'transparent'
                 }}
               >
-                <span className="text-xl font-bold leading-none block">✕</span>
+                <X className="w-4 h-4" />
               </button>
-              
-              <div className="flex items-center gap-3 pr-10">
+
+              <div className="relative flex items-center gap-3 pr-10">
                 <Kit
                   primaryColor={selectedPlayer.nation?.kitColor1 || '#FFF'}
                   secondaryColor={selectedPlayer.nation?.kitColor2 || '#000'}
@@ -1147,13 +1384,31 @@ export default function SquadPage() {
                   isCaptain={captainId === selectedPlayer.id}
                   isViceCaptain={viceCaptainId === selectedPlayer.id}
                 />
-                <div className="text-white flex-1">
-                  <h2 className="text-lg font-bold leading-tight">{selectedPlayer.displayName}</h2>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <img src={getFlagUrl(selectedPlayer.nation?.code || '')} alt="" className="w-4 h-3 rounded-sm object-cover" />
-                    <span className="text-white/70 text-xs font-medium">{selectedPlayer.nation?.name}</span>
-                    <span className="text-white/30">•</span>
-                    <span className="text-white/70 text-xs font-medium">{selectedPlayer.position}</span>
+                <div className="text-white flex-1 min-w-0">
+                  <h2 className="text-lg font-black leading-tight truncate">{selectedPlayer.displayName}</h2>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-[2px] rounded-md bg-white/10 ring-1 ring-white/15">
+                      <img src={getFlagUrl(selectedPlayer.nation?.code || '')} alt="" className="w-3.5 h-2.5 rounded-[1px] object-cover" />
+                      <span className="text-white text-[10px] font-bold">{selectedPlayer.nation?.code}</span>
+                    </span>
+                    <span className={`px-1.5 py-[2px] rounded-md text-[10px] font-black ${
+                      selectedPlayer.position === 'GK' ? 'bg-amber-500/30 text-amber-200 ring-1 ring-amber-400/40' :
+                      selectedPlayer.position === 'DEF' ? 'bg-sky-500/30 text-sky-200 ring-1 ring-sky-400/40' :
+                      selectedPlayer.position === 'MID' ? 'bg-emerald-500/30 text-emerald-200 ring-1 ring-emerald-400/40' :
+                      'bg-rose-500/30 text-rose-200 ring-1 ring-rose-400/40'
+                    }`}>{selectedPlayer.position}</span>
+                    {(() => {
+                      const opp = getNextOpponent(selectedPlayer.nation?.code || '');
+                      const fdr = getFixtureDifficulty(selectedPlayer.nation?.code || '', opp);
+                      return (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-[2px] rounded-md bg-black/30 ring-1 ring-white/10">
+                          <span className="text-white/70 text-[9px] font-bold uppercase">Next</span>
+                          <img src={getFlagUrl(opp)} alt={opp} className="w-3.5 h-2.5 rounded-[1px] object-cover" />
+                          <span className="text-white text-[10px] font-bold">{opp}</span>
+                          <span className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm text-[9px] font-black ${fdrPill(fdr)}`}>{fdr}</span>
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -1238,34 +1493,38 @@ export default function SquadPage() {
 
               {/* Fixtures Table */}
               <div>
-                <h3 className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2">Fixtures</h3>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Fixtures</h3>
+                  <FdrLegend />
+                </div>
                 <div className="rounded-lg border border-white/10 overflow-hidden">
                   {/* Table Header */}
-                  <div className="grid grid-cols-12 gap-1 bg-white/5 px-2 py-1.5 text-[9px] font-bold text-white/40 uppercase tracking-wider">
+                  <div className="grid grid-cols-12 gap-1 bg-white/5 px-2 py-1.5 text-[9px] font-bold text-white/40 uppercase tracking-wider items-center">
                     <div className="col-span-3">Date</div>
-                    <div className="col-span-4">Opponent</div>
-                    <div className="col-span-2 text-center">G</div>
-                    <div className="col-span-2 text-center">A</div>
-                    <div className="col-span-1 text-center">Pts</div>
+                    <div className="col-span-5">Opponent</div>
+                    <div className="col-span-1 text-center">G</div>
+                    <div className="col-span-1 text-center">A</div>
+                    <div className="col-span-2 text-center">Pts</div>
                   </div>
-                  
+
                   {/* Table Body */}
-                  <div className="max-h-28 overflow-y-auto">
+                  <div className="max-h-40 overflow-y-auto">
                     {getNationFixtures(selectedPlayer.nation?.code || '').map((fixture) => {
                       const opponent = fixture.home === selectedPlayer.nation?.code ? fixture.away : fixture.home;
                       const opponentName = NATION_NAMES[opponent] || opponent;
                       const fixtureDate = new Date(`${fixture.date}T${fixture.time}`);
                       const isPast = fixtureDate < new Date();
                       const isPlayed = fixture.isPlayed;
-                      
-                      // Mock stats for played games (would come from API)
+                      const isHome = fixture.home === selectedPlayer.nation?.code;
+                      const fdr = getFixtureDifficulty(selectedPlayer.nation?.code || '', opponent);
+
                       const goals = isPlayed ? (fixture.playerGoals || 0) : null;
                       const assists = isPlayed ? (fixture.playerAssists || 0) : null;
                       const points = isPlayed ? (fixture.playerPoints || 0) : null;
-                      
+
                       return (
-                        <div 
-                          key={fixture.id} 
+                        <div
+                          key={fixture.id}
                           className={`grid grid-cols-12 gap-1 px-2 py-1.5 border-t border-white/5 items-center ${
                             isPast && !isPlayed ? 'opacity-40' : ''
                           }`}
@@ -1274,30 +1533,43 @@ export default function SquadPage() {
                           <div className="col-span-3 text-[10px] text-white/60">
                             {formatFixtureDate(fixture.date)}
                           </div>
-                          
-                          {/* Opponent */}
-                          <div className="col-span-4 text-[10px] text-white font-medium truncate">
-                            vs {opponentName}
+
+                          {/* Opponent (flag + difficulty pill) */}
+                          <div className="col-span-5 flex items-center gap-1.5 min-w-0">
+                            <img
+                              src={getFlagUrl(opponent)}
+                              alt={opponent}
+                              className="w-4 h-3 rounded-sm object-cover ring-1 ring-white/10 shrink-0"
+                            />
+                            <span className="text-[10px] text-white/80 font-medium truncate">
+                              {isHome ? 'vs' : '@'} {opponentName}
+                            </span>
+                            <span
+                              className={`shrink-0 ml-auto inline-flex items-center justify-center w-4 h-4 rounded-sm text-[9px] font-black ${fdrPill(fdr)}`}
+                              title={`FDR ${fdr}`}
+                            >
+                              {fdr}
+                            </span>
                           </div>
-                          
+
                           {/* Goals */}
-                          <div className="col-span-2 text-center">
-                            <span className={`text-[10px] font-bold ${goals && goals > 0 ? 'text-emerald-400' : 'text-white/40'}`}>
-                              {goals ?? 0}
-                            </span>
-                          </div>
-                          
-                          {/* Assists */}
-                          <div className="col-span-2 text-center">
-                            <span className={`text-[10px] font-bold ${assists && assists > 0 ? 'text-emerald-400' : 'text-white/40'}`}>
-                              {assists ?? 0}
-                            </span>
-                          </div>
-                          
-                          {/* Points */}
                           <div className="col-span-1 text-center">
+                            <span className={`text-[10px] font-bold ${goals && goals > 0 ? 'text-emerald-400' : 'text-white/40'}`}>
+                              {goals ?? '–'}
+                            </span>
+                          </div>
+
+                          {/* Assists */}
+                          <div className="col-span-1 text-center">
+                            <span className={`text-[10px] font-bold ${assists && assists > 0 ? 'text-emerald-400' : 'text-white/40'}`}>
+                              {assists ?? '–'}
+                            </span>
+                          </div>
+
+                          {/* Points */}
+                          <div className="col-span-2 text-center">
                             <span className={`text-[10px] font-bold ${points && points > 0 ? 'text-emerald-400' : 'text-white/40'}`}>
-                              {points ?? 0}
+                              {points ?? '–'}
                             </span>
                           </div>
                         </div>
@@ -1322,6 +1594,78 @@ function StatItem({ label, value }: { label: string; value: string | number }) {
     <div className="bg-white/5 rounded-lg p-2 border border-white/5">
       <p className="text-[9px] font-bold text-white/30 uppercase tracking-wider mb-0.5">{label}</p>
       <p className="text-sm font-bold text-white">{value}</p>
+    </div>
+  );
+}
+
+interface StatCardProps {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  accent?: string;
+  highlight?: boolean;
+}
+
+function StatCard({ icon, label, value, accent = 'text-white', highlight = false }: StatCardProps) {
+  return (
+    <div className={`relative px-3 py-2 rounded-xl border overflow-hidden transition-all ${
+      highlight
+        ? 'bg-gradient-to-br from-emerald-500/10 to-emerald-700/5 border-emerald-500/30 shadow-[0_0_20px_-5px_rgba(16,185,129,0.4)]'
+        : 'bg-white/5 border-white/10'
+    }`}>
+      <div className="flex items-center gap-1.5 mb-0.5">
+        <span className={accent}>{icon}</span>
+        <p className="text-[9px] sm:text-[10px] uppercase tracking-wider font-bold text-white/50 leading-none">{label}</p>
+      </div>
+      <p className={`text-base sm:text-xl font-black leading-tight ${accent}`}>{value}</p>
+    </div>
+  );
+}
+
+// Map a chip name to a Lucide icon
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function chipIcon(name: string): any {
+  const n = name.toLowerCase();
+  if (n.includes('wildcard')) return RefreshCw;
+  if (n.includes('triple') || n.includes('captain')) return Crown;
+  if (n.includes('bench')) return Users;
+  if (n.includes('boost')) return Zap;
+  return Sparkles;
+}
+
+// FDR cell pill color
+function fdrPill(fdr: number): string {
+  switch (fdr) {
+    case 1: return 'bg-emerald-500 text-white';
+    case 2: return 'bg-emerald-700 text-emerald-100';
+    case 3: return 'bg-slate-500 text-white';
+    case 4: return 'bg-rose-600 text-white';
+    case 5: return 'bg-rose-900 text-rose-100';
+    default: return 'bg-slate-700 text-white';
+  }
+}
+
+// Color legend for fixture difficulty (1 easiest → 5 hardest)
+function FdrLegend() {
+  const items: { n: number; label: string }[] = [
+    { n: 1, label: 'Easy' },
+    { n: 2, label: '' },
+    { n: 3, label: 'Avg' },
+    { n: 4, label: '' },
+    { n: 5, label: 'Hard' },
+  ];
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-[8px] uppercase tracking-wider font-bold text-white/30 mr-1">FDR</span>
+      {items.map(it => (
+        <span
+          key={it.n}
+          className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm text-[8px] font-black ${fdrPill(it.n)}`}
+          title={`${it.n} – ${it.label || (it.n < 3 ? 'Easy' : 'Hard')}`}
+        >
+          {it.n}
+        </span>
+      ))}
     </div>
   );
 }

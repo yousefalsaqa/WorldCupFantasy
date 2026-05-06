@@ -8,75 +8,82 @@ async function hashPassword(password: string): Promise<string> {
 }
 
 // ============================================
-// WORLD CUP 2026 QUALIFIED NATIONS
+// 2026 FIFA WORLD CUP – ALL 48 QUALIFIED NATIONS
+// (12 groups × 4 teams – official draw, December 2025)
 // ============================================
 
 const nations = [
   // Group A
-  { name: 'Mexico', code: 'MEX', group: 'A', kitColor1: '#006847', kitColor2: '#FFFFFF' },
-  { name: 'South Africa', code: 'RSA', group: 'A', kitColor1: '#FFB81C', kitColor2: '#007A4D' },
-  { name: 'Korea Republic', code: 'KOR', group: 'A', kitColor1: '#C60C30', kitColor2: '#FFFFFF' },
-  
+  { name: 'Mexico',          code: 'MEX', group: 'A', kitColor1: '#006847', kitColor2: '#FFFFFF' },
+  { name: 'South Africa',    code: 'RSA', group: 'A', kitColor1: '#FFB81C', kitColor2: '#007A4D' },
+  { name: 'Korea Republic',  code: 'KOR', group: 'A', kitColor1: '#C60C30', kitColor2: '#FFFFFF' },
+  { name: 'Czechia',         code: 'CZE', group: 'A', kitColor1: '#11457E', kitColor2: '#D7141A' }, // UEFA Playoff D winner
+
   // Group B
-  { name: 'Canada', code: 'CAN', group: 'B', kitColor1: '#FF0000', kitColor2: '#FFFFFF' },
-  { name: 'Qatar', code: 'QAT', group: 'B', kitColor1: '#8A1538', kitColor2: '#FFFFFF' },
-  { name: 'Switzerland', code: 'SUI', group: 'B', kitColor1: '#FF0000', kitColor2: '#FFFFFF' },
-  
+  { name: 'Canada',                code: 'CAN', group: 'B', kitColor1: '#FF0000', kitColor2: '#FFFFFF' },
+  { name: 'Bosnia & Herzegovina',  code: 'BIH', group: 'B', kitColor1: '#002F6C', kitColor2: '#FECB00' }, // UEFA Playoff A winner
+  { name: 'Qatar',                 code: 'QAT', group: 'B', kitColor1: '#8A1538', kitColor2: '#FFFFFF' },
+  { name: 'Switzerland',           code: 'SUI', group: 'B', kitColor1: '#FF0000', kitColor2: '#FFFFFF' },
+
   // Group C
-  { name: 'Brazil', code: 'BRA', group: 'C', kitColor1: '#FFDF00', kitColor2: '#009739' },
-  { name: 'Morocco', code: 'MAR', group: 'C', kitColor1: '#C1272D', kitColor2: '#006233' },
-  { name: 'Haiti', code: 'HAI', group: 'C', kitColor1: '#00209F', kitColor2: '#D21034' },
-  { name: 'Scotland', code: 'SCO', group: 'C', kitColor1: '#0065BF', kitColor2: '#FFFFFF' },
-  
+  { name: 'Brazil',     code: 'BRA', group: 'C', kitColor1: '#FFDF00', kitColor2: '#009739' },
+  { name: 'Morocco',    code: 'MAR', group: 'C', kitColor1: '#C1272D', kitColor2: '#006233' },
+  { name: 'Haiti',      code: 'HAI', group: 'C', kitColor1: '#00209F', kitColor2: '#D21034' },
+  { name: 'Scotland',   code: 'SCO', group: 'C', kitColor1: '#0065BF', kitColor2: '#FFFFFF' },
+
   // Group D
-  { name: 'USA', code: 'USA', group: 'D', kitColor1: '#FFFFFF', kitColor2: '#002868' },
-  { name: 'Paraguay', code: 'PAR', group: 'D', kitColor1: '#DA121A', kitColor2: '#FFFFFF' },
-  { name: 'Australia', code: 'AUS', group: 'D', kitColor1: '#FFCD00', kitColor2: '#00843D' },
-  
+  { name: 'USA',        code: 'USA', group: 'D', kitColor1: '#FFFFFF', kitColor2: '#002868' },
+  { name: 'Paraguay',   code: 'PAR', group: 'D', kitColor1: '#DA121A', kitColor2: '#FFFFFF' },
+  { name: 'Australia',  code: 'AUS', group: 'D', kitColor1: '#FFCD00', kitColor2: '#00843D' },
+  { name: 'Türkiye',    code: 'TUR', group: 'D', kitColor1: '#E30A17', kitColor2: '#FFFFFF' }, // UEFA Playoff C winner
+
   // Group E
-  { name: 'Germany', code: 'GER', group: 'E', kitColor1: '#FFFFFF', kitColor2: '#000000' },
-  { name: 'Curaçao', code: 'CUW', group: 'E', kitColor1: '#002B7F', kitColor2: '#F9E814' },
-  { name: 'Côte d\'Ivoire', code: 'CIV', group: 'E', kitColor1: '#FF8200', kitColor2: '#009A44' },
-  { name: 'Ecuador', code: 'ECU', group: 'E', kitColor1: '#FFD100', kitColor2: '#034EA2' },
-  
+  { name: 'Germany',      code: 'GER', group: 'E', kitColor1: '#FFFFFF', kitColor2: '#000000' },
+  { name: 'Curaçao',      code: 'CUW', group: 'E', kitColor1: '#002B7F', kitColor2: '#F9E814' },
+  { name: "Côte d'Ivoire", code: 'CIV', group: 'E', kitColor1: '#FF8200', kitColor2: '#009A44' },
+  { name: 'Ecuador',      code: 'ECU', group: 'E', kitColor1: '#FFD100', kitColor2: '#034EA2' },
+
   // Group F
   { name: 'Netherlands', code: 'NED', group: 'F', kitColor1: '#FF6600', kitColor2: '#FFFFFF' },
-  { name: 'Japan', code: 'JPN', group: 'F', kitColor1: '#000080', kitColor2: '#FFFFFF' },
-  { name: 'Tunisia', code: 'TUN', group: 'F', kitColor1: '#E70013', kitColor2: '#FFFFFF' },
-  
+  { name: 'Japan',       code: 'JPN', group: 'F', kitColor1: '#000080', kitColor2: '#FFFFFF' },
+  { name: 'Sweden',      code: 'SWE', group: 'F', kitColor1: '#FECC02', kitColor2: '#006AA7' }, // UEFA Playoff B winner
+  { name: 'Tunisia',     code: 'TUN', group: 'F', kitColor1: '#E70013', kitColor2: '#FFFFFF' },
+
   // Group G
-  { name: 'Belgium', code: 'BEL', group: 'G', kitColor1: '#ED2939', kitColor2: '#000000' },
-  { name: 'Egypt', code: 'EGY', group: 'G', kitColor1: '#C8102E', kitColor2: '#FFFFFF' },
-  { name: 'Iran', code: 'IRN', group: 'G', kitColor1: '#FFFFFF', kitColor2: '#DA0000' },
+  { name: 'Belgium',     code: 'BEL', group: 'G', kitColor1: '#ED2939', kitColor2: '#000000' },
+  { name: 'Egypt',       code: 'EGY', group: 'G', kitColor1: '#C8102E', kitColor2: '#FFFFFF' },
+  { name: 'Iran',        code: 'IRN', group: 'G', kitColor1: '#FFFFFF', kitColor2: '#DA0000' },
   { name: 'New Zealand', code: 'NZL', group: 'G', kitColor1: '#FFFFFF', kitColor2: '#000000' },
-  
+
   // Group H
-  { name: 'Spain', code: 'ESP', group: 'H', kitColor1: '#AA151B', kitColor2: '#F1BF00' },
-  { name: 'Cabo Verde', code: 'CPV', group: 'H', kitColor1: '#003893', kitColor2: '#F7D618' },
-  { name: 'Saudi Arabia', code: 'KSA', group: 'H', kitColor1: '#006C35', kitColor2: '#FFFFFF' },
-  { name: 'Uruguay', code: 'URU', group: 'H', kitColor1: '#5CBFEB', kitColor2: '#FFFFFF' },
-  
+  { name: 'Spain',         code: 'ESP', group: 'H', kitColor1: '#AA151B', kitColor2: '#F1BF00' },
+  { name: 'Cabo Verde',    code: 'CPV', group: 'H', kitColor1: '#003893', kitColor2: '#F7D618' },
+  { name: 'Saudi Arabia',  code: 'KSA', group: 'H', kitColor1: '#006C35', kitColor2: '#FFFFFF' },
+  { name: 'Uruguay',       code: 'URU', group: 'H', kitColor1: '#5CBFEB', kitColor2: '#FFFFFF' },
+
   // Group I
-  { name: 'France', code: 'FRA', group: 'I', kitColor1: '#002395', kitColor2: '#FFFFFF' },
+  { name: 'France',  code: 'FRA', group: 'I', kitColor1: '#002395', kitColor2: '#FFFFFF' },
   { name: 'Senegal', code: 'SEN', group: 'I', kitColor1: '#FFFFFF', kitColor2: '#00853F' },
-  { name: 'Norway', code: 'NOR', group: 'I', kitColor1: '#BA0C2F', kitColor2: '#FFFFFF' },
-  
+  { name: 'Iraq',    code: 'IRQ', group: 'I', kitColor1: '#FFFFFF', kitColor2: '#CE1126' }, // FIFA Inter-Confederation Playoff 2 winner
+  { name: 'Norway',  code: 'NOR', group: 'I', kitColor1: '#BA0C2F', kitColor2: '#FFFFFF' },
+
   // Group J
   { name: 'Argentina', code: 'ARG', group: 'J', kitColor1: '#74ACDF', kitColor2: '#FFFFFF' },
-  { name: 'Algeria', code: 'ALG', group: 'J', kitColor1: '#006233', kitColor2: '#FFFFFF' },
-  { name: 'Jordan', code: 'JOR', group: 'J', kitColor1: '#FFFFFF', kitColor2: '#CE1126' },
-  { name: 'Austria', code: 'AUT', group: 'J', kitColor1: '#ED2939', kitColor2: '#FFFFFF' },
-  
+  { name: 'Algeria',   code: 'ALG', group: 'J', kitColor1: '#006233', kitColor2: '#FFFFFF' },
+  { name: 'Austria',   code: 'AUT', group: 'J', kitColor1: '#ED2939', kitColor2: '#FFFFFF' },
+  { name: 'Jordan',    code: 'JOR', group: 'J', kitColor1: '#FFFFFF', kitColor2: '#CE1126' },
+
   // Group K
-  { name: 'Portugal', code: 'POR', group: 'K', kitColor1: '#FF0000', kitColor2: '#006600' },
+  { name: 'Portugal',   code: 'POR', group: 'K', kitColor1: '#FF0000', kitColor2: '#006600' },
+  { name: 'DR Congo',   code: 'COD', group: 'K', kitColor1: '#007FFF', kitColor2: '#F7D618' }, // FIFA Inter-Confederation Playoff 1 winner
   { name: 'Uzbekistan', code: 'UZB', group: 'K', kitColor1: '#FFFFFF', kitColor2: '#1EB53A' },
-  { name: 'Colombia', code: 'COL', group: 'K', kitColor1: '#FCD116', kitColor2: '#003087' },
-  
+  { name: 'Colombia',   code: 'COL', group: 'K', kitColor1: '#FCD116', kitColor2: '#003087' },
+
   // Group L
   { name: 'England', code: 'ENG', group: 'L', kitColor1: '#FFFFFF', kitColor2: '#002366' },
   { name: 'Croatia', code: 'CRO', group: 'L', kitColor1: '#FF0000', kitColor2: '#FFFFFF' },
-  { name: 'Ghana', code: 'GHA', group: 'L', kitColor1: '#FFFFFF', kitColor2: '#006B3F' },
-  { name: 'Panama', code: 'PAN', group: 'L', kitColor1: '#DA121A', kitColor2: '#FFFFFF' },
+  { name: 'Ghana',   code: 'GHA', group: 'L', kitColor1: '#FFFFFF', kitColor2: '#006B3F' },
+  { name: 'Panama',  code: 'PAN', group: 'L', kitColor1: '#DA121A', kitColor2: '#FFFFFF' },
 ];
 
 // ============================================
@@ -199,9 +206,7 @@ const players = [
   { firstName: 'Neymar', lastName: 'da Silva Santos Júnior', displayName: 'Neymar', nationCode: 'BRA', position: 'FWD', price: 11.0, number: 10 },
   
   // More Goalkeepers
-  { firstName: 'Gianluigi', lastName: 'Donnarumma', displayName: 'Donnarumma', nationCode: 'ITA', position: 'GK', price: 5.5, number: 1 },
   { firstName: 'André', lastName: 'Onana', displayName: 'Onana', nationCode: 'CIV', position: 'GK', price: 5.0, number: 1 },
-  { firstName: 'Wojciech', lastName: 'Szczęsny', displayName: 'Szczęsny', nationCode: 'POL', position: 'GK', price: 4.5, number: 1 },
   { firstName: 'Yann', lastName: 'Sommer', displayName: 'Sommer', nationCode: 'SUI', position: 'GK', price: 4.5, number: 1 },
   { firstName: 'Hugo', lastName: 'Lloris', displayName: 'Lloris', nationCode: 'FRA', position: 'GK', price: 5.0, number: 1 },
   
@@ -227,17 +232,12 @@ const players = [
   { firstName: 'Marko', lastName: 'Arnautović', displayName: 'Arnautović', nationCode: 'AUT', position: 'FWD', price: 6.5, number: 7 },
   { firstName: 'Michael', lastName: 'Gregoritsch', displayName: 'Gregoritsch', nationCode: 'AUT', position: 'FWD', price: 5.5, number: 11 },
   { firstName: 'Nicolás', lastName: 'Otamendi', displayName: 'Otamendi', nationCode: 'ARG', position: 'DEF', price: 5.0, number: 19 },
-  { firstName: 'Federico', lastName: 'Dimarco', displayName: 'Dimarco', nationCode: 'ITA', position: 'DEF', price: 5.0, number: 3 },
-  { firstName: 'Giovanni', lastName: 'Di Lorenzo', displayName: 'Di Lorenzo', nationCode: 'ITA', position: 'DEF', price: 5.0, number: 2 },
   
   // More Midfielders
   { firstName: 'Rodri', lastName: 'Hernández', displayName: 'Rodri', nationCode: 'ESP', position: 'MID', price: 8.5, number: 16 },
   { firstName: 'Ilkay', lastName: 'Gündoğan', displayName: 'Gündoğan', nationCode: 'GER', position: 'MID', price: 7.5, number: 8 },
   { firstName: 'Joshua', lastName: 'Kimmich', displayName: 'Kimmich', nationCode: 'GER', position: 'MID', price: 8.0, number: 6 },
   { firstName: 'Leon', lastName: 'Goretzka', displayName: 'Goretzka', nationCode: 'GER', position: 'MID', price: 7.0, number: 8 },
-  { firstName: 'Marco', lastName: 'Verratti', displayName: 'Verratti', nationCode: 'ITA', position: 'MID', price: 7.0, number: 6 },
-  { firstName: 'Nicolò', lastName: 'Barella', displayName: 'Barella', nationCode: 'ITA', position: 'MID', price: 7.5, number: 18 },
-  { firstName: 'Sandro', lastName: 'Tonali', displayName: 'Tonali', nationCode: 'ITA', position: 'MID', price: 6.5, number: 8 },
   { firstName: 'Frenkie', lastName: 'de Jong', displayName: 'De Jong', nationCode: 'NED', position: 'MID', price: 8.0, number: 21 },
   { firstName: 'Xavi', lastName: 'Simons', displayName: 'X. Simons', nationCode: 'NED', position: 'MID', price: 7.5, number: 20 },
   { firstName: 'Casemiro', lastName: '', displayName: 'Casemiro', nationCode: 'BRA', position: 'MID', price: 7.0, number: 5 },
@@ -275,6 +275,74 @@ const players = [
   { firstName: 'Timo', lastName: 'Werner', displayName: 'Werner', nationCode: 'GER', position: 'FWD', price: 7.0, number: 11 },
   { firstName: 'Niclas', lastName: 'Füllkrug', displayName: 'Füllkrug', nationCode: 'GER', position: 'FWD', price: 6.5, number: 9 },
   { firstName: 'Randal', lastName: 'Kolo Muani', displayName: 'Kolo Muani', nationCode: 'FRA', position: 'FWD', price: 7.5, number: 12 },
+
+  // ========== NEW QUALIFIERS – PLAYOFF WINNERS ==========
+
+  // CZECHIA (UEFA Path D winner) – Group A
+  { firstName: 'Jindřich',  lastName: 'Staněk',     displayName: 'Staněk',     nationCode: 'CZE', position: 'GK',  price: 4.5, number: 1 },
+  { firstName: 'Tomáš',     lastName: 'Vlček',      displayName: 'Vlček',      nationCode: 'CZE', position: 'DEF', price: 4.5, number: 5 },
+  { firstName: 'David',     lastName: 'Zima',       displayName: 'Zima',       nationCode: 'CZE', position: 'DEF', price: 4.5, number: 4 },
+  { firstName: 'Vladimír',  lastName: 'Coufal',     displayName: 'Coufal',     nationCode: 'CZE', position: 'DEF', price: 4.5, number: 22 },
+  { firstName: 'Tomáš',     lastName: 'Souček',     displayName: 'Souček',     nationCode: 'CZE', position: 'MID', price: 6.5, number: 8 },
+  { firstName: 'Pavel',     lastName: 'Šulc',       displayName: 'Šulc',       nationCode: 'CZE', position: 'MID', price: 6.0, number: 11 },
+  { firstName: 'Adam',      lastName: 'Hložek',     displayName: 'Hložek',     nationCode: 'CZE', position: 'MID', price: 6.0, number: 15 },
+  { firstName: 'Patrik',    lastName: 'Schick',     displayName: 'Schick',     nationCode: 'CZE', position: 'FWD', price: 7.5, number: 9 },
+  { firstName: 'Mojmír',    lastName: 'Chytil',     displayName: 'Chytil',     nationCode: 'CZE', position: 'FWD', price: 5.5, number: 19 },
+
+  // BOSNIA & HERZEGOVINA (UEFA Path A winner) – Group B
+  { firstName: 'Ibrahim',   lastName: 'Šehić',      displayName: 'Šehić',      nationCode: 'BIH', position: 'GK',  price: 4.5, number: 1 },
+  { firstName: 'Sead',      lastName: 'Kolašinac',  displayName: 'Kolašinac',  nationCode: 'BIH', position: 'DEF', price: 5.0, number: 23 },
+  { firstName: 'Dennis',    lastName: 'Hadžikadunić', displayName: 'Hadžikadunić', nationCode: 'BIH', position: 'DEF', price: 4.5, number: 5 },
+  { firstName: 'Adrian',    lastName: 'Leon Barišić', displayName: 'A. Barišić', nationCode: 'BIH', position: 'DEF', price: 4.5, number: 4 },
+  { firstName: 'Miralem',   lastName: 'Pjanić',     displayName: 'Pjanić',     nationCode: 'BIH', position: 'MID', price: 6.5, number: 10 },
+  { firstName: 'Edin',      lastName: 'Višća',      displayName: 'Višća',      nationCode: 'BIH', position: 'MID', price: 5.5, number: 7 },
+  { firstName: 'Benjamin',  lastName: 'Tahirović',  displayName: 'Tahirović',  nationCode: 'BIH', position: 'MID', price: 5.0, number: 8 },
+  { firstName: 'Edin',      lastName: 'Džeko',      displayName: 'Džeko',      nationCode: 'BIH', position: 'FWD', price: 7.5, number: 11 },
+  { firstName: 'Ermedin',   lastName: 'Demirović',  displayName: 'Demirović',  nationCode: 'BIH', position: 'FWD', price: 6.0, number: 9 },
+
+  // TÜRKIYE (UEFA Path C winner) – Group D
+  { firstName: 'Uğurcan',   lastName: 'Çakır',      displayName: 'Çakır',      nationCode: 'TUR', position: 'GK',  price: 4.5, number: 1 },
+  { firstName: 'Merih',     lastName: 'Demiral',    displayName: 'Demiral',    nationCode: 'TUR', position: 'DEF', price: 5.0, number: 3 },
+  { firstName: 'Çağlar',    lastName: 'Söyüncü',    displayName: 'Söyüncü',    nationCode: 'TUR', position: 'DEF', price: 4.5, number: 4 },
+  { firstName: 'Ferdi',     lastName: 'Kadıoğlu',   displayName: 'Kadıoğlu',   nationCode: 'TUR', position: 'DEF', price: 5.0, number: 14 },
+  { firstName: 'Hakan',     lastName: 'Çalhanoğlu', displayName: 'Çalhanoğlu', nationCode: 'TUR', position: 'MID', price: 8.0, number: 10 },
+  { firstName: 'Arda',      lastName: 'Güler',      displayName: 'A. Güler',   nationCode: 'TUR', position: 'MID', price: 7.5, number: 8 },
+  { firstName: 'Orkun',     lastName: 'Kökçü',      displayName: 'Kökçü',      nationCode: 'TUR', position: 'MID', price: 6.0, number: 6 },
+  { firstName: 'Kenan',     lastName: 'Yıldız',     displayName: 'Yıldız',     nationCode: 'TUR', position: 'FWD', price: 8.0, number: 21 },
+  { firstName: 'Cenk',      lastName: 'Tosun',      displayName: 'Tosun',      nationCode: 'TUR', position: 'FWD', price: 6.0, number: 17 },
+
+  // SWEDEN (UEFA Path B winner) – Group F
+  { firstName: 'Robin',     lastName: 'Olsen',      displayName: 'R. Olsen',   nationCode: 'SWE', position: 'GK',  price: 4.5, number: 1 },
+  { firstName: 'Victor',    lastName: 'Lindelöf',   displayName: 'Lindelöf',   nationCode: 'SWE', position: 'DEF', price: 5.0, number: 3 },
+  { firstName: 'Gabriel',   lastName: 'Gudmundsson',displayName: 'Gudmundsson',nationCode: 'SWE', position: 'DEF', price: 5.0, number: 13 },
+  { firstName: 'Isak',      lastName: 'Hien',       displayName: 'Hien',       nationCode: 'SWE', position: 'DEF', price: 5.0, number: 4 },
+  { firstName: 'Dejan',     lastName: 'Kulusevski', displayName: 'Kulusevski', nationCode: 'SWE', position: 'MID', price: 7.5, number: 21 },
+  { firstName: 'Anthony',   lastName: 'Elanga',     displayName: 'Elanga',     nationCode: 'SWE', position: 'MID', price: 6.5, number: 11 },
+  { firstName: 'Lucas',     lastName: 'Bergvall',   displayName: 'Bergvall',   nationCode: 'SWE', position: 'MID', price: 6.0, number: 8 },
+  { firstName: 'Alexander', lastName: 'Isak',       displayName: 'Isak',       nationCode: 'SWE', position: 'FWD', price: 11.0, number: 9 },
+  { firstName: 'Viktor',    lastName: 'Gyökeres',   displayName: 'Gyökeres',   nationCode: 'SWE', position: 'FWD', price: 11.5, number: 23 },
+
+  // DR CONGO (Inter-Confederation Playoff 1 winner) – Group K
+  { firstName: 'Lionel',    lastName: 'Mpasi',      displayName: 'Mpasi',      nationCode: 'COD', position: 'GK',  price: 4.0, number: 1 },
+  { firstName: 'Chancel',   lastName: 'Mbemba',     displayName: 'Mbemba',     nationCode: 'COD', position: 'DEF', price: 5.0, number: 4 },
+  { firstName: 'Arthur',    lastName: 'Masuaku',    displayName: 'Masuaku',    nationCode: 'COD', position: 'DEF', price: 4.5, number: 3 },
+  { firstName: 'Axel',      lastName: 'Tuanzebe',   displayName: 'Tuanzebe',   nationCode: 'COD', position: 'DEF', price: 4.5, number: 5 },
+  { firstName: 'Charles',   lastName: 'Pickel',     displayName: 'Pickel',     nationCode: 'COD', position: 'MID', price: 5.0, number: 6 },
+  { firstName: 'Théo',      lastName: 'Bongonda',   displayName: 'Bongonda',   nationCode: 'COD', position: 'MID', price: 5.5, number: 11 },
+  { firstName: 'Yoane',     lastName: 'Wissa',      displayName: 'Wissa',      nationCode: 'COD', position: 'FWD', price: 7.5, number: 18 },
+  { firstName: 'Cédric',    lastName: 'Bakambu',    displayName: 'Bakambu',    nationCode: 'COD', position: 'FWD', price: 6.5, number: 9 },
+  { firstName: 'Fiston',    lastName: 'Mayele',     displayName: 'Mayele',     nationCode: 'COD', position: 'FWD', price: 6.0, number: 17 },
+
+  // IRAQ (Inter-Confederation Playoff 2 winner) – Group I
+  { firstName: 'Jalal',     lastName: 'Hassan',     displayName: 'Jalal Hassan',nationCode: 'IRQ', position: 'GK',  price: 4.0, number: 1 },
+  { firstName: 'Ali',       lastName: 'Adnan',      displayName: 'A. Adnan',   nationCode: 'IRQ', position: 'DEF', price: 4.5, number: 3 },
+  { firstName: 'Merchas',   lastName: 'Doski',      displayName: 'Doski',      nationCode: 'IRQ', position: 'DEF', price: 4.5, number: 5 },
+  { firstName: 'Zaid',      lastName: 'Tahseen',    displayName: 'Z. Tahseen', nationCode: 'IRQ', position: 'DEF', price: 4.5, number: 4 },
+  { firstName: 'Amir',      lastName: 'Al-Ammari',  displayName: 'Al-Ammari',  nationCode: 'IRQ', position: 'MID', price: 5.0, number: 8 },
+  { firstName: 'Ibrahim',   lastName: 'Bayesh',     displayName: 'Bayesh',     nationCode: 'IRQ', position: 'MID', price: 5.0, number: 10 },
+  { firstName: 'Bashar',    lastName: 'Resan',      displayName: 'B. Resan',   nationCode: 'IRQ', position: 'MID', price: 4.5, number: 6 },
+  { firstName: 'Aymen',     lastName: 'Hussein',    displayName: 'A. Hussein', nationCode: 'IRQ', position: 'FWD', price: 5.5, number: 9 },
+  { firstName: 'Mohanad',   lastName: 'Ali',        displayName: 'Mohanad Ali',nationCode: 'IRQ', position: 'FWD', price: 5.5, number: 11 },
 ];
 
 async function main() {
