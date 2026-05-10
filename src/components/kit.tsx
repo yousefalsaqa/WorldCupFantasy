@@ -235,16 +235,18 @@ export default function Kit({
         )}
       </svg>
 
-      {/* Captain badge (corner) - keep small redundant indicator */}
+      {/* Captain badge (top-LEFT corner). Visual-only change – moved here so
+          the live-points pill can live in the top-right slot regardless of
+          captain status. The SVG armband on the sleeve (above) is unchanged. */}
       {isCaptain && (
-        <div className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-gradient-to-br from-yellow-300 to-amber-500 rounded-full flex items-center justify-center shadow-[0_0_10px_rgba(251,191,36,0.6)] ring-1 sm:ring-2 ring-yellow-200/80 z-10 animate-pulse-slow">
+        <div className="absolute -top-1 -left-1 w-4 h-4 sm:w-5 sm:h-5 bg-gradient-to-br from-yellow-300 to-amber-500 rounded-full flex items-center justify-center shadow-[0_0_10px_rgba(251,191,36,0.6)] ring-1 sm:ring-2 ring-yellow-200/80 z-10 animate-pulse-slow">
           <span className="text-[8px] sm:text-[10px] font-black text-black">C</span>
         </div>
       )}
 
-      {/* Vice-Captain badge */}
+      {/* Vice-Captain badge (top-LEFT corner) */}
       {isViceCaptain && !isCaptain && (
-        <div className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-gradient-to-br from-gray-200 to-gray-400 rounded-full flex items-center justify-center shadow-lg ring-1 sm:ring-2 ring-white/70 z-10">
+        <div className="absolute -top-1 -left-1 w-4 h-4 sm:w-5 sm:h-5 bg-gradient-to-br from-gray-200 to-gray-400 rounded-full flex items-center justify-center shadow-lg ring-1 sm:ring-2 ring-white/70 z-10">
           <span className="text-[8px] sm:text-[10px] font-black text-black">V</span>
         </div>
       )}
@@ -324,8 +326,10 @@ function statusBadge(status?: PlayerStatus) {
     suspended: { bg: 'bg-red-700', text: '!', ring: 'ring-red-400' },
   } as const;
   const s = map[status];
+  // Bottom-left corner so it never collides with the captain/vice badge
+  // (top-left) or the live-points pill (top-right).
   return (
-    <div className={`absolute -top-1 -left-1 z-10 w-4 h-4 sm:w-5 sm:h-5 rounded-full ${s.bg} ring-1 sm:ring-2 ${s.ring} flex items-center justify-center shadow-md`}>
+    <div className={`absolute -bottom-1 -left-1 z-10 w-4 h-4 sm:w-5 sm:h-5 rounded-full ${s.bg} ring-1 sm:ring-2 ${s.ring} flex items-center justify-center shadow-md`}>
       <span className="text-black text-[9px] sm:text-[10px] font-black leading-none">{s.text}</span>
     </div>
   );
@@ -399,11 +403,13 @@ export function PlayerCard({
           isViceCaptain={isViceCaptain}
         />
 
-        {/* Status badge top-left */}
+        {/* Status badge bottom-left */}
         {statusBadge(status)}
 
-        {/* Live points pill (top-right, swaps with C/V badge) */}
-        {livePoints !== undefined && !isCaptain && !isViceCaptain && (
+        {/* Live points pill – always top-right now that captain/vice live in
+            the top-LEFT slot. Coexists cleanly: C/V badge top-left, points
+            top-right, status (if any) bottom-left. */}
+        {livePoints !== undefined && (
           <div className="absolute -top-1 -right-1 z-10 min-w-[18px] h-[18px] sm:min-w-[22px] sm:h-[22px] px-1 rounded-full bg-emerald-500 ring-2 ring-emerald-300/70 flex items-center justify-center shadow-[0_0_10px_rgba(16,185,129,0.6)]">
             <span className="text-white text-[9px] sm:text-[11px] font-black leading-none">{livePoints}</span>
           </div>

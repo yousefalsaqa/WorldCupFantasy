@@ -159,7 +159,7 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
       style={{ zIndex: 2147483647, isolation: 'isolate' }}
     >
       <div
-        className="absolute inset-0 bg-black/80"
+        className="absolute inset-0 bg-black/95"
         onClick={cancel}
         aria-hidden
       />
@@ -167,7 +167,7 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
         role="dialog"
         aria-modal="true"
         aria-labelledby="unsaved-title"
-        className="relative w-full max-w-sm bg-[#10141f] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+        className="relative w-full max-w-sm bg-[#070a12] border border-white/10 rounded-2xl shadow-2xl shadow-black/60 overflow-hidden"
         style={{ transform: 'translateZ(0)' }}
       >
         <div className="p-5">
