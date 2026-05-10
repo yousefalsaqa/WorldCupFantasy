@@ -21,6 +21,11 @@ async function getUser() {
 }
 
 // GET /api/team - Get user's team
+//
+// Intentionally returns ONLY the flat Team row. The squadPlayers + player +
+// nation join was the single biggest contributor to slow dashboard loads on
+// iOS Safari (3-level deep query, ~46 rows just to render 4 stat cards).
+// Callers that need the squad already use /api/squad/get separately.
 export async function GET() {
   const user = await getUser();
   if (!user) {
@@ -29,26 +34,28 @@ export async function GET() {
 
   const team = await prisma.team.findUnique({
     where: { userId: user.id },
-    include: {
-      squadPlayers: {
-        include: {
-          player: {
-            include: { nation: true },
-          },
-        },
-      },
-    },
   });
 
   // If unlimited transfers mode is enabled, override free transfers to a high number
   if (team && UNLIMITED_TRANSFERS) {
-    return NextResponse.json({ 
+    return NextResponse.json({
       team: { ...team, freeTransfers: 999 },
-      unlimitedTransfers: true 
+      unlimitedTransfers: true,
+    }, {
+      // Tiny private cache so quick back-and-forth between dashboard and other
+      // pages doesn't refetch every single time. Stale-while-revalidate keeps
+      // the data fresh without making the user wait.
+      headers: {
+        'Cache-Control': 'private, max-age=10, stale-while-revalidate=30',
+      },
     });
   }
 
-  return NextResponse.json({ team });
+  return NextResponse.json({ team }, {
+    headers: {
+      'Cache-Control': 'private, max-age=10, stale-while-revalidate=30',
+    },
+  });
 }
 
 // POST /api/team - Create team

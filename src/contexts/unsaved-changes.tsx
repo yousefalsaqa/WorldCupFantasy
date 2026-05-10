@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle } from 'lucide-react';
 
 interface UnsavedChangesContextValue {
@@ -96,6 +97,18 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, []);
 
+  // iOS Safari does not implement HTML5 drag-and-drop on touch. The squad
+  // page uses native dragstart/dragover/drop events, which is why dragging
+  // players felt broken on iPhone. This polyfill (10KB, zero deps) translates
+  // touch events into the matching synthetic drag events – existing handlers
+  // keep working, no other code changes needed. We dynamically import it so
+  // it never runs during SSR (it touches `document` at module load).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    // Lazy import – also keeps the desktop bundle smaller until first use.
+    void import('@dragdroptouch/drag-drop-touch');
+  }, []);
+
   const cancel = () => {
     pendingRef.current = null;
     setOpen(false);
@@ -116,57 +129,71 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
     [isDirty, setDirty, guard, forceClean]
   );
 
-  return (
-    <Ctx.Provider value={value}>
-      {children}
-      {open && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
-          <div
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-            onClick={cancel}
-            aria-hidden
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="unsaved-title"
-            className="relative w-full max-w-sm bg-[#10141f] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
-          >
-            <div className="p-5">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center flex-shrink-0">
-                  <AlertTriangle className="w-5 h-5 text-amber-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h2 id="unsaved-title" className="text-white font-semibold text-base">
-                    Unsaved changes
-                  </h2>
-                  <p className="text-white/60 text-sm mt-1">
-                    {label ?? 'You have unsaved changes that will be lost if you leave this page.'}
-                  </p>
-                </div>
-              </div>
+  // Portal target. We can only reference document.body on the client, so we
+  // gate this on a mount flag to avoid SSR mismatches.
+  const [portalReady, setPortalReady] = useState(false);
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
+
+  // The modal markup is rendered through a React portal into <body> so that
+  // no ancestor's stacking context (e.g. <main className="relative z-10">)
+  // or backdrop-blur compositor layer on iOS Safari can ever paint over it.
+  // z-[10001] is one above the squad page's chip / player-detail modals
+  // (z-[9999]) so the unsaved-changes prompt is always topmost.
+  const modal = open ? (
+    <div className="fixed inset-0 z-[10001] flex items-center justify-center px-4">
+      <div
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        onClick={cancel}
+        aria-hidden
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="unsaved-title"
+        className="relative w-full max-w-sm bg-[#10141f] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+      >
+        <div className="p-5">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center flex-shrink-0">
+              <AlertTriangle className="w-5 h-5 text-amber-400" />
             </div>
-            <div className="grid grid-cols-2 gap-2 p-3 pt-0">
-              <button
-                type="button"
-                onClick={cancel}
-                className="px-3 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 active:scale-[0.98] text-white font-medium text-sm transition"
-                autoFocus
-              >
-                Stay on page
-              </button>
-              <button
-                type="button"
-                onClick={leave}
-                className="px-3 py-2.5 rounded-lg bg-rose-500 hover:bg-rose-600 active:scale-[0.98] text-white font-semibold text-sm transition"
-              >
-                Leave without saving
-              </button>
+            <div className="flex-1 min-w-0">
+              <h2 id="unsaved-title" className="text-white font-semibold text-base">
+                Unsaved changes
+              </h2>
+              <p className="text-white/60 text-sm mt-1">
+                {label ?? 'You have unsaved changes that will be lost if you leave this page.'}
+              </p>
             </div>
           </div>
         </div>
-      )}
+        <div className="grid grid-cols-2 gap-2 p-3 pt-0">
+          <button
+            type="button"
+            onClick={cancel}
+            className="px-3 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 active:scale-[0.98] text-white font-medium text-sm transition"
+            autoFocus
+          >
+            Stay on page
+          </button>
+          <button
+            type="button"
+            onClick={leave}
+            className="px-3 py-2.5 rounded-lg bg-rose-500 hover:bg-rose-600 active:scale-[0.98] text-white font-semibold text-sm transition"
+          >
+            Leave without saving
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  return (
+    <Ctx.Provider value={value}>
+      {children}
+      {portalReady && modal ? createPortal(modal, document.body) : null}
     </Ctx.Provider>
   );
 }

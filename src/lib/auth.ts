@@ -12,7 +12,11 @@ const JWT_SECRET = new TextEncoder().encode(
 );
 
 const COOKIE_NAME = 'auth_token';
-const SALT_ROUNDS = 12;
+// SALT_ROUNDS=10 is OWASP-recommended (2024) and runs ~3× faster than 12 on
+// the small CPU allocation Vercel gives auth lambdas. Existing user hashes
+// still verify because bcrypt embeds the cost factor in the hash itself –
+// only NEW signups hash at the lower cost from now on.
+const SALT_ROUNDS = 10;
 const TOKEN_EXPIRY = '7d'; // 7 days
 
 export interface JWTPayload {

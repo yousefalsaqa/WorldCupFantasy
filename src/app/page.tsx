@@ -15,15 +15,20 @@ const NATIONS = [
 const HOSTS = ['USA', 'CAN', 'MEX'];
 
 export default function Home() {
+  // Mounted-on-client guard so the static SSR HTML paints first on iOS Safari.
+  // Heavy work (countdown timer, scrolling flag parade) is gated behind this –
+  // they were the main reason the landing page felt sluggish on first load.
+  const [mounted, setMounted] = useState(false);
   const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
 
   useEffect(() => {
+    setMounted(true);
     const targetDate = new Date('2026-06-11T18:00:00Z');
-    
+
     const updateCountdown = () => {
       const now = new Date();
       const diff = targetDate.getTime() - now.getTime();
-      
+
       if (diff > 0) {
         setCountdown({
           days: Math.floor(diff / (1000 * 60 * 60 * 24)),
@@ -35,16 +40,28 @@ export default function Home() {
     };
 
     updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
+    // Tick once a minute instead of every second. The seconds field still
+    // refreshes on the next mount; in exchange the page stops re-rendering 60
+    // times a minute, which on iOS Safari was thrashing the compositor while
+    // the marquee animation was running.
+    const interval = setInterval(updateCountdown, 60_000);
     return () => clearInterval(interval);
   }, []);
 
   return (
     <main className="min-h-screen bg-[#0a0e17] overflow-hidden">
-      {/* Background */}
+      {/* Background – use CSS radial-gradients instead of two giant blurred
+          circles. blur-[150px] on a 600px square is a known iOS Safari GPU
+          stall (compositor spends ~hundreds of ms per frame). A radial
+          gradient gives the same look for free. */}
       <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-rose-500/10 rounded-full blur-[150px]"></div>
-        <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-blue-500/10 rounded-full blur-[150px]"></div>
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage:
+              'radial-gradient(ellipse 600px 600px at 25% 0%, rgba(244,63,94,0.12), transparent 60%), radial-gradient(ellipse 600px 600px at 75% 100%, rgba(59,130,246,0.10), transparent 60%)',
+          }}
+        />
       </div>
 
       {/* Navigation */}
@@ -66,20 +83,30 @@ export default function Home() {
         </Link>
       </nav>
 
-      {/* Flag Parade - FIRST THING YOU SEE */}
-      <div className="relative overflow-hidden py-4 mb-4">
+      {/* Flag Parade - FIRST THING YOU SEE
+          Only render once mounted: avoids 80+ flag <img> being created during
+          the very first paint, which on iPhone Safari was the main reason the
+          page felt "stuck". Static fallback (the host flags below) is enough
+          to make the page feel populated until the parade fades in. */}
+      <div className="relative overflow-hidden py-4 mb-4 min-h-[68px]">
         <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-[#0a0e17] to-transparent z-10"></div>
         <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-[#0a0e17] to-transparent z-10"></div>
-        <div className="flex animate-scroll gap-6">
-          {[...NATIONS, ...NATIONS].map((code, i) => (
-            <img
-              key={`${code}-${i}`}
-              src={getFlagUrl(code, 'lg')}
-              alt={code}
-              className="w-16 h-10 rounded-lg shadow-xl object-cover flex-shrink-0 hover:scale-110 transition-transform"
-            />
-          ))}
-        </div>
+        {mounted && (
+          <div className="flex animate-scroll gap-6">
+            {[...NATIONS, ...NATIONS].map((code, i) => (
+              <img
+                key={`${code}-${i}`}
+                src={getFlagUrl(code, 'md')}
+                alt={code}
+                width={64}
+                height={40}
+                loading="lazy"
+                decoding="async"
+                className="w-16 h-10 rounded-lg shadow-xl object-cover flex-shrink-0 hover:scale-110 transition-transform"
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Hero Section */}
@@ -111,14 +138,15 @@ export default function Home() {
           <p className="mt-4 text-white/40 text-base tracking-[0.3em] uppercase font-medium">Fantasy Football</p>
         </div>
 
-        {/* Countdown */}
+        {/* Countdown – ticks once a minute, not every second. Saves a full
+            page re-render 59 times a minute on iOS Safari for a date that's
+            still weeks away. */}
         <div className="text-center mb-10">
           <p className="text-white/30 text-xs uppercase tracking-widest mb-3">Tournament Begins</p>
           <div className="flex justify-center gap-3">
             <CountdownUnit value={countdown.days} label="Days" />
             <CountdownUnit value={countdown.hours} label="Hrs" />
             <CountdownUnit value={countdown.minutes} label="Min" />
-            <CountdownUnit value={countdown.seconds} label="Sec" />
           </div>
         </div>
 

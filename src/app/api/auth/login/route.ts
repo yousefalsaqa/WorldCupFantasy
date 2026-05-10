@@ -34,14 +34,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Update last login
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() },
-    });
-
     // Create JWT token
-    const token = await createToken({ 
+    const token = await createToken({
       userId: user.id,
       email: user.email,
       username: user.username,
@@ -50,6 +44,14 @@ export async function POST(request: Request) {
 
     // Set cookie
     await setAuthCookie(token);
+
+    // Fire-and-forget the lastLoginAt update. The user's response should not
+    // wait on this DB write – it was adding ~100-300ms to every login on the
+    // serverless cold path. Errors are swallowed because this is purely
+    // bookkeeping and never fails business logic.
+    prisma.user
+      .update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
+      .catch((err) => console.error('lastLoginAt update failed:', err));
 
     return NextResponse.json({
       user: {
