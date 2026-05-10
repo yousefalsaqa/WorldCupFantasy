@@ -44,11 +44,15 @@ export default function DashboardPage() {
   }, []);
 
   async function loadData() {
+    // Hard timeout so the spinner never spins forever on iOS Safari if a
+    // serverless cold-start or dropped Postgres connection stalls a request.
+    const ctrl = new AbortController();
+    const timeoutId = setTimeout(() => ctrl.abort(), 20000);
     try {
       const [userRes, teamRes, stageRes] = await Promise.all([
-        fetch('/api/auth/me'),
-        fetch('/api/team'),
-        fetch('/api/stages/current'),
+        fetch('/api/auth/me', { signal: ctrl.signal }),
+        fetch('/api/team', { signal: ctrl.signal }),
+        fetch('/api/stages/current', { signal: ctrl.signal }),
       ]);
 
       const userData = await userRes.json();
@@ -56,7 +60,6 @@ export default function DashboardPage() {
       const stageData = await stageRes.json();
 
       setUser(userData.user);
-      // Check if team exists (even if API returns error, team might be null)
       if (teamRes.ok && teamData.team) {
         setTeam(teamData.team);
       } else {
@@ -66,8 +69,10 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('Load error:', error);
       setTeam(null);
+    } finally {
+      clearTimeout(timeoutId);
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function createTeam() {

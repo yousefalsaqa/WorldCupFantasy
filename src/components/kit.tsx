@@ -1,5 +1,7 @@
 'use client';
 
+import { useId } from 'react';
+
 interface KitProps {
   primaryColor: string;
   secondaryColor: string;
@@ -52,8 +54,10 @@ export default function Kit({
   const hoops = ['CRO', 'JPN'].includes(nationCode);
   const chest = ['GER', 'ENG', 'NED', 'BRA', 'ESP'].includes(nationCode);
 
-  // Unique ID for patterns
-  const patternId = `kit-${nationCode}-${Math.random().toString(36).substr(2, 6)}`;
+  // Stable unique ID for SVG <defs>. useId is SSR-safe and survives re-renders,
+  // so the pattern definitions don't get re-created on every state change.
+  const reactId = useId().replace(/:/g, '-');
+  const patternId = `kit-${nationCode || 'x'}${reactId}`;
 
   const sizes = {
     xs: 'w-9 h-11',

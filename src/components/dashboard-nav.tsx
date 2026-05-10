@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useUnsavedChanges } from '@/contexts/unsaved-changes';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Home', icon: HomeIcon },
@@ -15,10 +16,29 @@ const NAV_ITEMS = [
 export default function DashboardNav() {
   const pathname = usePathname();
   const router = useRouter();
+  const { guard } = useUnsavedChanges();
 
-  const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    router.push('/');
+  // Wrap any client navigation through the unsaved-changes guard so users get
+  // a confirm prompt instead of silently losing their work.
+  const navigate = (href: string) => {
+    guard(() => router.push(href));
+  };
+
+  const handleLogout = () => {
+    guard(async () => {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      router.push('/');
+    });
+  };
+
+  // Custom Link click handler – preventDefault and route through `navigate`
+  // so the dirty check fires before the route change happens.
+  const onLinkClick = (href: string) => (e: React.MouseEvent) => {
+    // Honour modifier keys (open in new tab, etc.) – let the browser handle them
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
+    if (pathname === href) return;
+    navigate(href);
   };
 
   return (
@@ -26,7 +46,11 @@ export default function DashboardNav() {
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/dashboard" className="flex items-center gap-2 group">
+          <Link
+            href="/dashboard"
+            onClick={onLinkClick('/dashboard')}
+            className="flex items-center gap-2 group"
+          >
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 via-pink-500 to-purple-600 flex items-center justify-center shadow-lg shadow-pink-500/20 group-hover:shadow-pink-500/30 transition-shadow">
               <span className="text-white font-black text-sm">26</span>
             </div>
@@ -45,9 +69,10 @@ export default function DashboardNav() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={onLinkClick(item.href)}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all
-                    ${isActive 
-                      ? 'bg-white/10 text-white' 
+                    ${isActive
+                      ? 'bg-white/10 text-white'
                       : 'text-white/50 hover:text-white hover:bg-white/5'
                     }`}
                 >

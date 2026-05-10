@@ -1,5 +1,6 @@
 'use client';
 
+import { useId } from 'react';
 import { getFlagUrl } from '@/lib/flags';
 
 interface PlayerKitProps {
@@ -68,8 +69,8 @@ export default function PlayerKit({
   // Ensure number color contrasts with kit
   const numberColor = getContrastColor(kitColor1, kitColor2);
   
-  // Generate unique gradient ID
-  const gradientId = `kit-${name.replace(/\s+/g, '-')}-${Math.random().toString(36).substr(2, 9)}`;
+  // Stable per-instance gradient ID (useId is SSR-safe)
+  const gradientId = `pk${useId().replace(/:/g, '-')}`;
 
   return (
     <div 

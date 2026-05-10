@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { getFlagUrl } from '@/lib/flags';
+import { useUnsavedChanges } from '@/contexts/unsaved-changes';
 
 type Position = 'GK' | 'DEF' | 'MID' | 'FWD';
 
@@ -51,6 +52,7 @@ const MAX_PLAYERS_PER_NATION = 3;
 
 export default function TransfersPage() {
   const router = useRouter();
+  const { setDirty, forceClean } = useUnsavedChanges();
   const [team, setTeam] = useState<Team | null>(null);
   const [squadPlayers, setSquadPlayers] = useState<SquadPlayer[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
@@ -63,6 +65,21 @@ export default function TransfersPage() {
   const [transfers, setTransfers] = useState<TransferItem[]>([]);
   const [selectedOut, setSelectedOut] = useState<SquadPlayer | null>(null);
   const [wildcardActive, setWildcardActive] = useState(false);
+  const [activeChip, setActiveChip] = useState<string | null>(null);
+
+  // Keep the layout-level unsaved-changes flag in sync with pending transfers.
+  // The flag drives the confirmation modal when the user tries to navigate away.
+  useEffect(() => {
+    if (transfers.length > 0) {
+      setDirty(
+        true,
+        `You have ${transfers.length} pending transfer${transfers.length === 1 ? '' : 's'} that hasn\u2019t been confirmed.`
+      );
+    } else {
+      setDirty(false);
+    }
+    return () => setDirty(false);
+  }, [transfers.length, setDirty]);
   
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -113,7 +130,8 @@ export default function TransfersPage() {
         if (chipsRes.ok) {
           const chipsData = await chipsRes.json();
           const active = chipsData.activeChip;
-          if (active === 'WILDCARD_1' || active === 'WILDCARD_2') {
+          setActiveChip(active ?? null);
+          if (active === 'WILDCARD_1' || active === 'WILDCARD_2' || active === 'FREE_HIT') {
             setWildcardActive(true);
           }
         }
@@ -259,12 +277,18 @@ export default function TransfersPage() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || 'Failed to confirm transfers');
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || `Failed to confirm transfers (status ${res.status})`);
         return;
       }
 
-      // Refresh the page
+      // Synchronously remove the unsaved-changes guard BEFORE reloading. State
+      // updates are async, so just calling setDirty(false) here lets the
+      // beforeunload listener still fire on the immediately following reload
+      // and the browser shows "Leave site?", which would silently abort the
+      // refresh and leave the page showing stale pending transfers.
+      setTransfers([]);
+      forceClean();
       router.refresh();
       window.location.reload();
     } catch {
@@ -320,13 +344,24 @@ export default function TransfersPage() {
         </div>
       </div>
 
-      {/* Wildcard Banner */}
+      {/* Unlimited-transfers chip banner */}
       {wildcardActive && (
-        <div className="flex items-center gap-3 p-4 mb-6 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-          <svg className="w-5 h-5 text-emerald-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className={`flex items-start gap-3 p-4 mb-6 rounded-lg border ${
+          activeChip === 'FREE_HIT'
+            ? 'bg-amber-500/10 border-amber-500/30'
+            : 'bg-emerald-500/10 border-emerald-500/20'
+        }`}>
+          <svg className={`w-5 h-5 flex-shrink-0 mt-0.5 ${activeChip === 'FREE_HIT' ? 'text-amber-400' : 'text-emerald-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
-          <p className="text-sm text-emerald-400 font-medium">Wildcard Active &mdash; Unlimited Free Transfers</p>
+          {activeChip === 'FREE_HIT' ? (
+            <div>
+              <p className="text-sm text-amber-300 font-semibold">Free Hit Active &mdash; Unlimited Free Transfers</p>
+              <p className="text-xs text-amber-400/70 mt-0.5">Your squad will revert to its previous state at the end of this stage.</p>
+            </div>
+          ) : (
+            <p className="text-sm text-emerald-400 font-medium">Wildcard Active &mdash; Unlimited Free Transfers</p>
+          )}
         </div>
       )}
 

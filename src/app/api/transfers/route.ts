@@ -139,7 +139,13 @@ export async function POST(request: NextRequest) {
         where: { teamId_stageId: { teamId: team.id, stageId: activeStage.id } },
         select: { chipUsed: true },
       });
-      if (teamStage?.chipUsed === 'WILDCARD_1' || teamStage?.chipUsed === 'WILDCARD_2') {
+      // Free Hit also grants unlimited transfers for the active stage; the
+      // squad reverts at end of stage via /api/squad/get's snapshot logic.
+      if (
+        teamStage?.chipUsed === 'WILDCARD_1' ||
+        teamStage?.chipUsed === 'WILDCARD_2' ||
+        teamStage?.chipUsed === 'FREE_HIT'
+      ) {
         unlimitedTransfers = true;
         isWildcardActive = true;
       }

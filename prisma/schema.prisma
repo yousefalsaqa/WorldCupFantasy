@@ -227,6 +227,10 @@ model Team {
   wildcard2Used   Boolean  @default(false)
   tripleCaptainUsed Boolean @default(false)
   benchBoostUsed  Boolean  @default(false)
+  freeHitUsed     Boolean  @default(false)
+  // JSON snapshot of squad+team state at the moment Free Hit was activated.
+  // Restored automatically once the activation stage ends.
+  freeHitSnapshot String?
   
   // Points
   totalPoints     Int      @default(0)

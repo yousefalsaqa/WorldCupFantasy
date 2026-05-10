@@ -7,7 +7,8 @@ import PitchBg from '@/components/pitch-bg';
 import FormationPicker from '@/components/formation-picker';
 import { getFlagUrl } from '@/lib/flags';
 import { getFixtureDifficulty } from '@/lib/fdr';
-import { Trophy, Wallet, Coins, Sparkles, Zap, RefreshCw, Crown, Users, Save, X, Search } from 'lucide-react';
+import { useUnsavedChanges } from '@/contexts/unsaved-changes';
+import { Trophy, Wallet, Coins, Sparkles, Zap, RefreshCw, Crown, Users, Save, X, Search, Wand2 } from 'lucide-react';
 
 // Chips
 interface ChipData {
@@ -17,6 +18,8 @@ interface ChipData {
   used: boolean;
   available: boolean;
   active: boolean;
+  canCancel?: boolean;
+  cancelBlockedReason?: string;
 }
 
 // Types
@@ -228,9 +231,26 @@ const MAX_PER_NATION = 3;
 
 export default function SquadPage() {
   const router = useRouter();
+  const { setDirty, forceClean } = useUnsavedChanges();
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<'loading' | 'builder' | 'view'>('loading');
+
+  // Local helpers to mark/unmark unsaved changes – wired into the layout-level
+  // confirmation modal so users don't silently lose work when navigating away.
+  const markDirty = useCallback(
+    (label?: string) => setDirty(true, label),
+    [setDirty]
+  );
+  const markClean = useCallback(() => setDirty(false), [setDirty]);
+
+  // Always clean up the dirty flag if this page unmounts (e.g. after the user
+  // confirmed leaving). Belt and suspenders – the modal already clears it.
+  useEffect(() => {
+    return () => setDirty(false);
+  }, [setDirty]);
   
   // All available players (for builder)
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
@@ -258,7 +278,10 @@ export default function SquadPage() {
   // Chips state
   const [chips, setChips] = useState<ChipData[]>([]);
   const [chipConfirm, setChipConfirm] = useState<ChipData | null>(null);
+  const [chipCancelConfirm, setChipCancelConfirm] = useState<ChipData | null>(null);
   const [chipLoading, setChipLoading] = useState(false);
+  const [chipDeadline, setChipDeadline] = useState<string | null>(null);
+  const [stageLocked, setStageLocked] = useState(false);
 
   const fetchChips = useCallback(async () => {
     try {
@@ -266,6 +289,8 @@ export default function SquadPage() {
       if (res.ok) {
         const data = await res.json();
         setChips(data.chips || []);
+        setChipDeadline(data.deadlineTime ?? null);
+        setStageLocked(Boolean(data.stageLocked));
       }
     } catch (err) {
       console.error('Failed to fetch chips:', err);
@@ -275,6 +300,14 @@ export default function SquadPage() {
   useEffect(() => {
     if (mode === 'view') fetchChips();
   }, [mode, fetchChips]);
+
+  // Lightweight ticking clock so the deadline countdown stays fresh
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!chipDeadline) return;
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, [chipDeadline]);
 
   const activateChip = async (chipId: string) => {
     setChipLoading(true);
@@ -288,66 +321,95 @@ export default function SquadPage() {
       if (res.ok) {
         await fetchChips();
       } else {
-        const data = await res.json();
-        alert(data.error || 'Failed to activate chip');
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || `Failed to activate chip (status ${res.status})`);
       }
-    } catch {
-      alert('Failed to activate chip');
+    } catch (err) {
+      console.error('Activate chip error:', err);
+      alert('Failed to activate chip \u2013 check your connection and try again.');
     } finally {
       setChipLoading(false);
       setChipConfirm(null);
     }
   };
 
-  // Prevent body scroll when modal is open and lock scroll position
-  useEffect(() => {
-    if (selectedPlayer) {
-      // Save current scroll position
-      const scrollY = window.scrollY;
-      document.body.style.position = 'fixed';
-      document.body.style.top = `-${scrollY}px`;
-      document.body.style.width = '100%';
-      document.body.style.overflow = 'hidden';
-    } else {
-      // Restore scroll position
-      const scrollY = document.body.style.top;
-      document.body.style.position = '';
-      document.body.style.top = '';
-      document.body.style.width = '';
-      document.body.style.overflow = '';
-      if (scrollY) {
-        window.scrollTo(0, parseInt(scrollY || '0') * -1);
+  const cancelActiveChip = async () => {
+    setChipLoading(true);
+    const cancellingId = chipCancelConfirm?.id;
+    try {
+      const res = await fetch('/api/chips', {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (res.ok) {
+        // Free Hit cancellation reverts squad + bank + transfers, so reload to
+        // resync. forceClean() removes the beforeunload guard synchronously
+        // (state updates are async, which previously made the reload silently
+        // abort if the user had any unsaved squad change).
+        if (cancellingId === 'FREE_HIT') {
+          forceClean();
+          window.location.reload();
+          return;
+        }
+        await fetchChips();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || `Failed to cancel chip (status ${res.status})`);
       }
+    } catch (err) {
+      console.error('Cancel chip error:', err);
+      alert('Failed to cancel chip \u2013 check your connection and try again.');
+    } finally {
+      setChipLoading(false);
+      setChipCancelConfirm(null);
     }
+  };
+
+  // Prevent body scroll when modal is open. Keep this minimal – the previous
+  // position:fixed + scroll-restore dance was a known iOS Safari freeze trigger.
+  useEffect(() => {
+    if (!selectedPlayer) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     return () => {
-      const scrollY = document.body.style.top;
-      document.body.style.position = '';
-      document.body.style.top = '';
-      document.body.style.width = '';
-      document.body.style.overflow = '';
-      if (scrollY) {
-        window.scrollTo(0, parseInt(scrollY || '0') * -1);
-      }
+      document.body.style.overflow = prevOverflow;
     };
   }, [selectedPlayer]);
 
   // Fetch data
   useEffect(() => {
-    async function fetchData() {
+    let cancelled = false;
+    // Manual timeout via AbortController (AbortSignal.timeout not supported on older iOS Safari)
+    const ctrl = new AbortController();
+    const timeoutId = setTimeout(() => ctrl.abort(), 20000);
+
+    async function fetchWithRetry(url: string, init?: RequestInit, retries = 1): Promise<Response> {
       try {
-        // Fetch all players for builder
-        const playersRes = await fetch('/api/players');
-        if (playersRes.ok) {
-          const data = await playersRes.json();
-          const players = Array.isArray(data) ? data : (data.players || []);
-          setAllPlayers(players);
+        return await fetch(url, { ...init, signal: ctrl.signal });
+      } catch (err) {
+        if (retries > 0 && !cancelled) {
+          await new Promise(r => setTimeout(r, 800));
+          return fetchWithRetry(url, init, retries - 1);
         }
-        
-        // Fetch existing squad
-        const squadRes = await fetch('/api/squad/get', { credentials: 'include' });
+        throw err;
+      }
+    }
+
+    async function fetchData() {
+      setLoadError(null);
+      try {
+        // Only block on the squad endpoint. /api/players (~204 records) is
+        // only used by the builder-mode picker and the transfer flow, so
+        // there's no reason to delay first paint on it. We kick off the
+        // players fetch in the background after the squad arrives, and
+        // also lazy-fetch on demand if the user opens the picker first.
+        const squadRes = await fetchWithRetry('/api/squad/get', { credentials: 'include' });
+        if (cancelled) return;
+
         if (squadRes.ok) {
           const squadData = await squadRes.json();
-          
+          if (cancelled) return;
+
           if (squadData.squad && squadData.squad.length === 15) {
             // User has complete squad - VIEW mode
             setBankBalance(squadData.bankBalance || 0);
@@ -413,15 +475,42 @@ export default function SquadPage() {
         } else {
           setMode('builder');
         }
+
+        // Kick off the players fetch in the background. Doesn't block render.
+        // Builder mode needs it for the picker; view mode never needs it.
+        if (!cancelled) {
+          fetchWithRetry('/api/players')
+            .then(async (res) => {
+              if (!cancelled && res.ok) {
+                const data = await res.json();
+                const players = Array.isArray(data) ? data : (data.players || []);
+                if (!cancelled) setAllPlayers(players);
+              }
+            })
+            .catch(() => { /* non-fatal: picker will lazy-fetch if needed */ });
+        }
       } catch (error) {
+        if (cancelled) return;
         console.error('Failed to fetch data:', error);
-        setMode('builder');
+        const aborted = (error as Error)?.name === 'AbortError';
+        setLoadError(
+          aborted
+            ? 'The request took too long. Tap retry.'
+            : 'Could not load your squad. Check your connection and try again.'
+        );
       } finally {
-        setLoading(false);
+        clearTimeout(timeoutId);
+        if (!cancelled) setLoading(false);
       }
     }
     fetchData();
-  }, []);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+      ctrl.abort();
+    };
+  }, [loadAttempt]);
 
   // Calculate squad stats
   const squadValue = useMemo(() => squad.reduce((sum, p) => sum + p.currentPrice, 0), [squad]);
@@ -465,11 +554,13 @@ export default function SquadPage() {
     setShowModal(false);
     setSelectingPosition(null);
     setSearchTerm('');
+    markDirty('You added a player to your squad but haven\u2019t saved yet.');
   };
 
   // Remove player from squad
   const removePlayer = (playerId: string) => {
     setSquad(prev => prev.filter(p => p.id !== playerId));
+    markDirty('You removed a player from your squad but haven\u2019t saved yet.');
   };
 
   // Open modal for position
@@ -477,6 +568,18 @@ export default function SquadPage() {
     if (positionCounts[position] < POSITION_LIMITS[position]) {
       setSelectingPosition(position);
       setShowModal(true);
+      // Defensive lazy-load: if the background fetch hasn't populated yet,
+      // pull players now so the picker isn't empty.
+      if (allPlayers.length === 0) {
+        fetch('/api/players')
+          .then(r => r.ok ? r.json() : null)
+          .then(data => {
+            if (!data) return;
+            const players = Array.isArray(data) ? data : (data.players || []);
+            setAllPlayers(players);
+          })
+          .catch(() => {});
+      }
     }
   };
 
@@ -528,6 +631,7 @@ export default function SquadPage() {
         return;
       }
       
+      markClean();
       // Refresh to view mode
       window.location.reload();
     } catch (error) {
@@ -605,6 +709,7 @@ export default function SquadPage() {
 
     setPlayerToSub(null);
     setSelectedPlayer(null);
+    markDirty('You made a substitution but haven\u2019t saved your lineup.');
   };
 
   // Tap-based selection: first tap selects, second tap swaps
@@ -651,11 +756,13 @@ export default function SquadPage() {
   const setCaptain = (playerId: string) => {
     if (viceCaptainId === playerId) setViceCaptainId(null);
     setCaptainId(playerId);
+    markDirty('You changed the captain but haven\u2019t saved.');
   };
 
   const setViceCaptain = (playerId: string) => {
     if (captainId === playerId) setCaptainId(null);
     setViceCaptainId(playerId);
+    markDirty('You changed the vice-captain but haven\u2019t saved.');
   };
 
   // Save squad changes (view mode)
@@ -679,7 +786,8 @@ export default function SquadPage() {
         alert(data.error || 'Failed to save');
         return;
       }
-      
+
+      markClean();
       alert('Squad saved!');
     } catch (error) {
       console.error('Save error:', error);
@@ -691,8 +799,31 @@ export default function SquadPage() {
 
   if (loading || mode === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-white/60">Loading...</div>
+      <div className="min-h-[70vh] flex items-center justify-center px-6">
+        {loadError ? (
+          <div className="max-w-sm w-full bg-white/5 border border-white/10 rounded-2xl p-6 text-center">
+            <div className="w-12 h-12 mx-auto rounded-full bg-rose-500/20 flex items-center justify-center mb-3">
+              <X className="w-6 h-6 text-rose-400" />
+            </div>
+            <div className="text-white font-semibold mb-1">Something went wrong</div>
+            <div className="text-white/60 text-sm mb-4">{loadError}</div>
+            <button
+              onClick={() => {
+                setLoading(true);
+                setLoadError(null);
+                setLoadAttempt(a => a + 1);
+              }}
+              className="w-full bg-rose-500 hover:bg-rose-600 active:scale-95 text-white font-semibold py-2.5 rounded-lg transition"
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-10 h-10 border-2 border-white/20 border-t-rose-400 rounded-full animate-spin" />
+            <div className="text-white/60 text-sm">Loading your squad…</div>
+          </div>
+        )}
       </div>
     );
   }
@@ -806,7 +937,11 @@ export default function SquadPage() {
         {/* Desktop actions */}
         <div className="hidden sm:flex items-center justify-between px-3 sm:px-0">
           <button
-            onClick={() => setSquad([])}
+            onClick={() => {
+              if (squad.length === 0) return;
+              setSquad([]);
+              markDirty('You cleared your squad but haven\u2019t saved.');
+            }}
             className="px-4 py-2 text-white/60 hover:text-white transition-colors"
           >
             Clear All
@@ -823,7 +958,11 @@ export default function SquadPage() {
         {/* Mobile sticky bottom bar */}
         <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-white/10 px-3 py-2.5 flex items-center justify-between gap-3">
           <button
-            onClick={() => setSquad([])}
+            onClick={() => {
+              if (squad.length === 0) return;
+              setSquad([]);
+              markDirty('You cleared your squad but haven\u2019t saved.');
+            }}
             className="px-3 py-2 text-white/60 hover:text-white text-sm font-medium"
           >
             Clear
@@ -976,6 +1115,7 @@ export default function SquadPage() {
     setStartingXI(newStarting.map(p => ({ ...p, isStarting: true })));
     setBench(newBench.map(p => ({ ...p, isStarting: false })));
     setFormation(newFormation);
+    markDirty('You changed your formation but haven\u2019t saved.');
   };
   
   // Current players on pitch by position
@@ -1072,6 +1212,29 @@ export default function SquadPage() {
         </div>
       </div>
 
+      {/* Free Hit live banner – shown when the chip is currently active so the
+          user is reminded their squad will revert at end of stage. */}
+      {chips.some(c => c.id === 'FREE_HIT' && c.active) && (
+        <div className="px-3 sm:px-0 mb-3">
+          <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-transparent p-3 sm:p-4 flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+              <Wand2 className="w-5 h-5 text-amber-300" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-amber-200 font-black text-sm sm:text-base flex items-center gap-2 flex-wrap">
+                Free Hit Active
+                <span className="text-[10px] font-bold bg-amber-500/20 text-amber-200 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  This stage only
+                </span>
+              </div>
+              <p className="text-amber-200/70 text-xs sm:text-sm mt-0.5 leading-snug">
+                Make as many transfers as you like. Your squad will automatically revert to its previous lineup once this stage ends.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Chips Bar */}
       {chips.length > 0 && (
         <div className="px-3 sm:px-0 mb-5">
@@ -1091,17 +1254,29 @@ export default function SquadPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {chips.map(chip => {
                 const Icon = chipIcon(chip.name);
+                const clickable = chip.available && !chipLoading;
+                const handleCardClick = () => {
+                  if (clickable) setChipConfirm(chip);
+                };
                 return (
-                  <button
+                  <div
                     key={chip.id}
-                    onClick={() => chip.available ? setChipConfirm(chip) : undefined}
-                    disabled={!chip.available || chipLoading}
+                    role={clickable ? 'button' : undefined}
+                    tabIndex={clickable ? 0 : undefined}
+                    onClick={handleCardClick}
+                    onKeyDown={clickable ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleCardClick();
+                      }
+                    } : undefined}
+                    aria-disabled={!clickable && !chip.active}
                     className={`relative p-3 rounded-xl border text-left transition-all overflow-hidden group ${
                       chip.active
                         ? 'bg-gradient-to-br from-emerald-500/20 to-emerald-700/10 border-emerald-500/60 shadow-[0_0_20px_rgba(16,185,129,0.25)]'
                         : chip.used
                         ? 'bg-white/[0.02] border-white/5 opacity-50'
-                        : chip.available
+                        : clickable
                         ? 'bg-white/5 border-white/10 hover:border-white/30 hover:bg-white/10 hover:-translate-y-0.5 cursor-pointer'
                         : 'bg-white/[0.02] border-white/5 opacity-60'
                     }`}
@@ -1113,8 +1288,8 @@ export default function SquadPage() {
                     )}
 
                     <div className="flex items-center justify-between mb-1.5 relative">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
                           chip.active
                             ? 'bg-emerald-500/30 text-emerald-200'
                             : chip.used
@@ -1123,7 +1298,7 @@ export default function SquadPage() {
                         }`}>
                           <Icon className="w-4 h-4" />
                         </div>
-                        <span className={`text-[11px] sm:text-xs font-black tracking-tight ${
+                        <span className={`text-[11px] sm:text-xs font-black tracking-tight truncate ${
                           chip.active ? 'text-emerald-200' : chip.used ? 'text-white/30 line-through' : 'text-white/90'
                         }`}>
                           {chip.name}
@@ -1134,7 +1309,36 @@ export default function SquadPage() {
                       )}
                     </div>
                     <p className="text-[10px] text-white/40 leading-tight relative">{chip.description}</p>
-                  </button>
+
+                    {/* Cancel control on the active chip (only before deadline) */}
+                    {chip.active && (
+                      <div className="mt-2 pt-2 border-t border-emerald-500/20 relative">
+                        {chip.canCancel ? (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setChipCancelConfirm(chip); }}
+                            disabled={chipLoading}
+                            className="w-full text-[10px] sm:text-[11px] font-bold text-rose-300 hover:text-rose-200 hover:bg-rose-500/10 active:scale-[0.98] disabled:opacity-50 transition px-2 py-1 rounded"
+                          >
+                            Cancel chip
+                          </button>
+                        ) : stageLocked ? (
+                          <p className="text-[9px] sm:text-[10px] text-white/40 text-center font-medium">
+                            Locked &mdash; stage has started
+                          </p>
+                        ) : chip.cancelBlockedReason ? (
+                          <p className="text-[9px] sm:text-[10px] text-amber-300/70 text-center font-medium leading-tight">
+                            {chip.cancelBlockedReason}
+                          </p>
+                        ) : null}
+                        {chipDeadline && !stageLocked && (
+                          <p className="text-[9px] sm:text-[10px] text-emerald-300/70 text-center mt-1">
+                            Locks in {formatCountdown(chipDeadline, now)}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -1154,13 +1358,25 @@ export default function SquadPage() {
           >
             <h3 className="text-lg font-bold text-white mb-2">Activate {chipConfirm.name}?</h3>
             <p className="text-white/60 text-sm mb-1">{chipConfirm.description}</p>
-            <p className="text-amber-400 text-xs mb-6">This cannot be undone.</p>
+            {chipConfirm.id === 'FREE_HIT' && (
+              <div className="mt-3 mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <p className="text-amber-300 text-xs font-semibold mb-1">How Free Hit works</p>
+                <ul className="text-amber-200/80 text-xs space-y-1 list-disc list-inside">
+                  <li>Unlimited free transfers for this stage</li>
+                  <li>Your current squad is saved as a snapshot</li>
+                  <li>At the end of the stage, your squad reverts to that snapshot automatically</li>
+                </ul>
+              </div>
+            )}
+            <p className="text-white/50 text-xs mb-6">
+              You can still cancel this until the stage deadline starts.
+            </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setChipConfirm(null)}
                 className="flex-1 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white/70 font-medium hover:bg-white/10 transition-colors"
               >
-                Cancel
+                Back
               </button>
               <button
                 onClick={() => activateChip(chipConfirm.id)}
@@ -1168,6 +1384,53 @@ export default function SquadPage() {
                 className="flex-1 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl text-white font-bold hover:from-emerald-600 hover:to-emerald-700 disabled:opacity-50 transition-all"
               >
                 {chipLoading ? 'Activating...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Chip Cancellation Modal */}
+      {chipCancelConfirm && (
+        <div
+          className="fixed inset-0 bg-black/80 z-[9999] backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setChipCancelConfirm(null)}
+        >
+          <div
+            className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm p-6 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold text-white mb-2">Cancel {chipCancelConfirm.name}?</h3>
+            <p className="text-white/60 text-sm mb-3">
+              Your {chipCancelConfirm.name} will be returned and you can use it again later.
+            </p>
+            {chipCancelConfirm.id === 'FREE_HIT' && (
+              <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <p className="text-amber-300 text-xs font-semibold mb-1">Heads up</p>
+                <p className="text-amber-200/80 text-xs leading-snug">
+                  Any transfers you made under Free Hit will be reverted &mdash; your squad goes
+                  back to exactly what it was before activation.
+                </p>
+              </div>
+            )}
+            {chipDeadline && !stageLocked && (
+              <p className="text-emerald-300/80 text-xs mb-6">
+                Stage locks in {formatCountdown(chipDeadline, now)}.
+              </p>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setChipCancelConfirm(null)}
+                className="flex-1 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white/70 font-medium hover:bg-white/10 transition-colors"
+              >
+                Keep it active
+              </button>
+              <button
+                onClick={cancelActiveChip}
+                disabled={chipLoading}
+                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-rose-500 to-rose-600 rounded-xl text-white font-bold hover:from-rose-600 hover:to-rose-700 disabled:opacity-50 transition-all"
+              >
+                {chipLoading ? 'Cancelling...' : 'Cancel chip'}
               </button>
             </div>
           </div>
@@ -1622,10 +1885,27 @@ function StatCard({ icon, label, value, accent = 'text-white', highlight = false
   );
 }
 
+// Compact countdown like "2d 5h", "3h 12m", "47m", "30s" — used for the chip
+// "Locks in …" hint on the active chip card.
+function formatCountdown(deadlineIso: string, nowMs: number): string {
+  const target = new Date(deadlineIso).getTime();
+  const diff = target - nowMs;
+  if (diff <= 0) return 'now';
+  const sec = Math.floor(diff / 1000);
+  const days = Math.floor(sec / 86400);
+  const hours = Math.floor((sec % 86400) / 3600);
+  const mins = Math.floor((sec % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  if (mins > 0) return `${mins}m`;
+  return `${sec}s`;
+}
+
 // Map a chip name to a Lucide icon
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function chipIcon(name: string): any {
   const n = name.toLowerCase();
+  if (n.includes('free hit') || n.includes('free-hit')) return Wand2;
   if (n.includes('wildcard')) return RefreshCw;
   if (n.includes('triple') || n.includes('captain')) return Crown;
   if (n.includes('bench')) return Users;
