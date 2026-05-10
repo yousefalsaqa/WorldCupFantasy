@@ -138,13 +138,28 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
 
   // The modal markup is rendered through a React portal into <body> so that
   // no ancestor's stacking context (e.g. <main className="relative z-10">)
-  // or backdrop-blur compositor layer on iOS Safari can ever paint over it.
-  // z-[10001] is one above the squad page's chip / player-detail modals
-  // (z-[9999]) so the unsaved-changes prompt is always topmost.
+  // can ever paint over it.
+  //
+  // iOS Safari hardening – three layers, each independently sufficient:
+  //   1. `isolation: isolate` forces this container into its own stacking
+  //      context so nothing outside (including any squad-page modal at
+  //      z-[9999]) can interact with our z-index ordering.
+  //   2. `z-index: 2147483647` (max signed int32) is the absolute highest
+  //      legal z-index – nothing can sit above it.
+  //   3. The overlay does NOT use `backdrop-filter: blur()`. iOS Safari has
+  //      a long-standing bug where backdrop-filter on a fullscreen-fixed
+  //      element creates a GPU composite layer that lets sibling content
+  //      paint behind the visible blur, ignoring z-index. Plain rgba dim
+  //      is bulletproof.
+  //   4. `translateZ(0)` on the dialog promotes it to its own GPU layer so
+  //      iOS doesn't render it inside a parent's composite by mistake.
   const modal = open ? (
-    <div className="fixed inset-0 z-[10001] flex items-center justify-center px-4">
+    <div
+      className="fixed inset-0 flex items-center justify-center px-4"
+      style={{ zIndex: 2147483647, isolation: 'isolate' }}
+    >
       <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/80"
         onClick={cancel}
         aria-hidden
       />
@@ -152,7 +167,8 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
         role="dialog"
         aria-modal="true"
         aria-labelledby="unsaved-title"
-        className="relative w-full max-w-sm bg-[#10141f] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        className="relative w-full max-w-sm bg-[#10141f] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+        style={{ transform: 'translateZ(0)' }}
       >
         <div className="p-5">
           <div className="flex items-start gap-3">
