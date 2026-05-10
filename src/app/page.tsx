@@ -49,7 +49,7 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-[#0a0e17] overflow-hidden">
+    <main className="min-h-screen bg-[#0a0e17] overflow-hidden pt-safe pb-safe">
       {/* Background – use CSS radial-gradients instead of two giant blurred
           circles. blur-[150px] on a 600px square is a known iOS Safari GPU
           stall (compositor spends ~hundreds of ms per frame). A radial

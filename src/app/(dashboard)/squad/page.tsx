@@ -839,7 +839,17 @@ export default function SquadPage() {
 
     const progress = (squad.length / 15) * 100;
     return (
-      <div className="max-w-5xl mx-auto px-0 sm:px-4 py-4 sm:py-6 pb-24 sm:pb-6" style={{ overflowX: 'auto', overflowY: 'visible', width: '100%' }}>
+      <div
+        className="max-w-5xl mx-auto px-0 sm:px-4 py-4 sm:py-6 sm:pb-6"
+        style={{
+          overflowX: 'auto',
+          overflowY: 'visible',
+          width: '100%',
+          // Reserve space for the mobile sticky bottom bar PLUS the iPhone
+          // home indicator. 6rem covers the bar; env() adds the safe area.
+          paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))',
+        }}
+      >
         {/* Header */}
         <div className="px-3 sm:px-0 mb-5 sm:mb-6">
           <div className="flex items-center gap-3 mb-3">
@@ -956,7 +966,7 @@ export default function SquadPage() {
         </div>
 
         {/* Mobile sticky bottom bar */}
-        <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-white/10 px-3 py-2.5 flex items-center justify-between gap-3">
+        <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-white/10 px-3 pt-2.5 add-pb-safe flex items-center justify-between gap-3">
           <button
             onClick={() => {
               if (squad.length === 0) return;
@@ -1184,7 +1194,15 @@ export default function SquadPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-0 sm:px-4 py-4 sm:py-6 pb-24 sm:pb-6" style={{ overflowX: 'auto', overflowY: 'visible', width: '100%' }}>
+    <div
+      className="max-w-5xl mx-auto px-0 sm:px-4 py-4 sm:py-6 sm:pb-6"
+      style={{
+        overflowX: 'auto',
+        overflowY: 'visible',
+        width: '100%',
+        paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))',
+      }}
+    >
       {/* Header */}
       <div className="px-3 sm:px-0 mb-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4">
@@ -1570,7 +1588,7 @@ export default function SquadPage() {
       </div>
 
       {/* Mobile sticky bottom bar */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-white/10 px-3 py-2.5 flex items-center justify-between gap-3">
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-white/10 px-3 pt-2.5 add-pb-safe flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="text-center">
             <p className="text-[9px] text-white/40 uppercase font-bold leading-none">Pts</p>

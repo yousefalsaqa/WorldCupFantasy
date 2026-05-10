@@ -86,3 +86,25 @@ input:-webkit-autofill:focus {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* Safe-area padding utilities. Required because the PWA is configured with
+ * `viewport-fit=cover`, which lets the app paint edge-to-edge including under
+ * the iPhone's notch / status bar (top) and home indicator (bottom). Applying
+ * these on fixed/sticky chrome ensures content sits *below* the notch and
+ * *above* the home indicator instead of being clipped or overlapping system UI.
+ *
+ * The `max(...)` flavours guarantee a sensible minimum padding on devices
+ * where env(...) returns 0 (Android, desktop) so spacing doesn't visually
+ * collapse when the PWA is opened in a regular browser tab. */
+.pt-safe { padding-top: env(safe-area-inset-top); }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+.pl-safe { padding-left: env(safe-area-inset-left); }
+.pr-safe { padding-right: env(safe-area-inset-right); }
+
+.pt-safe-or-3 { padding-top: max(env(safe-area-inset-top), 0.75rem); }
+.pb-safe-or-3 { padding-bottom: max(env(safe-area-inset-bottom), 0.75rem); }
+
+/* When a fixed bottom bar already has its own padding (py-2.5 etc.), use
+ * the additive form so the content keeps its existing internal spacing
+ * AND clears the home indicator. */
+.add-pb-safe { padding-bottom: calc(env(safe-area-inset-bottom) + 0.625rem); }

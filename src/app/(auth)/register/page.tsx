@@ -52,7 +52,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0e17] relative overflow-hidden flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-[#0a0e17] relative overflow-hidden flex items-center justify-center px-4 py-12 pt-safe pb-safe">
       {/* Background effects */}
       <div className="absolute inset-0">
         <div className="absolute inset-0 bg-[linear-gradient(125deg,#0a0e17_0%,#0a0e17_40%,#1a1025_50%,#0a0e17_60%,#0a0e17_100%)]"></div>

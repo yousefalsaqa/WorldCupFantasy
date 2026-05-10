@@ -42,7 +42,11 @@ export default function DashboardNav() {
   };
 
   return (
-    <nav className="bg-[#0d111a]/95 backdrop-blur-md border-b border-white/5 sticky top-0 z-50">
+    // pt-safe + pl/pr-safe so the nav's content sits below the iPhone notch
+    // and clear of any landscape side bezels when launched as a PWA. The
+    // background extends under the status bar (looks like one continuous
+    // dark bar – the desired iOS app feel).
+    <nav className="bg-[#0d111a]/95 backdrop-blur-md border-b border-white/5 sticky top-0 z-50 pt-safe pl-safe pr-safe">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
