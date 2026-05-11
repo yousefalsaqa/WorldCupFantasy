@@ -8,6 +8,14 @@ import FormationPicker from '@/components/formation-picker';
 import { getFlagUrl } from '@/lib/flags';
 import { getFixtureDifficulty } from '@/lib/fdr';
 import { useUnsavedChanges } from '@/contexts/unsaved-changes';
+import { useUserTimezone, useNow } from '@/hooks/useTimezone';
+import {
+  formatDateShort,
+  formatTime,
+  formatCountdown as fmtCountdown,
+  formatDuration,
+  deadlineFor,
+} from '@/lib/format-time';
 import { Trophy, Wallet, Coins, Sparkles, Zap, RefreshCw, Crown, Users, Save, X, Search, Wand2 } from 'lucide-react';
 
 // Chips
@@ -219,10 +227,12 @@ function getNextOpponent(nationCode: string): string {
   return opponent;
 }
 
-// Format fixture date for display
-function formatFixtureDate(dateStr: string): string {
-  const date = new Date(dateStr + 'T00:00:00');
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+// Format a calendar date string (YYYY-MM-DD) for display. We anchor at noon
+// to dodge timezone off-by-one errors — at midnight a UTC-shifted client can
+// see "May 31" for "June 1" depending on the user's chosen zone.
+function formatFixtureDate(dateStr: string, tz?: string): string {
+  const date = new Date(dateStr + 'T12:00:00');
+  return formatDateShort(date, tz);
 }
 
 // Position limits
@@ -232,6 +242,11 @@ const MAX_PER_NATION = 3;
 export default function SquadPage() {
   const router = useRouter();
   const { setDirty, forceClean } = useUnsavedChanges();
+  // Reactive timezone + per-minute clock — drives the deadline tile, fixture
+  // dates and chip countdowns so they all stay in lockstep when the user
+  // changes their preferred zone.
+  const { timezone } = useUserTimezone();
+  const now = useNow(60_000);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -301,13 +316,10 @@ export default function SquadPage() {
     if (mode === 'view') fetchChips();
   }, [mode, fetchChips]);
 
-  // Lightweight ticking clock so the deadline countdown stays fresh
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!chipDeadline) return;
-    const t = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(t);
-  }, [chipDeadline]);
+  // The `now` value above (via useNow(60_000)) drives both the squad
+  // deadline tile and the chip countdowns, so we don't need a second timer
+  // here. 60s granularity is fine — chip cards show "Locks in 2h 5m", not
+  // seconds, so a more frequent tick would just burn battery.
 
   const activateChip = async (chipId: string) => {
     setChipLoading(true);
@@ -1185,45 +1197,23 @@ export default function SquadPage() {
     .filter(f => f.dt > new Date())
     .sort((a, b) => a.dt.getTime() - b.dt.getTime())[0];
 
-  let countdownStr = '—';
-  if (nextFixture) {
-    const ms = nextFixture.dt.getTime() - Date.now();
-    const days = Math.floor(ms / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((ms / (1000 * 60 * 60)) % 24);
-    countdownStr = days > 0 ? `${days}d ${hours}h` : `${hours}h`;
-  }
+  // Countdown to next kickoff. `formatDuration` returns "—" once we're past
+  // kickoff (matchday window) which is the right thing to show in the tile.
+  const countdownStr = nextFixture ? formatDuration(nextFixture.dt.getTime(), now) : '—';
 
   // Squad-lock deadline: 1 hour before the first match of the upcoming
-  // gameweek. We approximate "first match of the gameweek" as the next
-  // fixture in chronological order – which is exactly right pre-tournament
-  // and during the gap between matchdays. (Once the tournament is in full
-  // swing we may want to anchor this on the Stage record's `deadline`
-  // field instead, but for now `nextFixture - 1h` matches the user's
-  // mental model and is wrong only mid-matchday when transfers are
-  // already locked anyway.)
+  // gameweek (see DEADLINE_OFFSET_MS in @/lib/format-time). We approximate
+  // "first match of the gameweek" as the next fixture in chronological
+  // order – exactly right pre-tournament and during the gap between
+  // matchdays. Once the tournament is in full swing we may want to anchor
+  // this on the Stage record's `deadline` field instead.
   let deadlineDateShort = '—';
   let deadlineHint = '';
   if (nextFixture) {
-    const deadlineMs = nextFixture.dt.getTime() - 60 * 60 * 1000;
-    const ddt = new Date(deadlineMs);
-    deadlineDateShort = ddt.toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-    });
-    const timeStr = ddt.toLocaleTimeString(undefined, {
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-    const diff = deadlineMs - Date.now();
-    let countdown = 'Locked';
-    if (diff > 0) {
-      const d = Math.floor(diff / 86400000);
-      const h = Math.floor((diff / 3600000) % 24);
-      const m = Math.floor((diff / 60000) % 60);
-      if (d > 0) countdown = `in ${d}d ${h}h`;
-      else if (h > 0) countdown = `in ${h}h ${m}m`;
-      else countdown = `in ${m}m`;
-    }
+    const dl = deadlineFor(nextFixture.dt);
+    deadlineDateShort = formatDateShort(dl, timezone);
+    const timeStr = formatTime(dl, timezone);
+    const countdown = fmtCountdown(dl.getTime(), now, 'Locked');
     deadlineHint = `${timeStr} · ${countdown}`;
   }
 
@@ -1950,20 +1940,13 @@ function StatCard({ icon, label, value, hint, accent = 'text-white', highlight =
   );
 }
 
-// Compact countdown like "2d 5h", "3h 12m", "47m", "30s" — used for the chip
-// "Locks in …" hint on the active chip card.
+// Compact countdown like "2d 5h", "3h 12m", "47m", "now" — used for the chip
+// "Locks in …" hint on the active chip card. Thin wrapper around the shared
+// formatter so this file keeps its existing call signature.
 function formatCountdown(deadlineIso: string, nowMs: number): string {
   const target = new Date(deadlineIso).getTime();
-  const diff = target - nowMs;
-  if (diff <= 0) return 'now';
-  const sec = Math.floor(diff / 1000);
-  const days = Math.floor(sec / 86400);
-  const hours = Math.floor((sec % 86400) / 3600);
-  const mins = Math.floor((sec % 3600) / 60);
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${mins}m`;
-  if (mins > 0) return `${mins}m`;
-  return `${sec}s`;
+  if (target - nowMs <= 0) return 'now';
+  return formatDuration(target, nowMs);
 }
 
 // Map a chip name to a Lucide icon

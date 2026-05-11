@@ -3,6 +3,9 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getFlagUrl } from '@/lib/flags';
+import { useUserTimezone } from '@/hooks/useTimezone';
+import { formatDateWithWeekday, formatTime as fmtTime } from '@/lib/format-time';
+import { TimezoneIndicator } from '@/components/timezone-picker';
 
 // World Cup 2026 Stadiums
 const STADIUMS = {
@@ -225,6 +228,7 @@ type FilterOption = 'all' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' 
 
 function FixturesContent() {
   const searchParams = useSearchParams();
+  const { timezone, abbreviation } = useUserTimezone();
   const [filter, setFilter] = useState<FilterOption>('all');
   
   // Read initial filter from URL
@@ -250,24 +254,28 @@ function FixturesContent() {
     return dateA.getTime() - dateB.getTime();
   });
 
+  // Anchor calendar-day formatting at noon to dodge timezone off-by-one.
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr + 'T00:00:00');
-    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    return formatDateWithWeekday(new Date(dateStr + 'T12:00:00'), timezone);
   };
 
-  const formatTime = (timeStr: string) => {
-    const [hours, minutes] = timeStr.split(':');
-    const hour = parseInt(hours);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-    return `${displayHour}:${minutes} ${ampm} EST`;
+  // Combine YYYY-MM-DD and HH:mm into a Date and format with user TZ. The
+  // source data is timezone-naive (stored in the venue's local time), so the
+  // displayed value really shows "what time would my browser show if I were
+  // in this zone" — that's the right pragmatic behaviour until we add a
+  // stadium-tz map.
+  const formatTime = (dateStr: string, timeStr: string) => {
+    const date = new Date(`${dateStr}T${timeStr}`);
+    return `${fmtTime(date, timezone)} ${abbreviation}`;
   };
 
   return (
     <div className="max-w-5xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-black text-white mb-2">Fixtures</h1>
-        <p className="text-white/40 text-sm">All times shown in Eastern Standard Time (EST)</p>
+        <div className="flex items-center gap-2">
+          <TimezoneIndicator />
+        </div>
       </div>
 
       {/* Filter */}
@@ -304,7 +312,7 @@ function FixturesContent() {
 
                 {/* Time */}
                 <div className="px-2 sm:px-4 py-1.5 sm:py-2 bg-white/10 rounded-lg flex-shrink-0">
-                  <span className="text-white font-bold text-[10px] sm:text-sm whitespace-nowrap">{formatTime(fixture.time)}</span>
+                  <span className="text-white font-bold text-[10px] sm:text-sm whitespace-nowrap">{formatTime(fixture.date, fixture.time)}</span>
                 </div>
 
                 {/* Away Team */}

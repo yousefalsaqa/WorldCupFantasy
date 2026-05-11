@@ -4,6 +4,7 @@
 // ============================================
 
 import { useState, useEffect, useCallback } from 'react';
+import { formatTime as fmtTime } from '@/lib/format-time';
 
 interface LiveMatch {
   id: string;
@@ -132,9 +133,9 @@ export function getMatchStatusText(match: LiveMatch): string {
   if (match.isFinished) return 'FT';
   if (match.isStarted) return 'Live';
   
-  // Show kickoff time
-  const kickoff = new Date(match.kickoffTime);
-  return kickoff.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  // Show kickoff time in user's preferred TZ (defaults to auto-detect via
+  // fmtTime → getUserTimezone()).
+  return fmtTime(new Date(match.kickoffTime));
 }
 
 export function isMatchLive(match: LiveMatch): boolean {

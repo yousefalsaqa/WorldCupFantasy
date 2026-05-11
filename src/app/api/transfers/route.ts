@@ -8,6 +8,11 @@ export const dynamic = 'force-dynamic';
 
 const TRANSFER_HIT_COST = 4;
 
+// FIFA World Cup rule: max 3 players from any single nation in your 15-man
+// squad. Mirrors the UI check in /transfers and /squad, and matches what
+// /api/squad/route.ts already enforces on single-player adds.
+const MAX_PLAYERS_PER_NATION = 3;
+
 // Set to true for testing until first gameweek - allows unlimited free transfers
 const UNLIMITED_TRANSFERS = true;
 
@@ -122,6 +127,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         error: `Insufficient funds. Need £${netCost.toFixed(1)}m but only have £${team.bankBalance.toFixed(1)}m` 
       }, { status: 400 });
+    }
+
+    // Nation-limit check (3 max per nation). The UI in /transfers has always
+    // checked this client-side; we move it server-side so an attacker can't
+    // bypass the rule by hitting the API directly. We model the final squad
+    // as: (current squad minus players being sold) + (new incoming players),
+    // then bucket by nation. The new player's nation is the one we need to
+    // look up explicitly because team.squadPlayers doesn't include them.
+    const incomingPlayers = await prisma.player.findMany({
+      where: { id: { in: playersIn } },
+      select: { id: true, nationId: true, displayName: true, nation: { select: { name: true } } },
+    });
+    const finalNationCounts: Record<string, number> = {};
+    // Add players that are STAYING (in squad and not being sold)
+    for (const sp of team.squadPlayers) {
+      if (playersOut.includes(sp.playerId)) continue;
+      finalNationCounts[sp.player.nationId] =
+        (finalNationCounts[sp.player.nationId] || 0) + 1;
+    }
+    // Add incoming players
+    for (const p of incomingPlayers) {
+      finalNationCounts[p.nationId] = (finalNationCounts[p.nationId] || 0) + 1;
+    }
+    // Find the offender (if any) and report it cleanly. We report the FIRST
+    // breach so the user gets a specific actionable error rather than a
+    // generic "too many players".
+    for (const p of incomingPlayers) {
+      if (finalNationCounts[p.nationId] > MAX_PLAYERS_PER_NATION) {
+        return NextResponse.json(
+          {
+            error: `Cannot have more than ${MAX_PLAYERS_PER_NATION} players from ${p.nation.name} (${p.displayName} would be the 4th).`,
+          },
+          { status: 400 },
+        );
+      }
     }
 
     // Check for unlimited transfers: pre-tournament or wildcard active

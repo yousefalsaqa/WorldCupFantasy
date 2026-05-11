@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useUserTimezone } from '@/hooks/useTimezone';
+import { formatDateTime } from '@/lib/format-time';
 
 interface Nation {
   id: string;
@@ -34,6 +36,7 @@ interface Match {
 }
 
 export default function AdminFixturesPage() {
+  const { timezone } = useUserTimezone();
   const [stages, setStages] = useState<Stage[]>([]);
   const [nations, setNations] = useState<Nation[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
@@ -190,12 +193,7 @@ export default function AdminFixturesPage() {
                     <div key={match.id} className="px-4 py-3 flex items-center justify-between hover:bg-slate-800/50">
                       <div className="flex items-center gap-4">
                         <div className="text-xs text-slate-500 w-32">
-                          {new Date(match.kickoffTime).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                          {formatDateTime(new Date(match.kickoffTime), timezone)}
                         </div>
                         <div className="flex items-center gap-2 min-w-[200px]">
                           <span className="text-white font-medium text-right w-24 truncate">

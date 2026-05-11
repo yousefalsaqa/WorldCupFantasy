@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { getFlagUrl } from '@/lib/flags';
+import { decomposeDuration } from '@/lib/format-time';
 
 // All 48 qualifying nations. The final 6 entries are the March 2026 playoff
 // winners (4 UEFA paths + 2 FIFA intercontinental pathways).
@@ -28,16 +29,10 @@ export default function Home() {
     const targetDate = new Date('2026-06-11T18:00:00Z');
 
     const updateCountdown = () => {
-      const now = new Date();
-      const diff = targetDate.getTime() - now.getTime();
-
+      const diff = targetDate.getTime() - Date.now();
       if (diff > 0) {
-        setCountdown({
-          days: Math.floor(diff / (1000 * 60 * 60 * 24)),
-          hours: Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
-          minutes: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
-          seconds: Math.floor((diff % (1000 * 60)) / 1000),
-        });
+        const { days, hours, minutes, seconds } = decomposeDuration(diff);
+        setCountdown({ days, hours, minutes, seconds });
       }
     };
 

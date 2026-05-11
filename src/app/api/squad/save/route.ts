@@ -89,7 +89,38 @@ export async function POST(request: NextRequest) {
     if (totalCost > 100) {
       return NextResponse.json({ error: 'Squad exceeds budget' }, { status: 400 });
     }
-    
+
+    // Nation-limit check (3 max per nation). Mirrors /api/transfers and the
+    // single-player add endpoint at /api/squad. We fetch all submitted
+    // players in one query and bucket by nationId.
+    const submittedPlayers = await prisma.player.findMany({
+      where: { id: { in: players.map((p) => p.playerId) } },
+      select: { id: true, nationId: true, displayName: true, nation: { select: { name: true } } },
+    });
+    if (submittedPlayers.length !== players.length) {
+      return NextResponse.json(
+        { error: 'One or more players in your squad could not be found.' },
+        { status: 400 },
+      );
+    }
+    const nationCounts: Record<string, { count: number; name: string }> = {};
+    for (const p of submittedPlayers) {
+      const entry = nationCounts[p.nationId];
+      if (entry) {
+        entry.count += 1;
+      } else {
+        nationCounts[p.nationId] = { count: 1, name: p.nation.name };
+      }
+    }
+    for (const { count, name } of Object.values(nationCounts)) {
+      if (count > 3) {
+        return NextResponse.json(
+          { error: `Cannot have more than 3 players from ${name} (you have ${count}).` },
+          { status: 400 },
+        );
+      }
+    }
+
     // Clear existing squad players
     await prisma.squadPlayer.deleteMany({
       where: { teamId: team.id },

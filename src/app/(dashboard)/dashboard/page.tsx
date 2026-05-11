@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getFlagUrl } from '@/lib/flags';
+import { useUserTimezone } from '@/hooks/useTimezone';
+import { formatDateShort } from '@/lib/format-time';
 
 interface User {
   id: string;
@@ -32,6 +34,7 @@ interface Stage {
 const HOST_FLAGS = ['us', 'ca', 'mx'];
 
 export default function DashboardPage() {
+  const { timezone } = useUserTimezone();
   const [user, setUser] = useState<User | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
   const [currentStage, setCurrentStage] = useState<Stage | null>(null);
@@ -232,8 +235,8 @@ export default function DashboardPage() {
                   <div>
                     <h3 className="font-bold text-white">{currentStage.name}</h3>
                     <p className="text-sm text-white/40">
-                      {currentStage.deadlineTime 
-                        ? `Deadline: ${new Date(currentStage.deadlineTime).toLocaleDateString()}`
+                      {currentStage.deadlineTime
+                        ? `Deadline: ${formatDateShort(new Date(currentStage.deadlineTime), timezone)}`
                         : 'Pre-tournament'}
                     </p>
                   </div>

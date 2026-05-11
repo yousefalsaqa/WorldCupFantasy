@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useUserTimezone } from '@/hooks/useTimezone';
+import { formatAdminTimestamp, formatDateShort } from '@/lib/format-time';
 
 interface NationBreakdown {
   code: string;
@@ -70,6 +72,7 @@ interface PlayerMatch {
 }
 
 export default function AdminDashboard() {
+  const { timezone } = useUserTimezone();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -366,7 +369,7 @@ export default function AdminDashboard() {
             </p>
             {stats?.playerTableLocked && stats?.playerTableLockedAt && (
               <p className="text-white/30 text-xs mt-2">
-                Locked at {new Date(stats.playerTableLockedAt).toLocaleString()}
+                Locked at {formatAdminTimestamp(new Date(stats.playerTableLockedAt), timezone)}
               </p>
             )}
           </div>
@@ -617,7 +620,7 @@ export default function AdminDashboard() {
                     {playerMatches.map((pm) => (
                       <option key={pm.id} value={pm.match.id}>
                         {pm.match.homeNation.code} vs {pm.match.awayNation.code} 
-                        ({new Date(pm.match.matchDate).toLocaleDateString()}) 
+                        ({formatDateShort(new Date(pm.match.matchDate), timezone)}) 
                         - {pm.totalPoints} pts
                       </option>
                     ))}

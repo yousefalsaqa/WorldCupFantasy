@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import { formatTime } from '@/lib/format-time';
 
 export default function AdminSyncPage() {
   const [loading, setLoading] = useState(false);
   const [log, setLog] = useState<string[]>([]);
 
   function addLog(message: string) {
-    setLog(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
+    setLog(prev => [...prev, `[${formatTime(new Date())}] ${message}`]);
   }
 
   async function syncTeams() {

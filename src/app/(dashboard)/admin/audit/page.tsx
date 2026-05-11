@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useUserTimezone } from '@/hooks/useTimezone';
+import { formatAdminTimestamp } from '@/lib/format-time';
 
 interface AuditEntry {
   id: string;
@@ -12,6 +14,7 @@ interface AuditEntry {
 }
 
 export default function AdminAuditPage() {
+  const { timezone } = useUserTimezone();
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -112,7 +115,7 @@ export default function AdminAuditPage() {
                       {entry.action}
                     </span>
                     <span className="text-white/40 text-sm">
-                      {new Date(entry.createdAt).toLocaleString()}
+                      {formatAdminTimestamp(new Date(entry.createdAt), timezone)}
                     </span>
                     {entry.user && (
                       <span className="text-white/60 text-sm">

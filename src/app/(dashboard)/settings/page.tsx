@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { User, Mail, Calendar, Shield } from 'lucide-react';
+import { TimezoneSettingCard } from '@/components/timezone-picker';
 
 export default async function SettingsPage() {
   const session = await getSession();
@@ -107,6 +108,16 @@ export default async function SettingsPage() {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Preferences */}
+      <div className="card mb-6">
+        <div className="p-4 border-b border-surface-800">
+          <h2 className="font-semibold text-laliga-cream">Preferences</h2>
+        </div>
+        <div className="divide-y divide-surface-800">
+          <TimezoneSettingCard />
         </div>
       </div>
 

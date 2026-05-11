@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useUserTimezone } from '@/hooks/useTimezone';
+import { formatDateShort } from '@/lib/format-time';
 
 interface UserData {
   id: string;
@@ -18,6 +20,7 @@ interface UserData {
 }
 
 export default function AdminUsersPage() {
+  const { timezone } = useUserTimezone();
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -153,7 +156,7 @@ export default function AdminUsersPage() {
                     {user.team?._count.squadPlayers || 0}
                   </td>
                   <td className="px-4 py-3 text-white/40 text-sm">
-                    {new Date(user.createdAt).toLocaleDateString()}
+                    {formatDateShort(new Date(user.createdAt), timezone)}
                   </td>
                 </tr>
               ))}

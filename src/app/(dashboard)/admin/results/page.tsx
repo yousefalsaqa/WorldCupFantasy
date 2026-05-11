@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useUserTimezone } from '@/hooks/useTimezone';
+import { formatDateShort } from '@/lib/format-time';
 
 interface Nation {
   name: string;
@@ -27,6 +29,7 @@ interface Player {
 }
 
 export default function AdminResultsPage() {
+  const { timezone } = useUserTimezone();
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
@@ -188,7 +191,7 @@ export default function AdminResultsPage() {
                         {match.homeNation.name} vs {match.awayNation.name}
                       </span>
                       <div className="text-xs text-slate-500 mt-1">
-                        {match.stage.name} • {new Date(match.kickoffTime).toLocaleDateString()}
+                        {match.stage.name} • {formatDateShort(new Date(match.kickoffTime), timezone)}
                       </div>
                     </div>
                     {match.isStarted && !match.isFinished && (
