@@ -4,12 +4,14 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { getFlagUrl } from '@/lib/flags';
 
-// All 48 qualifying nations
+// All 48 qualifying nations. The final 6 entries are the March 2026 playoff
+// winners (4 UEFA paths + 2 FIFA intercontinental pathways).
 const NATIONS = [
   'MEX', 'RSA', 'KOR', 'CAN', 'QAT', 'SUI', 'BRA', 'MAR', 'HAI', 'SCO',
   'USA', 'PAR', 'AUS', 'GER', 'CUW', 'CIV', 'ECU', 'NED', 'JPN', 'TUN',
   'BEL', 'EGY', 'IRN', 'NZL', 'ESP', 'CPV', 'KSA', 'URU', 'FRA', 'SEN',
-  'NOR', 'ARG', 'ALG', 'JOR', 'POR', 'UZB', 'COL', 'ENG', 'CRO', 'GHA', 'PAN'
+  'NOR', 'ARG', 'ALG', 'JOR', 'AUT', 'POR', 'UZB', 'COL', 'ENG', 'CRO', 'GHA', 'PAN',
+  'CZE', 'BIH', 'TUR', 'SWE', 'IRQ', 'COD',
 ];
 
 const HOSTS = ['USA', 'CAN', 'MEX'];

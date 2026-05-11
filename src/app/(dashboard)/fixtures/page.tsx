@@ -27,24 +27,25 @@ const STADIUMS = {
   'bc_place': { name: 'BC Place', city: 'Vancouver', country: 'Canada', capacity: 54500 },
 };
 
-// Group Stage Fixtures (all times in EST)
-// TBD = Teams from Euro/FIFA Playoffs (to be determined)
+// Group Stage Fixtures (all times in EST). Playoff-winner slots that were
+// originally TBD were filled in following the March 2026 UEFA play-offs and
+// FIFA inter-confederation play-offs.
 const GROUP_FIXTURES: Fixture[] = [
-  // Group A - Opening Match (Mexico, South Korea, South Africa, TBD from Euro Playoff D)
+  // Group A (Mexico, South Korea, South Africa, Czech Republic – UEFA Path D winner)
   { id: '1', group: 'A', home: 'MEX', away: 'RSA', date: '2026-06-11', time: '20:00', stadium: 'azteca', stage: 'Group A' },
-  { id: '2', group: 'A', home: 'KOR', away: 'TBD', date: '2026-06-12', time: '14:00', stadium: 'rose_bowl', stage: 'Group A' },
+  { id: '2', group: 'A', home: 'KOR', away: 'CZE', date: '2026-06-12', time: '14:00', stadium: 'rose_bowl', stage: 'Group A' },
   { id: '3', group: 'A', home: 'RSA', away: 'KOR', date: '2026-06-16', time: '14:00', stadium: 'att', stage: 'Group A' },
-  { id: '4', group: 'A', home: 'TBD', away: 'MEX', date: '2026-06-16', time: '17:00', stadium: 'sofi', stage: 'Group A' },
+  { id: '4', group: 'A', home: 'CZE', away: 'MEX', date: '2026-06-16', time: '17:00', stadium: 'sofi', stage: 'Group A' },
   { id: '5', group: 'A', home: 'MEX', away: 'KOR', date: '2026-06-20', time: '17:00', stadium: 'azteca', stage: 'Group A' },
-  { id: '6', group: 'A', home: 'TBD', away: 'RSA', date: '2026-06-20', time: '17:00', stadium: 'arrowhead', stage: 'Group A' },
-  
-  // Group B (Canada, Qatar, Switzerland, TBD from Euro Playoff A)
+  { id: '6', group: 'A', home: 'CZE', away: 'RSA', date: '2026-06-20', time: '17:00', stadium: 'arrowhead', stage: 'Group A' },
+
+  // Group B (Canada, Qatar, Switzerland, Bosnia & Herzegovina – UEFA Path A winner)
   { id: '7', group: 'B', home: 'CAN', away: 'QAT', date: '2026-06-12', time: '17:00', stadium: 'bmo', stage: 'Group B' },
-  { id: '8', group: 'B', home: 'SUI', away: 'TBD', date: '2026-06-12', time: '20:00', stadium: 'bc_place', stage: 'Group B' },
+  { id: '8', group: 'B', home: 'SUI', away: 'BIH', date: '2026-06-12', time: '20:00', stadium: 'bc_place', stage: 'Group B' },
   { id: '9', group: 'B', home: 'QAT', away: 'SUI', date: '2026-06-17', time: '14:00', stadium: 'hard_rock', stage: 'Group B' },
-  { id: '10', group: 'B', home: 'TBD', away: 'CAN', date: '2026-06-17', time: '17:00', stadium: 'bmo', stage: 'Group B' },
+  { id: '10', group: 'B', home: 'BIH', away: 'CAN', date: '2026-06-17', time: '17:00', stadium: 'bmo', stage: 'Group B' },
   { id: '11', group: 'B', home: 'CAN', away: 'SUI', date: '2026-06-21', time: '14:00', stadium: 'bc_place', stage: 'Group B' },
-  { id: '12', group: 'B', home: 'TBD', away: 'QAT', date: '2026-06-21', time: '14:00', stadium: 'centurylink', stage: 'Group B' },
+  { id: '12', group: 'B', home: 'BIH', away: 'QAT', date: '2026-06-21', time: '14:00', stadium: 'centurylink', stage: 'Group B' },
   
   // Group C (Brazil, Morocco, Haiti, Scotland)
   { id: '13', group: 'C', home: 'BRA', away: 'MAR', date: '2026-06-13', time: '14:00', stadium: 'sofi', stage: 'Group C' },
@@ -54,13 +55,13 @@ const GROUP_FIXTURES: Fixture[] = [
   { id: '17', group: 'C', home: 'BRA', away: 'HAI', date: '2026-06-23', time: '17:00', stadium: 'nrg', stage: 'Group C' },
   { id: '18', group: 'C', home: 'SCO', away: 'MAR', date: '2026-06-23', time: '17:00', stadium: 'lincoln', stage: 'Group C' },
   
-  // Group D (USA, Australia, Paraguay, TBD from Euro Playoff C)
+  // Group D (USA, Australia, Paraguay, Turkey – UEFA Path C winner)
   { id: '19', group: 'D', home: 'USA', away: 'PAR', date: '2026-06-13', time: '20:00', stadium: 'metlife', stage: 'Group D' },
-  { id: '20', group: 'D', home: 'AUS', away: 'TBD', date: '2026-06-14', time: '14:00', stadium: 'att', stage: 'Group D' },
+  { id: '20', group: 'D', home: 'AUS', away: 'TUR', date: '2026-06-14', time: '14:00', stadium: 'att', stage: 'Group D' },
   { id: '21', group: 'D', home: 'PAR', away: 'AUS', date: '2026-06-18', time: '20:00', stadium: 'arrowhead', stage: 'Group D' },
-  { id: '22', group: 'D', home: 'TBD', away: 'USA', date: '2026-06-19', time: '14:00', stadium: 'sofi', stage: 'Group D' },
+  { id: '22', group: 'D', home: 'TUR', away: 'USA', date: '2026-06-19', time: '14:00', stadium: 'sofi', stage: 'Group D' },
   { id: '23', group: 'D', home: 'USA', away: 'AUS', date: '2026-06-23', time: '20:00', stadium: 'metlife', stage: 'Group D' },
-  { id: '24', group: 'D', home: 'TBD', away: 'PAR', date: '2026-06-23', time: '20:00', stadium: 'rose_bowl', stage: 'Group D' },
+  { id: '24', group: 'D', home: 'TUR', away: 'PAR', date: '2026-06-23', time: '20:00', stadium: 'rose_bowl', stage: 'Group D' },
   
   // Group E (Germany, Curaçao, Ivory Coast, Ecuador)
   { id: '25', group: 'E', home: 'GER', away: 'CUW', date: '2026-06-14', time: '14:00', stadium: 'levis', stage: 'Group E' },
@@ -70,13 +71,13 @@ const GROUP_FIXTURES: Fixture[] = [
   { id: '29', group: 'E', home: 'GER', away: 'CIV', date: '2026-06-24', time: '17:00', stadium: 'sofi', stage: 'Group E' },
   { id: '30', group: 'E', home: 'ECU', away: 'CUW', date: '2026-06-24', time: '17:00', stadium: 'centurylink', stage: 'Group E' },
   
-  // Group F (Netherlands, Japan, Tunisia, TBD from Euro Playoff B)
+  // Group F (Netherlands, Japan, Tunisia, Sweden – UEFA Path B winner)
   { id: '31', group: 'F', home: 'NED', away: 'JPN', date: '2026-06-14', time: '20:00', stadium: 'rose_bowl', stage: 'Group F' },
-  { id: '32', group: 'F', home: 'TUN', away: 'TBD', date: '2026-06-15', time: '14:00', stadium: 'lincoln', stage: 'Group F' },
+  { id: '32', group: 'F', home: 'TUN', away: 'SWE', date: '2026-06-15', time: '14:00', stadium: 'lincoln', stage: 'Group F' },
   { id: '33', group: 'F', home: 'JPN', away: 'TUN', date: '2026-06-19', time: '20:00', stadium: 'att', stage: 'Group F' },
-  { id: '34', group: 'F', home: 'TBD', away: 'NED', date: '2026-06-20', time: '14:00', stadium: 'akron', stage: 'Group F' },
+  { id: '34', group: 'F', home: 'SWE', away: 'NED', date: '2026-06-20', time: '14:00', stadium: 'akron', stage: 'Group F' },
   { id: '35', group: 'F', home: 'NED', away: 'TUN', date: '2026-06-24', time: '20:00', stadium: 'metlife', stage: 'Group F' },
-  { id: '36', group: 'F', home: 'TBD', away: 'JPN', date: '2026-06-24', time: '20:00', stadium: 'bbva', stage: 'Group F' },
+  { id: '36', group: 'F', home: 'SWE', away: 'JPN', date: '2026-06-24', time: '20:00', stadium: 'bbva', stage: 'Group F' },
   
   // Group G (Belgium, Egypt, Iran, New Zealand)
   { id: '37', group: 'G', home: 'BEL', away: 'EGY', date: '2026-06-15', time: '17:00', stadium: 'metlife', stage: 'Group G' },
@@ -94,13 +95,13 @@ const GROUP_FIXTURES: Fixture[] = [
   { id: '47', group: 'H', home: 'ESP', away: 'KSA', date: '2026-06-26', time: '14:00', stadium: 'rose_bowl', stage: 'Group H' },
   { id: '48', group: 'H', home: 'URU', away: 'CPV', date: '2026-06-26', time: '14:00', stadium: 'levis', stage: 'Group H' },
   
-  // Group I (France, Senegal, Norway, TBD from FIFA Playoff 2)
+  // Group I (France, Senegal, Norway, Iraq – FIFA Pathway 2 winner)
   { id: '49', group: 'I', home: 'FRA', away: 'SEN', date: '2026-06-16', time: '20:00', stadium: 'metlife', stage: 'Group I' },
-  { id: '50', group: 'I', home: 'NOR', away: 'TBD', date: '2026-06-17', time: '14:00', stadium: 'sofi', stage: 'Group I' },
+  { id: '50', group: 'I', home: 'NOR', away: 'IRQ', date: '2026-06-17', time: '14:00', stadium: 'sofi', stage: 'Group I' },
   { id: '51', group: 'I', home: 'SEN', away: 'NOR', date: '2026-06-21', time: '20:00', stadium: 'att', stage: 'Group I' },
-  { id: '52', group: 'I', home: 'TBD', away: 'FRA', date: '2026-06-22', time: '14:00', stadium: 'hard_rock', stage: 'Group I' },
+  { id: '52', group: 'I', home: 'IRQ', away: 'FRA', date: '2026-06-22', time: '14:00', stadium: 'hard_rock', stage: 'Group I' },
   { id: '53', group: 'I', home: 'FRA', away: 'NOR', date: '2026-06-26', time: '20:00', stadium: 'sofi', stage: 'Group I' },
-  { id: '54', group: 'I', home: 'TBD', away: 'SEN', date: '2026-06-26', time: '20:00', stadium: 'nrg', stage: 'Group I' },
+  { id: '54', group: 'I', home: 'IRQ', away: 'SEN', date: '2026-06-26', time: '20:00', stadium: 'nrg', stage: 'Group I' },
   
   // Group J (Argentina, Algeria, Jordan, Austria)
   { id: '55', group: 'J', home: 'ARG', away: 'ALG', date: '2026-06-17', time: '17:00', stadium: 'hard_rock', stage: 'Group J' },
@@ -110,13 +111,13 @@ const GROUP_FIXTURES: Fixture[] = [
   { id: '59', group: 'J', home: 'JOR', away: 'ALG', date: '2026-06-27', time: '14:00', stadium: 'centurylink', stage: 'Group J' },
   { id: '60', group: 'J', home: 'AUT', away: 'ARG', date: '2026-06-27', time: '14:00', stadium: 'hard_rock', stage: 'Group J' },
   
-  // Group K (Portugal, Uzbekistan, Colombia, TBD from FIFA Playoff 1)
+  // Group K (Portugal, Uzbekistan, Colombia, DR Congo – FIFA Pathway 1 winner)
   { id: '61', group: 'K', home: 'POR', away: 'UZB', date: '2026-06-18', time: '14:00', stadium: 'sofi', stage: 'Group K' },
-  { id: '62', group: 'K', home: 'COL', away: 'TBD', date: '2026-06-18', time: '17:00', stadium: 'mercedes', stage: 'Group K' },
+  { id: '62', group: 'K', home: 'COL', away: 'COD', date: '2026-06-18', time: '17:00', stadium: 'mercedes', stage: 'Group K' },
   { id: '63', group: 'K', home: 'UZB', away: 'COL', date: '2026-06-23', time: '14:00', stadium: 'levis', stage: 'Group K' },
-  { id: '64', group: 'K', home: 'TBD', away: 'POR', date: '2026-06-23', time: '17:00', stadium: 'arrowhead', stage: 'Group K' },
+  { id: '64', group: 'K', home: 'COD', away: 'POR', date: '2026-06-23', time: '17:00', stadium: 'arrowhead', stage: 'Group K' },
   { id: '65', group: 'K', home: 'POR', away: 'COL', date: '2026-06-28', time: '17:00', stadium: 'azteca', stage: 'Group K' },
-  { id: '66', group: 'K', home: 'TBD', away: 'UZB', date: '2026-06-28', time: '17:00', stadium: 'bbva', stage: 'Group K' },
+  { id: '66', group: 'K', home: 'COD', away: 'UZB', date: '2026-06-28', time: '17:00', stadium: 'bbva', stage: 'Group K' },
   
   // Group L (England, Croatia, Ghana, Panama)
   { id: '67', group: 'L', home: 'ENG', away: 'CRO', date: '2026-06-18', time: '20:00', stadium: 'metlife', stage: 'Group L' },
@@ -147,31 +148,31 @@ const KNOCKOUT_FIXTURES: Fixture[] = [
   { id: 'R32-15', group: '', home: '3rd Best', away: '3rd Best', date: '2026-07-06', time: '16:00', stadium: 'centurylink', stage: 'Round of 32' },
   { id: 'R32-16', group: '', home: '3rd Best', away: '3rd Best', date: '2026-07-06', time: '20:00', stadium: 'bmo', stage: 'Round of 32' },
   
-  // Round of 16 (July 8-11)
-  { id: 'R16-1', group: '', home: 'TBD', away: 'TBD', date: '2026-07-08', time: '14:00', stadium: 'metlife', stage: 'Round of 16' },
-  { id: 'R16-2', group: '', home: 'TBD', away: 'TBD', date: '2026-07-08', time: '18:00', stadium: 'rose_bowl', stage: 'Round of 16' },
-  { id: 'R16-3', group: '', home: 'TBD', away: 'TBD', date: '2026-07-09', time: '14:00', stadium: 'att', stage: 'Round of 16' },
-  { id: 'R16-4', group: '', home: 'TBD', away: 'TBD', date: '2026-07-09', time: '18:00', stadium: 'sofi', stage: 'Round of 16' },
-  { id: 'R16-5', group: '', home: 'TBD', away: 'TBD', date: '2026-07-10', time: '14:00', stadium: 'azteca', stage: 'Round of 16' },
-  { id: 'R16-6', group: '', home: 'TBD', away: 'TBD', date: '2026-07-10', time: '18:00', stadium: 'hard_rock', stage: 'Round of 16' },
-  { id: 'R16-7', group: '', home: 'TBD', away: 'TBD', date: '2026-07-11', time: '14:00', stadium: 'mercedes', stage: 'Round of 16' },
-  { id: 'R16-8', group: '', home: 'TBD', away: 'TBD', date: '2026-07-11', time: '18:00', stadium: 'nrg', stage: 'Round of 16' },
-  
-  // Quarter Finals (July 13-14)
-  { id: 'QF-1', group: '', home: 'TBD', away: 'TBD', date: '2026-07-13', time: '14:00', stadium: 'metlife', stage: 'Quarter Final' },
-  { id: 'QF-2', group: '', home: 'TBD', away: 'TBD', date: '2026-07-13', time: '18:00', stadium: 'sofi', stage: 'Quarter Final' },
-  { id: 'QF-3', group: '', home: 'TBD', away: 'TBD', date: '2026-07-14', time: '14:00', stadium: 'azteca', stage: 'Quarter Final' },
-  { id: 'QF-4', group: '', home: 'TBD', away: 'TBD', date: '2026-07-14', time: '18:00', stadium: 'att', stage: 'Quarter Final' },
-  
-  // Semi Finals (July 16-17)
-  { id: 'SF-1', group: '', home: 'TBD', away: 'TBD', date: '2026-07-16', time: '18:00', stadium: 'metlife', stage: 'Semi Final' },
-  { id: 'SF-2', group: '', home: 'TBD', away: 'TBD', date: '2026-07-17', time: '18:00', stadium: 'azteca', stage: 'Semi Final' },
-  
-  // Third Place Play-off (July 19)
-  { id: '3RD', group: '', home: 'TBD', away: 'TBD', date: '2026-07-19', time: '14:00', stadium: 'hard_rock', stage: '3rd Place' },
-  
-  // Final (July 19)
-  { id: 'FINAL', group: '', home: 'TBD', away: 'TBD', date: '2026-07-19', time: '18:00', stadium: 'metlife', stage: 'Final' },
+  // Round of 16 (July 8–11) – feeders are the 16 R32 winners, paired sequentially.
+  { id: 'R16-1', group: '', home: 'W R32-1', away: 'W R32-2', date: '2026-07-08', time: '14:00', stadium: 'metlife', stage: 'Round of 16' },
+  { id: 'R16-2', group: '', home: 'W R32-3', away: 'W R32-4', date: '2026-07-08', time: '18:00', stadium: 'rose_bowl', stage: 'Round of 16' },
+  { id: 'R16-3', group: '', home: 'W R32-5', away: 'W R32-6', date: '2026-07-09', time: '14:00', stadium: 'att', stage: 'Round of 16' },
+  { id: 'R16-4', group: '', home: 'W R32-7', away: 'W R32-8', date: '2026-07-09', time: '18:00', stadium: 'sofi', stage: 'Round of 16' },
+  { id: 'R16-5', group: '', home: 'W R32-9', away: 'W R32-10', date: '2026-07-10', time: '14:00', stadium: 'azteca', stage: 'Round of 16' },
+  { id: 'R16-6', group: '', home: 'W R32-11', away: 'W R32-12', date: '2026-07-10', time: '18:00', stadium: 'hard_rock', stage: 'Round of 16' },
+  { id: 'R16-7', group: '', home: 'W R32-13', away: 'W R32-14', date: '2026-07-11', time: '14:00', stadium: 'mercedes', stage: 'Round of 16' },
+  { id: 'R16-8', group: '', home: 'W R32-15', away: 'W R32-16', date: '2026-07-11', time: '18:00', stadium: 'nrg', stage: 'Round of 16' },
+
+  // Quarter Finals (July 13–14) – feeders are the 8 R16 winners.
+  { id: 'QF-1', group: '', home: 'W R16-1', away: 'W R16-2', date: '2026-07-13', time: '14:00', stadium: 'metlife', stage: 'Quarter Final' },
+  { id: 'QF-2', group: '', home: 'W R16-3', away: 'W R16-4', date: '2026-07-13', time: '18:00', stadium: 'sofi', stage: 'Quarter Final' },
+  { id: 'QF-3', group: '', home: 'W R16-5', away: 'W R16-6', date: '2026-07-14', time: '14:00', stadium: 'azteca', stage: 'Quarter Final' },
+  { id: 'QF-4', group: '', home: 'W R16-7', away: 'W R16-8', date: '2026-07-14', time: '18:00', stadium: 'att', stage: 'Quarter Final' },
+
+  // Semi Finals (July 16–17) – feeders are the 4 QF winners.
+  { id: 'SF-1', group: '', home: 'W QF-1', away: 'W QF-2', date: '2026-07-16', time: '18:00', stadium: 'metlife', stage: 'Semi Final' },
+  { id: 'SF-2', group: '', home: 'W QF-3', away: 'W QF-4', date: '2026-07-17', time: '18:00', stadium: 'azteca', stage: 'Semi Final' },
+
+  // Third Place Play-off (July 19) – losers of the two semi-finals.
+  { id: '3RD', group: '', home: 'L SF-1', away: 'L SF-2', date: '2026-07-19', time: '14:00', stadium: 'hard_rock', stage: '3rd Place' },
+
+  // Final (July 19) – winners of the two semi-finals.
+  { id: 'FINAL', group: '', home: 'W SF-1', away: 'W SF-2', date: '2026-07-19', time: '18:00', stadium: 'metlife', stage: 'Final' },
 ];
 
 interface Fixture {
@@ -198,7 +199,14 @@ const NATION_NAMES: Record<string, string> = {
   'ARG': 'Argentina', 'ALG': 'Algeria', 'JOR': 'Jordan', 'AUT': 'Austria',
   'POR': 'Portugal', 'UZB': 'Uzbekistan', 'COL': 'Colombia',
   'ENG': 'England', 'CRO': 'Croatia', 'GHA': 'Ghana', 'PAN': 'Panama',
-  'TBD': 'TBD',
+  // 2026 playoff winners (UEFA paths A–D + FIFA intercontinental pathways 1–2).
+  // Finals took place 31 March 2026 – source: wikipedia.org/wiki/2026_FIFA_World_Cup_qualification.
+  'CZE': 'Czech Republic',           // UEFA Path D → Group A
+  'BIH': 'Bosnia & Herzegovina',     // UEFA Path A → Group B
+  'TUR': 'Turkey',                   // UEFA Path C → Group D
+  'SWE': 'Sweden',                   // UEFA Path B → Group F
+  'IRQ': 'Iraq',                     // FIFA Pathway 2 → Group I
+  'COD': 'DR Congo',                 // FIFA Pathway 1 → Group K
 };
 
 const FLAG_CODES: Record<string, string> = {
@@ -209,6 +217,8 @@ const FLAG_CODES: Record<string, string> = {
   'ESP': 'es', 'CPV': 'cv', 'KSA': 'sa', 'URU': 'uy', 'FRA': 'fr', 'SEN': 'sn',
   'NOR': 'no', 'ARG': 'ar', 'ALG': 'dz', 'JOR': 'jo', 'AUT': 'at', 'POR': 'pt', 'UZB': 'uz',
   'COL': 'co', 'ENG': 'gb-eng', 'CRO': 'hr', 'GHA': 'gh', 'PAN': 'pa',
+  // Playoff winners
+  'CZE': 'cz', 'BIH': 'ba', 'TUR': 'tr', 'SWE': 'se', 'IRQ': 'iq', 'COD': 'cd',
 };
 
 type FilterOption = 'all' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'knockout';
@@ -289,43 +299,17 @@ function FixturesContent() {
               <div className="flex items-center justify-between gap-2 mb-3">
                 {/* Home Team */}
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                  {!isKnockout && FLAG_CODES[fixture.home] ? (
-                    <img 
-                      src={getFlagUrl(FLAG_CODES[fixture.home], 'md')} 
-                      alt={fixture.home}
-                      className="w-6 h-4 sm:w-8 sm:h-6 rounded shadow-md flex-shrink-0"
-                    />
-                  ) : (
-                    <div className="w-6 h-4 sm:w-8 sm:h-6 bg-white/10 rounded flex items-center justify-center text-[8px] sm:text-[10px] text-white/50 flex-shrink-0">
-                      {fixture.home.slice(0, 3)}
-                    </div>
-                  )}
-                  <span className="text-white font-semibold text-xs sm:text-sm truncate">
-                    {NATION_NAMES[fixture.home] || fixture.home}
-                  </span>
+                  <TeamCell code={fixture.home} side="home" />
                 </div>
-                
+
                 {/* Time */}
                 <div className="px-2 sm:px-4 py-1.5 sm:py-2 bg-white/10 rounded-lg flex-shrink-0">
                   <span className="text-white font-bold text-[10px] sm:text-sm whitespace-nowrap">{formatTime(fixture.time)}</span>
                 </div>
-                
+
                 {/* Away Team */}
                 <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
-                  <span className="text-white font-semibold text-xs sm:text-sm truncate text-right">
-                    {NATION_NAMES[fixture.away] || fixture.away}
-                  </span>
-                  {!isKnockout && FLAG_CODES[fixture.away] ? (
-                    <img 
-                      src={getFlagUrl(FLAG_CODES[fixture.away], 'md')} 
-                      alt={fixture.away}
-                      className="w-6 h-4 sm:w-8 sm:h-6 rounded shadow-md flex-shrink-0"
-                    />
-                  ) : (
-                    <div className="w-6 h-4 sm:w-8 sm:h-6 bg-white/10 rounded flex items-center justify-center text-[8px] sm:text-[10px] text-white/50 flex-shrink-0">
-                      {fixture.away.slice(0, 3)}
-                    </div>
-                  )}
+                  <TeamCell code={fixture.away} side="away" />
                 </div>
               </div>
               
@@ -378,5 +362,64 @@ function FilterButton({ children, active, onClick }: { children: React.ReactNode
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * Render one side of a fixture's team display.
+ *
+ * Three rendering modes, picked in order:
+ *   1. Real nation with a flag code → show flag + full name (e.g. "🇧🇷 Brazil").
+ *   2. Group-stage placeholder like "1A" / "2B" / "3rd Best" (R32 seeding) →
+ *      compact muted pill (fits inside the existing 3-char box).
+ *   3. Knockout placeholder like "W R32-1" / "L SF-2" (R16+ feeders) → italic
+ *      label, no box, full width – these are too long for the pill and the
+ *      box was rendering useless slices like "W R".
+ */
+function TeamCell({ code, side }: { code: string; side: 'home' | 'away' }) {
+  const flag = FLAG_CODES[code];
+  const name = NATION_NAMES[code] ?? code;
+  const isHome = side === 'home';
+  const containerAlign = isHome ? '' : 'flex-row-reverse text-right';
+  const textAlign = isHome ? '' : 'text-right';
+
+  if (flag) {
+    return (
+      <div className={`flex items-center gap-2 min-w-0 ${containerAlign}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={getFlagUrl(flag, 'md')}
+          alt={code}
+          className="w-6 h-4 sm:w-8 sm:h-6 rounded shadow-md flex-shrink-0"
+        />
+        <span className={`text-white font-semibold text-xs sm:text-sm truncate ${textAlign}`}>
+          {name}
+        </span>
+      </div>
+    );
+  }
+
+  // Short group-stage style placeholder (1A, 2B, 3rd Best …) – preserve the
+  // existing pill so R32 rows still look like R32 rows.
+  const isShortPlaceholder = code.length <= 9 && !/^[WL] /.test(code);
+  if (isShortPlaceholder) {
+    return (
+      <div className={`flex items-center gap-2 min-w-0 ${containerAlign}`}>
+        <div className="px-1.5 h-4 sm:h-6 bg-white/10 rounded flex items-center justify-center text-[9px] sm:text-[10px] text-white/60 flex-shrink-0 font-mono">
+          {code}
+        </div>
+        <span className={`text-white/70 font-semibold text-xs sm:text-sm truncate italic ${textAlign}`}>
+          {name}
+        </span>
+      </div>
+    );
+  }
+
+  // Knockout feeder label ("W R32-1", "L SF-2"). Italic, no pill, the label
+  // is the team name.
+  return (
+    <span className={`text-white/70 font-semibold text-xs sm:text-sm truncate italic ${textAlign} w-full`}>
+      {name}
+    </span>
   );
 }
