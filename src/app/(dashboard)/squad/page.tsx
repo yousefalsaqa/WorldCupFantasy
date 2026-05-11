@@ -1193,6 +1193,40 @@ export default function SquadPage() {
     countdownStr = days > 0 ? `${days}d ${hours}h` : `${hours}h`;
   }
 
+  // Squad-lock deadline: 1 hour before the first match of the upcoming
+  // gameweek. We approximate "first match of the gameweek" as the next
+  // fixture in chronological order – which is exactly right pre-tournament
+  // and during the gap between matchdays. (Once the tournament is in full
+  // swing we may want to anchor this on the Stage record's `deadline`
+  // field instead, but for now `nextFixture - 1h` matches the user's
+  // mental model and is wrong only mid-matchday when transfers are
+  // already locked anyway.)
+  let deadlineDateShort = '—';
+  let deadlineHint = '';
+  if (nextFixture) {
+    const deadlineMs = nextFixture.dt.getTime() - 60 * 60 * 1000;
+    const ddt = new Date(deadlineMs);
+    deadlineDateShort = ddt.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+    });
+    const timeStr = ddt.toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+    const diff = deadlineMs - Date.now();
+    let countdown = 'Locked';
+    if (diff > 0) {
+      const d = Math.floor(diff / 86400000);
+      const h = Math.floor((diff / 3600000) % 24);
+      const m = Math.floor((diff / 60000) % 60);
+      if (d > 0) countdown = `in ${d}d ${h}h`;
+      else if (h > 0) countdown = `in ${h}h ${m}m`;
+      else countdown = `in ${m}m`;
+    }
+    deadlineHint = `${timeStr} · ${countdown}`;
+  }
+
   return (
     <div
       className="max-w-5xl mx-auto px-0 sm:px-4 py-4 sm:py-6 sm:pb-6"
@@ -1226,7 +1260,13 @@ export default function SquadPage() {
           <StatCard icon={<Trophy className="w-4 h-4" />} label="Total Pts" value={`${totalPoints}`} accent="text-emerald-400" highlight />
           <StatCard icon={<Coins className="w-4 h-4" />} label="Value" value={`£${teamValue.toFixed(1)}m`} accent="text-white" />
           <StatCard icon={<Wallet className="w-4 h-4" />} label="Bank" value={`£${bankBalance.toFixed(1)}m`} accent="text-emerald-300" />
-          <StatCard icon={<Zap className="w-4 h-4" />} label="Form" value={countdownStr} accent="text-amber-300" />
+          <StatCard
+            icon={<Zap className="w-4 h-4" />}
+            label="Deadline"
+            value={deadlineDateShort}
+            hint={deadlineHint}
+            accent="text-amber-300"
+          />
         </div>
       </div>
 
@@ -1883,11 +1923,13 @@ interface StatCardProps {
   icon: React.ReactNode;
   label: string;
   value: string;
+  /** Optional small subtext shown under the value (e.g. "7:00 PM · in 29d"). */
+  hint?: string;
   accent?: string;
   highlight?: boolean;
 }
 
-function StatCard({ icon, label, value, accent = 'text-white', highlight = false }: StatCardProps) {
+function StatCard({ icon, label, value, hint, accent = 'text-white', highlight = false }: StatCardProps) {
   return (
     <div className={`relative px-3 py-2 rounded-xl border overflow-hidden transition-all ${
       highlight
@@ -1899,6 +1941,11 @@ function StatCard({ icon, label, value, accent = 'text-white', highlight = false
         <p className="text-[9px] sm:text-[10px] uppercase tracking-wider font-bold text-white/50 leading-none">{label}</p>
       </div>
       <p className={`text-base sm:text-xl font-black leading-tight ${accent}`}>{value}</p>
+      {hint && (
+        <p className="text-[9px] sm:text-[10px] font-medium text-white/40 mt-0.5 leading-tight truncate">
+          {hint}
+        </p>
+      )}
     </div>
   );
 }

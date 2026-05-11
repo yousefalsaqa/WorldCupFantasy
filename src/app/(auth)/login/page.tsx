@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -9,11 +9,23 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // Set when the user arrived here because their session went bad (Tier 1
+  // server redirect or Tier 2 client 401 interceptor). We read it from
+  // window.location.search in an effect to avoid pulling in Suspense
+  // boundaries for useSearchParams in Next 14.
+  const [sessionExpired, setSessionExpired] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    setSessionExpired(params.get('reason') === 'session_expired');
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    setSessionExpired(false); // they're actively retrying; hide the stale banner
     setLoading(true);
 
     try {
@@ -23,17 +35,40 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await res.json();
+      // Server might return HTML (timeout / 5xx page) instead of JSON. Parse
+      // defensively so we don't crash into the bare "Something went wrong".
+      let data: { error?: string } = {};
+      try {
+        data = await res.json();
+      } catch {
+        // ignore – we'll fall back to a status-based message below
+      }
 
       if (!res.ok) {
-        setError(data.error || 'Login failed');
+        const msg =
+          data.error ||
+          (res.status === 504 || res.status === 408
+            ? 'Server timed out – please try again.'
+            : res.status >= 500
+            ? 'Server error – please try again in a moment.'
+            : 'Login failed');
+        setError(msg);
         setLoading(false);
         return;
       }
 
       router.push('/dashboard');
-    } catch {
-      setError('Something went wrong');
+    } catch (err) {
+      // Logging the actual error makes future "something went wrong" reports
+      // debuggable from the browser console without needing server access.
+      console.error('Login request failed:', err);
+      const aborted =
+        err instanceof DOMException && err.name === 'AbortError';
+      setError(
+        aborted
+          ? 'Login was cancelled.'
+          : 'Could not reach the server. Check your connection and try again.',
+      );
       setLoading(false);
     }
   }
@@ -70,6 +105,12 @@ export default function LoginPage() {
             <h1 className="text-2xl font-black text-white">Welcome Back</h1>
             <p className="text-white/40 text-sm mt-1">Sign in to manage your squad</p>
           </div>
+
+          {sessionExpired && !error && (
+            <div className="bg-amber-500/10 border border-amber-500/30 text-amber-200 px-4 py-3 rounded-xl text-sm mb-6">
+              Your session expired. Please sign in again to continue.
+            </div>
+          )}
 
           {error && (
             <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm mb-6">
