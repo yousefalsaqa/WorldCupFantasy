@@ -253,7 +253,7 @@ export default function DashboardPage() {
             <QuickAction href="/squad" icon={<SquadIcon />} label="My Squad" />
             <QuickAction href="/fixtures" icon={<CalendarIcon />} label="Fixtures" />
             <QuickAction href="/standings" icon={<StandingsIcon />} label="Standings" />
-            <QuickAction href="/transfers" icon={<TransferIcon />} label="Transfers" />
+            <QuickAction href="/transfers" icon={<TransferIcon />} label="Activity" />
             <QuickAction href="/leagues" icon={<TrophyIcon />} label="Leagues" />
             <QuickAction href="/history" icon={<HistoryIcon />} label="History" />
             <QuickAction href="/trends" icon={<TrendsIcon />} label="Trends" />

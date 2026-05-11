@@ -202,3 +202,27 @@ export const DEADLINE_OFFSET_MS = 60 * 60 * 1000;
 export function deadlineFor(kickoff: Date): Date {
   return new Date(kickoff.getTime() - DEADLINE_OFFSET_MS);
 }
+
+/**
+ * The static WORLD_CUP_FIXTURES table stores `date: '2026-06-11'` and
+ * `time: '20:00'` without any zone info. The original UI labelled these as
+ * "EST", so we treat the source as US Eastern Time. June–July 2026 falls
+ * entirely within DST so the effective offset is UTC-4 (EDT) for every
+ * match — hard-coding it is correct for the tournament window and avoids
+ * pulling in a tz database.
+ *
+ * If we ever need to support matches outside the DST window we'll have to
+ * switch to a proper IANA → offset resolution (e.g. via Intl).
+ */
+const FIXTURE_SOURCE_OFFSET = '-04:00';
+
+/**
+ * Combine a fixture date + time pair into a real Date instant, interpreting
+ * the input as US Eastern Time. After this point everything is in absolute
+ * UTC and the user's chosen display zone can render it correctly.
+ */
+export function parseFixtureDateTime(dateStr: string, timeStr: string): Date {
+  // Pad seconds so Safari accepts the ISO string ("HH:MM" alone is fine in
+  // modern engines but the explicit ":00" suffix is cheap insurance).
+  return new Date(`${dateStr}T${timeStr}:00${FIXTURE_SOURCE_OFFSET}`);
+}

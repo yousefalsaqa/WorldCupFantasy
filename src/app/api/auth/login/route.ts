@@ -4,23 +4,39 @@ import { verifyPassword, createToken, setAuthCookie } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
-    const { email, password } = await request.json();
+    // Accept either `identifier` (new clients) or `email` (legacy clients
+    // still sending the original payload). Either field may carry a
+    // username OR an email — we disambiguate by checking for an `@`.
+    const body = await request.json();
+    const identifierRaw: string | undefined = body.identifier ?? body.email;
+    const password: string | undefined = body.password;
 
-    if (!email || !password) {
+    if (!identifierRaw || !password) {
       return NextResponse.json(
-        { error: 'Email and password are required' },
+        { error: 'Username or email and password are required' },
         { status: 400 }
       );
     }
 
-    // Find user
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+    const identifier = identifierRaw.trim();
+    const looksLikeEmail = identifier.includes('@');
+
+    // Look up by email OR username. Both fields are unique in the schema, so
+    // a single findFirst keeps us at one round-trip. We always lowercase the
+    // email branch (we store emails canonically) but keep usernames
+    // case-insensitive via Prisma's `mode: 'insensitive'` — users who
+    // registered "Yousef" should still be able to log in as "yousef".
+    const user = await prisma.user.findFirst({
+      where: looksLikeEmail
+        ? { email: identifier.toLowerCase() }
+        : { username: { equals: identifier, mode: 'insensitive' } },
     });
 
+    // Generic error message either way — never leak which half of the
+    // credential was wrong (classic user-enumeration mitigation).
     if (!user) {
       return NextResponse.json(
-        { error: 'Invalid email or password' },
+        { error: 'Invalid username/email or password' },
         { status: 401 }
       );
     }
@@ -29,7 +45,7 @@ export async function POST(request: Request) {
     const isValid = await verifyPassword(password, user.passwordHash);
     if (!isValid) {
       return NextResponse.json(
-        { error: 'Invalid email or password' },
+        { error: 'Invalid username/email or password' },
         { status: 401 }
       );
     }

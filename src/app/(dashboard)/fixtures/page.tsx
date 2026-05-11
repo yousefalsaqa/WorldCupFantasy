@@ -4,7 +4,11 @@ import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getFlagUrl } from '@/lib/flags';
 import { useUserTimezone } from '@/hooks/useTimezone';
-import { formatDateWithWeekday, formatTime as fmtTime } from '@/lib/format-time';
+import {
+  formatDateWithWeekday,
+  formatTime as fmtTime,
+  parseFixtureDateTime,
+} from '@/lib/format-time';
 import { TimezoneIndicator } from '@/components/timezone-picker';
 
 // World Cup 2026 Stadiums
@@ -247,11 +251,12 @@ function FixturesContent() {
     return f.group === filter;
   });
   
-  // Sort by date and time
+  // Sort by date and time. parseFixtureDateTime anchors the timezone-naive
+  // strings to Eastern Time (the source zone the FIFA schedule was logged
+  // in) so the sort is consistent across all user timezones.
   filteredFixtures.sort((a, b) => {
-    const dateA = new Date(`${a.date}T${a.time}`);
-    const dateB = new Date(`${b.date}T${b.time}`);
-    return dateA.getTime() - dateB.getTime();
+    return parseFixtureDateTime(a.date, a.time).getTime() -
+      parseFixtureDateTime(b.date, b.time).getTime();
   });
 
   // Anchor calendar-day formatting at noon to dodge timezone off-by-one.
@@ -259,13 +264,14 @@ function FixturesContent() {
     return formatDateWithWeekday(new Date(dateStr + 'T12:00:00'), timezone);
   };
 
-  // Combine YYYY-MM-DD and HH:mm into a Date and format with user TZ. The
-  // source data is timezone-naive (stored in the venue's local time), so the
-  // displayed value really shows "what time would my browser show if I were
-  // in this zone" — that's the right pragmatic behaviour until we add a
-  // stadium-tz map.
+  // The fixture data stores `time: '20:00'` without a zone. The original
+  // schedule was logged in Eastern Time (the UI used to label everything
+  // "EST"), so we treat the source as ET via parseFixtureDateTime, then
+  // render the absolute moment in the user's chosen zone. Result: a 20:00
+  // ET kickoff displays as "8:00 PM EDT" for ET users, "5:00 PM PDT" for
+  // West Coast users, "4:00 AM GST" next day for Dubai users, etc.
   const formatTime = (dateStr: string, timeStr: string) => {
-    const date = new Date(`${dateStr}T${timeStr}`);
+    const date = parseFixtureDateTime(dateStr, timeStr);
     return `${fmtTime(date, timezone)} ${abbreviation}`;
   };
 

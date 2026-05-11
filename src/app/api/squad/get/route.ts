@@ -169,6 +169,10 @@ export async function GET(request: NextRequest) {
       teamId: team.id,
       bankBalance: refreshedTeam?.bankBalance ?? team.bankBalance,
       teamValue: refreshedTeam?.teamValue ?? team.teamValue,
+      // Surface the transfer-budget fields so the squad page can drive the
+      // transfer-mode UI (free transfers badge + hits calculation).
+      freeTransfers: refreshedTeam?.freeTransfers ?? team.freeTransfers,
+      transfersUsed: refreshedTeam?.transfersUsed ?? team.transfersUsed,
     });
 
   } catch (error) {

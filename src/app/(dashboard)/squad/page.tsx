@@ -8,6 +8,7 @@ import FormationPicker from '@/components/formation-picker';
 import { getFlagUrl } from '@/lib/flags';
 import { getFixtureDifficulty } from '@/lib/fdr';
 import { useUnsavedChanges } from '@/contexts/unsaved-changes';
+import { ArrowLeftRight, RotateCcw } from 'lucide-react';
 import { useUserTimezone, useNow } from '@/hooks/useTimezone';
 import {
   formatDateShort,
@@ -15,6 +16,7 @@ import {
   formatCountdown as fmtCountdown,
   formatDuration,
   deadlineFor,
+  parseFixtureDateTime,
 } from '@/lib/format-time';
 import { Trophy, Wallet, Coins, Sparkles, Zap, RefreshCw, Crown, Users, Save, X, Search, Wand2 } from 'lucide-react';
 
@@ -199,7 +201,11 @@ const NATION_NAMES: Record<string, string> = {
 // Get fixtures for a nation
 function getNationFixtures(nationCode: string): Fixture[] {
   return WORLD_CUP_FIXTURES.filter(f => f.home === nationCode || f.away === nationCode)
-    .sort((a, b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
+    .sort(
+      (a, b) =>
+        parseFixtureDateTime(a.date, a.time).getTime() -
+        parseFixtureDateTime(b.date, b.time).getTime(),
+    );
 }
 
 // Get next opponent for a nation (first upcoming unplayed game)
@@ -209,7 +215,7 @@ function getNextOpponent(nationCode: string): string {
   
   // Find the next unplayed game
   const nextFixture = fixtures.find(f => {
-    const fixtureDate = new Date(`${f.date}T${f.time}`);
+    const fixtureDate = parseFixtureDateTime(f.date, f.time);
     return fixtureDate > now && !f.isPlayed;
   });
   
@@ -289,6 +295,28 @@ export default function SquadPage() {
   // View mode state
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [playerToSub, setPlayerToSub] = useState<Player | null>(null);
+
+  // Transfer mode state
+  //
+  // Transfer mode is a sub-state of "view" mode — the team is built and we're
+  // mid-tournament. Toggling `transferMode` switches the squad page to a
+  // 15-on-pitch layout where users swap players via a picker. Until the user
+  // confirms or discards, the underlying `squad` array is untouched; the
+  // pending transfers live in `pendingTransfers` and are projected onto the
+  // display via `transferDisplaySquad` below.
+  const [transferMode, setTransferMode] = useState(false);
+  const [freeTransfers, setFreeTransfers] = useState(0);
+  const [pendingTransfers, setPendingTransfers] = useState<
+    Array<{ playerOut: Player; playerIn: Player }>
+  >([]);
+  // The squad player the user just tapped Replace on. Drives the picker
+  // modal's position filter and refund math. Distinct from `selectedPlayer`
+  // (view-mode player detail) and `selectingPosition` (builder slot).
+  const [transferReplacingFor, setTransferReplacingFor] = useState<Player | null>(null);
+  const [transferSubmitting, setTransferSubmitting] = useState(false);
+  const [transferError, setTransferError] = useState<string | null>(null);
+  // True when the user has tapped Discard but we're waiting for confirmation.
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
 
   // Chips state
   const [chips, setChips] = useState<ChipData[]>([]);
@@ -426,6 +454,10 @@ export default function SquadPage() {
             // User has complete squad - VIEW mode
             setBankBalance(squadData.bankBalance || 0);
             setTeamValue(squadData.teamValue || 0);
+            // Capture free transfers so the transfer mode UI can show the
+            // correct "X free transfers" badge. The API may not return this
+            // pre-tournament — fall back to 0 in that case.
+            setFreeTransfers(squadData.freeTransfers ?? 0);
             
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const players: Player[] = squadData.squad.map((sp: any) => ({
@@ -542,26 +574,272 @@ export default function SquadPage() {
     return counts;
   }, [squad]);
 
-  // Filter available players for modal
+  // ============================================
+  // TRANSFER MODE — derived state
+  // ============================================
+  //
+  // The "display squad" projects pending transfers onto the current 15-man
+  // roster: each outgoing player is swapped for its incoming counterpart so
+  // the pitch reflects what the team WILL look like after Confirm. Outgoing
+  // players keep their slot but visually fade; we render the replacements
+  // with an amber glow + Undo button instead.
+  const transferDisplaySquad = useMemo(() => {
+    if (!transferMode) return squad;
+    return squad.map((sp) => {
+      const t = pendingTransfers.find((pt) => pt.playerOut.id === sp.id);
+      if (!t) return sp;
+      // Project the incoming player onto the slot. We re-stamp `currentPrice`
+      // as the *new* player's price so budget math downstream is correct;
+      // `purchasePrice` (refund) stays on the original via t.playerOut.
+      return { ...t.playerIn };
+    });
+  }, [transferMode, squad, pendingTransfers]);
+
+  // True iff the given slot is showing an incoming pending transfer. Drives
+  // the amber glow border and the Replace ↔ Undo button switch.
+  const isPendingIncoming = useCallback(
+    (playerId: string) =>
+      pendingTransfers.some((t) => t.playerIn.id === playerId),
+    [pendingTransfers],
+  );
+
+  const findOutgoingFor = useCallback(
+    (incomingPlayerId: string) =>
+      pendingTransfers.find((t) => t.playerIn.id === incomingPlayerId)
+        ?.playerOut ?? null,
+    [pendingTransfers],
+  );
+
+  // Net £m change after pending transfers. World Cup uses fixed prices so the
+  // refund equals the original purchase price — same rule as the legacy
+  // /transfers page.
+  const transferBudgetImpact = useMemo(() => {
+    let change = 0;
+    for (const t of pendingTransfers) {
+      change += t.playerOut.currentPrice - t.playerIn.currentPrice;
+    }
+    return change;
+  }, [pendingTransfers]);
+
+  const projectedBank = bankBalance + transferBudgetImpact;
+
+  // Points hit cost = (transfers beyond freeTransfers) × 4. Matches the
+  // server-side rule in /api/transfers.
+  const transferHitCost = useMemo(() => {
+    const extra = Math.max(0, pendingTransfers.length - freeTransfers);
+    return extra * 4;
+  }, [pendingTransfers.length, freeTransfers]);
+
+  // Nation counts after applying pending transfers, used by the picker to
+  // grey out players who would breach the 3-per-nation cap. We start from
+  // the CURRENT squad minus outs, then add ins.
+  const projectedNationCounts = useMemo(() => {
+    const out = new Set(pendingTransfers.map((t) => t.playerOut.id));
+    const counts: Record<string, number> = {};
+    squad.forEach((p) => {
+      if (out.has(p.id)) return;
+      const k = p.nation?.id || '';
+      counts[k] = (counts[k] || 0) + 1;
+    });
+    pendingTransfers.forEach((t) => {
+      const k = t.playerIn.nation?.id || '';
+      counts[k] = (counts[k] || 0) + 1;
+    });
+    return counts;
+  }, [squad, pendingTransfers]);
+
+  // Keep the unsaved-changes guard in sync with pending transfers so the
+  // user can't accidentally navigate away mid-flow.
+  useEffect(() => {
+    if (transferMode && pendingTransfers.length > 0) {
+      setDirty(
+        true,
+        `You have ${pendingTransfers.length} pending transfer${pendingTransfers.length === 1 ? '' : 's'} that hasn\u2019t been confirmed.`,
+      );
+    }
+    // We don't clear here — the discard handler / submit handler are
+    // explicit about when the dirty flag goes away.
+  }, [transferMode, pendingTransfers.length, setDirty]);
+
+  // Open the picker for a squad slot. Stashes the player being replaced so
+  // the picker can filter by position and refund correctly.
+  const startReplace = useCallback(
+    (squadPlayer: Player) => {
+      setTransferReplacingFor(squadPlayer);
+      setShowModal(true);
+      setSelectingPosition(squadPlayer.position as Position);
+      setSearchTerm('');
+      // Defensive lazy-load identical to builder.openModal so the picker
+      // isn't empty if /api/players hadn't resolved yet.
+      if (allPlayers.length === 0) {
+        fetch('/api/players')
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data) => {
+            if (!data) return;
+            const players = Array.isArray(data) ? data : data.players || [];
+            setAllPlayers(players);
+          })
+          .catch(() => {});
+      }
+    },
+    [allPlayers.length],
+  );
+
+  // Undo a pending transfer — find the entry by incoming-player id and drop
+  // it. Safe to call multiple times; idempotent if the entry's gone.
+  const undoTransfer = useCallback((incomingPlayerId: string) => {
+    setPendingTransfers((prev) =>
+      prev.filter((t) => t.playerIn.id !== incomingPlayerId),
+    );
+  }, []);
+
+  // Commit a replacement: replaces an existing pending transfer for this
+  // slot if any (so users can change their mind mid-flow), otherwise pushes
+  // a new entry.
+  const commitTransfer = useCallback(
+    (playerOut: Player, playerIn: Player) => {
+      setPendingTransfers((prev) => {
+        // If the slot was already being replaced (rare — would require
+        // tapping Replace on an already-pending player, which we don't
+        // render — defensive anyway), drop the prior entry first.
+        const filtered = prev.filter((t) => t.playerOut.id !== playerOut.id);
+        return [...filtered, { playerOut, playerIn }];
+      });
+      setTransferReplacingFor(null);
+      setSelectingPosition(null);
+      setShowModal(false);
+      setSearchTerm('');
+    },
+    [],
+  );
+
+  const enterTransferMode = useCallback(() => {
+    setTransferMode(true);
+    setTransferError(null);
+    setPendingTransfers([]);
+  }, []);
+
+  const exitTransferMode = useCallback(() => {
+    setTransferMode(false);
+    setPendingTransfers([]);
+    setTransferReplacingFor(null);
+    setTransferError(null);
+    setDiscardConfirmOpen(false);
+    setDirty(false);
+  }, [setDirty]);
+
+  const submitTransfers = useCallback(async () => {
+    if (pendingTransfers.length === 0) return;
+    setTransferSubmitting(true);
+    setTransferError(null);
+    try {
+      const res = await fetch('/api/transfers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          transfers: pendingTransfers.map((t) => ({
+            playerOutId: t.playerOut.id,
+            playerInId: t.playerIn.id,
+          })),
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setTransferError(
+          data.error || `Failed to confirm transfers (status ${res.status})`,
+        );
+        setTransferSubmitting(false);
+        return;
+      }
+      // Drop the unsaved guard BEFORE reload — see /transfers for the reason.
+      setPendingTransfers([]);
+      forceClean();
+      window.location.reload();
+    } catch (err) {
+      console.error('Submit transfers error:', err);
+      setTransferError(
+        'Could not reach the server. Check your connection and try again.',
+      );
+      setTransferSubmitting(false);
+    }
+  }, [pendingTransfers, forceClean]);
+
+  // Filter available players for modal. Works for both the builder (no
+  // `transferReplacingFor`) and the transfer-mode picker (set). In transfer
+  // mode the math is different:
+  //   - budget = current bank + (price of player being replaced)
+  //     The world cup model uses fixed prices, so refund = purchase price.
+  //   - the player being replaced is allowed to "reappear" (you can pick
+  //     them back if you change your mind mid-tap), so we don't filter them
+  //     out unconditionally — only their PRESENT-IN-SQUAD siblings.
+  //   - the nation cap uses the projected count (squad minus all pending
+  //     outs, plus all pending ins), which already excludes the slot being
+  //     replaced.
   const availablePlayers = useMemo(() => {
     if (!selectingPosition) return [];
-    
-    const squadIds = new Set(squad.map(p => p.id));
-    
+
+    const isTransferPicker = Boolean(transferReplacingFor);
+    const squadIds = new Set(squad.map((p) => p.id));
+    const pendingInIds = new Set(pendingTransfers.map((t) => t.playerIn.id));
+    const pendingOutIds = new Set(pendingTransfers.map((t) => t.playerOut.id));
+
+    const effectiveBudget = isTransferPicker
+      ? bankBalance + (transferReplacingFor?.currentPrice ?? 0)
+      : remainingBudget;
+
+    const counts = isTransferPicker ? projectedNationCounts : nationCounts;
+
     return allPlayers
-      .filter(p => {
-        if (squadIds.has(p.id)) return false;
+      .filter((p) => {
         if (p.position !== selectingPosition) return false;
-        if (p.currentPrice > remainingBudget) return false;
-        if ((nationCounts[p.nation?.id || ''] || 0) >= MAX_PER_NATION) return false;
-        if (searchTerm && !p.displayName.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+        if (searchTerm && !p.displayName.toLowerCase().includes(searchTerm.toLowerCase())) {
+          return false;
+        }
+        if (isTransferPicker) {
+          // Hide players that are STILL in the squad (and not on their way
+          // out via a pending transfer) and players already lined up to come
+          // in — these would create duplicates after Confirm.
+          const inSquad = squadIds.has(p.id);
+          const alreadyIncoming = pendingInIds.has(p.id);
+          const goingOut = pendingOutIds.has(p.id);
+          if (alreadyIncoming) return false;
+          if (inSquad && !goingOut) return false;
+        } else {
+          if (squadIds.has(p.id)) return false;
+        }
+        if (p.currentPrice > effectiveBudget) return false;
+        if ((counts[p.nation?.id || ''] || 0) >= MAX_PER_NATION) return false;
         return true;
       })
-      .sort((a, b) => sortBy === 'price' ? b.currentPrice - a.currentPrice : a.displayName.localeCompare(b.displayName));
-  }, [allPlayers, squad, selectingPosition, remainingBudget, nationCounts, searchTerm, sortBy]);
+      .sort((a, b) =>
+        sortBy === 'price'
+          ? b.currentPrice - a.currentPrice
+          : a.displayName.localeCompare(b.displayName),
+      );
+  }, [
+    allPlayers,
+    squad,
+    selectingPosition,
+    remainingBudget,
+    nationCounts,
+    searchTerm,
+    sortBy,
+    transferReplacingFor,
+    pendingTransfers,
+    bankBalance,
+    projectedNationCounts,
+  ]);
 
-  // Add player to squad
+  // Add player to squad. Two distinct flows share this handler:
+  //   - Builder mode: append to `squad` and mark page dirty.
+  //   - Transfer-mode picker: commit a swap via commitTransfer(), no
+  //     mutation of `squad` (only `pendingTransfers` changes).
   const addPlayer = (player: Player) => {
+    if (transferReplacingFor) {
+      commitTransfer(transferReplacingFor, player);
+      return;
+    }
     setSquad(prev => [...prev, player]);
     setShowModal(false);
     setSelectingPosition(null);
@@ -1018,7 +1296,14 @@ export default function SquadPage() {
                     <p className="text-xs text-white/40">Budget remaining: £{remainingBudget.toFixed(1)}m</p>
                   </div>
                 </div>
-                <button onClick={() => { setShowModal(false); setSelectingPosition(null); }} className="text-white/60 hover:text-white p-2 rounded-lg hover:bg-white/5">
+                <button
+                  onClick={() => {
+                    setShowModal(false);
+                    setSelectingPosition(null);
+                    setTransferReplacingFor(null);
+                  }}
+                  className="text-white/60 hover:text-white p-2 rounded-lg hover:bg-white/5"
+                >
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -1191,9 +1476,11 @@ export default function SquadPage() {
   // Total points across squad
   const totalPoints = allSquadPlayers.reduce((sum, p) => sum + (p.points || 0), 0);
 
-  // Next gameweek countdown – first upcoming fixture across whole tournament
+  // Next gameweek countdown – first upcoming fixture across whole tournament.
+  // parseFixtureDateTime anchors the schedule to Eastern Time so the cutoff
+  // matches reality regardless of where the user (or our Vercel region) is.
   const nextFixture = WORLD_CUP_FIXTURES
-    .map(f => ({ ...f, dt: new Date(`${f.date}T${f.time}`) }))
+    .map(f => ({ ...f, dt: parseFixtureDateTime(f.date, f.time) }))
     .filter(f => f.dt > new Date())
     .sort((a, b) => a.dt.getTime() - b.dt.getTime())[0];
 
@@ -1215,6 +1502,349 @@ export default function SquadPage() {
     const timeStr = formatTime(dl, timezone);
     const countdown = fmtCountdown(dl.getTime(), now, 'Locked');
     deadlineHint = `${timeStr} · ${countdown}`;
+  }
+
+  // ============================================
+  // TRANSFER MODE — pitch layout for swaps
+  // ============================================
+  if (transferMode) {
+    // Group the projected squad by position. We always show 2 GK / 5 DEF /
+    // 5 MID / 3 FWD slots regardless of formation — transfer mode is
+    // squad-level, not lineup-level.
+    const tGks = transferDisplaySquad.filter((p) => p.position === 'GK');
+    const tDefs = transferDisplaySquad.filter((p) => p.position === 'DEF');
+    const tMids = transferDisplaySquad.filter((p) => p.position === 'MID');
+    const tFwds = transferDisplaySquad.filter((p) => p.position === 'FWD');
+
+    // Renders one player card with a 44pt-min tap target in the bottom-right
+    // corner. When the player is a pending incoming transfer the button
+    // becomes Undo (amber, prominent); otherwise it's Replace (subtle gold).
+    const renderTransferCard = (p: Player) => {
+      const incoming = isPendingIncoming(p.id);
+      return (
+        <div key={p.id} className="relative flex-shrink-0">
+          <div
+            className={
+              incoming
+                ? 'rounded-2xl ring-2 ring-amber-400 shadow-[0_0_22px_rgba(251,191,36,0.45)]'
+                : ''
+            }
+          >
+            <PlayerCard
+              player={p}
+              showOpponent={getNextOpponent(p.nation?.code || '')}
+              difficulty={getFixtureDifficulty(
+                p.nation?.code || '',
+                getNextOpponent(p.nation?.code || ''),
+              )}
+              size="xs"
+            />
+          </div>
+          {/* Bottom-right corner action. 44×44pt min tap target per Apple
+              HIG (~11 Tailwind units). The button visually clips below the
+              card so it doesn't crowd the points/captain badges. */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (incoming) {
+                undoTransfer(p.id);
+              } else {
+                startReplace(p);
+              }
+            }}
+            className={`absolute -bottom-2 -right-2 min-w-[44px] min-h-[44px] px-2 rounded-full text-[10px] font-black tracking-wide inline-flex items-center justify-center gap-1 shadow-lg transition-transform active:scale-95 ${
+              incoming
+                ? 'bg-amber-400 text-amber-950 ring-2 ring-amber-200'
+                : 'bg-laliga-gold text-laliga-dark ring-2 ring-amber-100/20 hover:bg-amber-300'
+            }`}
+            aria-label={incoming ? 'Undo transfer' : 'Replace player'}
+          >
+            {incoming ? (
+              <>
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>UNDO</span>
+              </>
+            ) : (
+              <>
+                <ArrowLeftRight className="w-3.5 h-3.5" />
+                <span>SWAP</span>
+              </>
+            )}
+          </button>
+        </div>
+      );
+    };
+
+    return (
+      <div
+        className="max-w-5xl mx-auto px-0 sm:px-4 py-4 sm:py-6"
+        style={{
+          // Reserve room for BOTH sticky bars (top + bottom) and iPhone
+          // safe-area insets.
+          paddingTop: 'calc(env(safe-area-inset-top))',
+          paddingBottom: 'calc(7rem + env(safe-area-inset-bottom))',
+        }}
+      >
+        {/* Sticky top bar: budget / free / hits. We keep it inside the page
+            container (not fixed) so it scrolls correctly above the pitch on
+            short viewports. The sticky-position keeps it pinned during the
+            "scroll the picker" interaction. */}
+        <div className="sticky top-0 z-30 bg-[#0a0e17]/95 backdrop-blur-md border-b border-white/10 -mx-0 sm:-mx-4 px-3 sm:px-4 py-3 mb-4">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (pendingTransfers.length > 0) {
+                    setDiscardConfirmOpen(true);
+                  } else {
+                    exitTransferMode();
+                  }
+                }}
+                className="text-white/60 hover:text-white text-xs sm:text-sm font-medium px-2 py-1.5 rounded-lg hover:bg-white/5"
+              >
+                ← Back
+              </button>
+              <h1 className="text-lg sm:text-xl font-black text-white tracking-tight">TRANSFERS</h1>
+            </div>
+            <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs">
+              <div className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <span className="text-white/50 mr-1">Bank</span>
+                <span className={`font-black ${projectedBank < 0 ? 'text-red-400' : 'text-emerald-300'}`}>
+                  £{projectedBank.toFixed(1)}m
+                </span>
+              </div>
+              <div className="px-2.5 py-1 rounded-lg bg-sky-500/10 border border-sky-500/20">
+                <span className="text-white/50 mr-1">Free</span>
+                <span className="font-black text-sky-300">
+                  {Math.max(0, freeTransfers - pendingTransfers.length)}
+                </span>
+              </div>
+              <div
+                className={`px-2.5 py-1 rounded-lg border ${
+                  transferHitCost > 0
+                    ? 'bg-red-500/15 border-red-500/30'
+                    : 'bg-white/5 border-white/10'
+                }`}
+              >
+                <span className="text-white/50 mr-1">Hit</span>
+                <span className={`font-black ${transferHitCost > 0 ? 'text-red-300' : 'text-white/70'}`}>
+                  {transferHitCost > 0 ? `-${transferHitCost}` : '0'}
+                </span>
+              </div>
+            </div>
+          </div>
+          <p className="text-[11px] text-white/40">
+            Tap <span className="text-laliga-gold font-bold">SWAP</span> on a card to replace that player.
+            Tap <span className="text-amber-300 font-bold">UNDO</span> to revert a pending change.
+          </p>
+        </div>
+
+        {transferError && (
+          <div className="mx-3 sm:mx-0 mb-3 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-sm text-red-300">
+            {transferError}
+          </div>
+        )}
+
+        {/* Pitch */}
+        <div className="relative rounded-2xl mb-6 overflow-hidden shadow-[0_20px_60px_-20px_rgba(0,0,0,0.6)] ring-1 ring-white/10">
+          <PitchBg />
+          <div
+            className="relative z-10 p-2 sm:p-6 space-y-4 sm:space-y-6 overflow-x-auto scrollbar-hide"
+            style={{ WebkitOverflowScrolling: 'touch' }}
+          >
+            <div className="flex justify-center gap-1.5 sm:gap-6 min-w-max sm:min-w-0">
+              {tFwds.map(renderTransferCard)}
+            </div>
+            <div className="flex justify-center gap-1 sm:gap-4 min-w-max sm:min-w-0">
+              {tMids.map(renderTransferCard)}
+            </div>
+            <div className="flex justify-center gap-1 sm:gap-4 min-w-max sm:min-w-0">
+              {tDefs.map(renderTransferCard)}
+            </div>
+            <div className="flex justify-center gap-2 sm:gap-6 min-w-max sm:min-w-0">
+              {tGks.map(renderTransferCard)}
+            </div>
+          </div>
+        </div>
+
+        {/* Sticky bottom action bar — fixed at viewport bottom on mobile so
+            it survives Safari address-bar collapse without jumping. iOS
+            safe-area inset is added on top of the 1rem base padding. */}
+        <div
+          className="fixed bottom-0 left-0 right-0 z-30 bg-[#0a0e17]/95 backdrop-blur-md border-t border-white/10 px-3 sm:px-4 py-3"
+          style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
+        >
+          <div className="max-w-5xl mx-auto flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                if (pendingTransfers.length > 0) {
+                  setDiscardConfirmOpen(true);
+                } else {
+                  exitTransferMode();
+                }
+              }}
+              className="px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/80 hover:text-white text-sm font-bold border border-white/10"
+            >
+              {pendingTransfers.length > 0 ? 'Discard' : 'Cancel'}
+            </button>
+            <button
+              type="button"
+              onClick={submitTransfers}
+              disabled={pendingTransfers.length === 0 || transferSubmitting || projectedBank < 0}
+              className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-black text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              {transferSubmitting
+                ? 'Confirming…'
+                : pendingTransfers.length === 0
+                ? 'No transfers yet'
+                : `Confirm ${pendingTransfers.length} transfer${pendingTransfers.length === 1 ? '' : 's'}${transferHitCost > 0 ? ` · -${transferHitCost} pts` : ''}`}
+            </button>
+          </div>
+        </div>
+
+        {/* Player Selection Modal — reuses the same modal markup as the
+            builder. The transfer-mode branch is selected automatically
+            because `transferReplacingFor` is set; addPlayer() forwards to
+            commitTransfer() in that case. */}
+        {showModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+            <div className="bg-slate-900 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden border border-white/10 shadow-2xl">
+              <div className="p-4 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-800">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center font-black text-sm flex-shrink-0 ${
+                      selectingPosition === 'GK'
+                        ? 'bg-amber-500/20 text-amber-300'
+                        : selectingPosition === 'DEF'
+                        ? 'bg-sky-500/20 text-sky-300'
+                        : selectingPosition === 'MID'
+                        ? 'bg-emerald-500/20 text-emerald-300'
+                        : 'bg-rose-500/20 text-rose-300'
+                    }`}
+                  >
+                    {selectingPosition}
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-base sm:text-lg font-bold text-white truncate">
+                      Replace {transferReplacingFor?.displayName}
+                    </h2>
+                    <p className="text-xs text-white/40">
+                      Budget after refund: £
+                      {(bankBalance + (transferReplacingFor?.currentPrice ?? 0)).toFixed(1)}m
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowModal(false);
+                    setSelectingPosition(null);
+                    setTransferReplacingFor(null);
+                  }}
+                  className="text-white/60 hover:text-white p-2 rounded-lg hover:bg-white/5 flex-shrink-0"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-4 border-b border-white/10 flex gap-3">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                  <input
+                    type="text"
+                    placeholder="Search players..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-white/30 focus:bg-white/10 transition-colors"
+                  />
+                </div>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as 'price' | 'name')}
+                  className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm cursor-pointer"
+                >
+                  <option value="price">By Price</option>
+                  <option value="name">By Name</option>
+                </select>
+              </div>
+
+              <div className="max-h-[55vh] overflow-y-auto">
+                {availablePlayers.length === 0 ? (
+                  <div className="p-8 text-center text-white/40">
+                    No players available within budget for this slot.
+                  </div>
+                ) : (
+                  availablePlayers.slice(0, 50).map((player) => (
+                    <button
+                      key={player.id}
+                      onClick={() => addPlayer(player)}
+                      className="w-full p-3 sm:p-4 flex items-center gap-3 sm:gap-4 hover:bg-white/5 border-b border-white/5 text-left group transition-colors"
+                    >
+                      <Kit
+                        primaryColor={player.nation?.kitColor1 || '#FFF'}
+                        secondaryColor={player.nation?.kitColor2 || '#000'}
+                        number={player.shirtNumber}
+                        nationCode={player.nation?.code || ''}
+                        size="sm"
+                      />
+                      <img
+                        src={getFlagUrl(player.nation?.code || '')}
+                        alt=""
+                        className="w-6 h-4 rounded-sm object-cover"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white font-semibold truncate">{player.displayName}</p>
+                        <p className="text-white/40 text-xs">{player.nation?.name}</p>
+                      </div>
+                      <p className="text-emerald-400 font-bold whitespace-nowrap">
+                        £{player.currentPrice.toFixed(1)}m
+                      </p>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Discard-confirm dialog — only shows when there are pending
+            transfers to throw away. Plain modal, no Portal needed because
+            this entire render branch already lives at the top of the
+            view-mode tree. */}
+        {discardConfirmOpen && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+            <div className="bg-slate-900 rounded-2xl w-full max-w-sm border border-white/10 p-5">
+              <h3 className="text-lg font-black text-white mb-2">Discard pending transfers?</h3>
+              <p className="text-sm text-white/60 mb-5">
+                You&apos;ll lose your {pendingTransfers.length} pending change
+                {pendingTransfers.length === 1 ? '' : 's'}. This can&apos;t be undone.
+              </p>
+              <div className="flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setDiscardConfirmOpen(false)}
+                  className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/80 text-sm font-semibold"
+                >
+                  Keep editing
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDiscardConfirmOpen(false);
+                    exitTransferMode();
+                  }}
+                  className="px-4 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 text-sm font-bold"
+                >
+                  Discard
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -1242,7 +1872,18 @@ export default function SquadPage() {
               </div>
             </div>
           </div>
-          <FormationPicker formations={validFormations} current={formation} onChange={changeFormation} />
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <FormationPicker formations={validFormations} current={formation} onChange={changeFormation} />
+            <button
+              type="button"
+              onClick={enterTransferMode}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-200 hover:bg-amber-500/25 hover:text-amber-100 text-xs sm:text-sm font-bold transition-colors"
+              title="Make transfers"
+            >
+              <ArrowLeftRight className="w-4 h-4" />
+              <span>Transfer</span>
+            </button>
+          </div>
         </div>
 
         {/* Stats strip */}
@@ -1823,7 +2464,7 @@ export default function SquadPage() {
                     {getNationFixtures(selectedPlayer.nation?.code || '').map((fixture) => {
                       const opponent = fixture.home === selectedPlayer.nation?.code ? fixture.away : fixture.home;
                       const opponentName = NATION_NAMES[opponent] || opponent;
-                      const fixtureDate = new Date(`${fixture.date}T${fixture.time}`);
+                      const fixtureDate = parseFixtureDateTime(fixture.date, fixture.time);
                       const isPast = fixtureDate < new Date();
                       const isPlayed = fixture.isPlayed;
                       const isHome = fixture.home === selectedPlayer.nation?.code;

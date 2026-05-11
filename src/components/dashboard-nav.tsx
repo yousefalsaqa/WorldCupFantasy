@@ -7,7 +7,7 @@ import { useUnsavedChanges } from '@/contexts/unsaved-changes';
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Home', icon: HomeIcon },
   { href: '/squad', label: 'Squad', icon: SquadIcon },
-  { href: '/transfers', label: 'Transfers', icon: TransfersIcon },
+  { href: '/transfers', label: 'Activity', icon: TransfersIcon },
   { href: '/fixtures', label: 'Fixtures', icon: FixturesIcon },
   { href: '/standings', label: 'Standings', icon: StandingsIcon },
   { href: '/leagues', label: 'Leagues', icon: LeaguesIcon },

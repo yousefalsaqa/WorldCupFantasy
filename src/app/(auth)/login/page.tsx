@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
+  // `identifier` accepts either an email or a username. We disambiguate
+  // server-side by checking for "@" so the user doesn't have to pick.
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -32,7 +34,7 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ identifier, password }),
       });
 
       // Server might return HTML (timeout / 5xx page) instead of JSON. Parse
@@ -121,15 +123,20 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-xs font-bold text-white/50 uppercase tracking-wider mb-2">
-                Email
+                Username or email
               </label>
               <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
+                // `type="text"` (not "email") so the browser doesn't reject
+                // usernames as malformed. We do our own validation server-side.
+                type="text"
+                value={identifier}
+                onChange={e => setIdentifier(e.target.value)}
                 required
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:border-white/30 focus:bg-white/10 outline-none transition-all"
-                placeholder="you@example.com"
+                placeholder="you@example.com or yourname"
               />
             </div>
 
