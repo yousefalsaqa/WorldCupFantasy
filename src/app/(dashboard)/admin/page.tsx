@@ -2,6 +2,19 @@
 
 import { useEffect, useState } from 'react';
 
+interface NationBreakdown {
+  code: string;
+  name: string;
+  group: string;
+  total: number;
+  gk: number;
+  def: number;
+  mid: number;
+  fwd: number;
+  unavailable: number;
+  issues: string[];
+}
+
 interface Stats {
   nations: number;
   players: number;
@@ -9,6 +22,13 @@ interface Stats {
   teams: number;
   stages: number;
   matches: number;
+  unavailablePlayers?: number;
+  playersWithoutPhotos?: number;
+  playersWithoutShirtNumbers?: number;
+  nationsWithIssues?: number;
+  playerTableLocked?: boolean;
+  playerTableLockedAt?: string | null;
+  breakdown?: NationBreakdown[];
   error?: string;
 }
 
@@ -60,6 +80,13 @@ export default function AdminDashboard() {
   const [syncing, setSyncing] = useState(false);
   const [updateResult, setUpdateResult] = useState<LiveUpdateResult | null>(null);
 
+  // Squad health breakdown drawer
+  const [healthOpen, setHealthOpen] = useState(false);
+
+  // Player-table lock toggle state. We mirror `stats.playerTableLocked`
+  // here so the toggle UI feels instant while the API call is in-flight.
+  const [lockBusy, setLockBusy] = useState(false);
+
   // Emergency Override state
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -100,6 +127,56 @@ export default function AdminDashboard() {
         // Silently fail - sync status is optional
       });
   }, []);
+
+  // Toggle the player-table lock. We optimistically flip the cached stats
+  // value, fire the request, and roll back on failure so the toggle never
+  // ends up in a half-broken state if the API rejects us.
+  const handleTogglePlayerLock = async () => {
+    if (!stats || lockBusy) return;
+    const next = !stats.playerTableLocked;
+
+    if (next && !confirm(
+      'Lock the player table?\n\n' +
+      '• Bulk CSV imports will be blocked.\n' +
+      '• `npm run db:seed` will refuse to wipe the database.\n' +
+      '• You can still edit individual players from /admin/players.\n\n' +
+      'Continue?',
+    )) {
+      return;
+    }
+
+    setLockBusy(true);
+    const previous = stats.playerTableLocked;
+    setStats({ ...stats, playerTableLocked: next });
+    try {
+      const res = await fetch('/api/admin/settings/player-lock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locked: next }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setStats((s) => (s ? { ...s, playerTableLocked: previous } : s));
+        alert(data.error || 'Failed to update lock');
+      } else {
+        const data = await res.json();
+        setStats((s) =>
+          s
+            ? {
+                ...s,
+                playerTableLocked: data.locked,
+                playerTableLockedAt: data.updatedAt ?? s.playerTableLockedAt,
+              }
+            : s,
+        );
+      }
+    } catch (err) {
+      setStats((s) => (s ? { ...s, playerTableLocked: previous } : s));
+      alert('Network error: ' + (err instanceof Error ? err.message : 'unknown'));
+    } finally {
+      setLockBusy(false);
+    }
+  };
 
   const handleLiveUpdate = async () => {
     setUpdating(true);
@@ -244,6 +321,135 @@ export default function AdminDashboard() {
         <StatCard icon="⚽" label="Teams" value={stats?.teams || 0} />
         <StatCard icon="📅" label="Stages" value={stats?.stages || 0} />
         <StatCard icon="🎮" label="Matches" value={stats?.matches || 0} />
+        <StatCard
+          icon="🚫"
+          label="Unavailable"
+          value={stats?.unavailablePlayers || 0}
+          tone={stats?.unavailablePlayers ? 'warn' : undefined}
+        />
+        <StatCard
+          icon="⚠️"
+          label="Nations w/ Issues"
+          value={stats?.nationsWithIssues || 0}
+          tone={stats?.nationsWithIssues ? 'warn' : 'ok'}
+        />
+        <StatCard
+          icon="📷"
+          label="No Photo"
+          value={stats?.playersWithoutPhotos || 0}
+          tone={stats?.playersWithoutPhotos ? 'warn' : undefined}
+        />
+        <StatCard
+          icon="🔢"
+          label="No Shirt #"
+          value={stats?.playersWithoutShirtNumbers || 0}
+          tone={stats?.playersWithoutShirtNumbers ? 'warn' : undefined}
+        />
+      </div>
+
+      {/* Player Table Lock */}
+      {/* Once admin flips this on, both the bulk CSV importer and the seed
+       * script will refuse to overwrite the Player table. The intent is to
+       * use this after June 4 (when real squads are finalized) so a
+       * forgotten `db:seed` can't wipe the production roster. */}
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h3 className="font-bold text-white mb-1 flex items-center gap-2">
+              <span>{stats?.playerTableLocked ? '🔒' : '🔓'}</span>
+              Player Table Lock
+            </h3>
+            <p className="text-white/40 text-sm max-w-xl">
+              {stats?.playerTableLocked
+                ? 'Locked. Bulk imports are rejected and `npm run db:seed` will abort. You can still edit individual players from /admin/players.'
+                : 'Unlocked. Bulk imports and seed wipes are allowed. Turn this on once final squads are loaded so a stray seed never nukes them.'}
+            </p>
+            {stats?.playerTableLocked && stats?.playerTableLockedAt && (
+              <p className="text-white/30 text-xs mt-2">
+                Locked at {new Date(stats.playerTableLockedAt).toLocaleString()}
+              </p>
+            )}
+          </div>
+          <button
+            onClick={handleTogglePlayerLock}
+            disabled={lockBusy || !stats}
+            className={`px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-50 border ${
+              stats?.playerTableLocked
+                ? 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/30 text-amber-300'
+                : 'bg-rose-500/20 hover:bg-rose-500/30 border-rose-500/30 text-rose-300'
+            }`}
+          >
+            {lockBusy ? '...' : stats?.playerTableLocked ? 'Unlock' : 'Lock player table'}
+          </button>
+        </div>
+      </div>
+
+      {/* Squad Health drawer */}
+      {/* Click to expand: shows every nation that has a missing/over-stuffed
+       * squad, with counts per position. Healthy nations are hidden by
+       * default to keep the panel scannable. */}
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+        <button
+          onClick={() => setHealthOpen(!healthOpen)}
+          className="w-full flex items-center justify-between"
+        >
+          <div className="text-left">
+            <h3 className="font-bold text-white">Squad Health</h3>
+            <p className="text-white/40 text-sm mt-1">
+              {stats?.nationsWithIssues
+                ? `${stats.nationsWithIssues} nation${stats.nationsWithIssues === 1 ? '' : 's'} need attention`
+                : 'All nations look good'}
+            </p>
+          </div>
+          <span className="text-white/40">{healthOpen ? '▼' : '▶'}</span>
+        </button>
+
+        {healthOpen && stats?.breakdown && (
+          <div className="mt-4 -mx-2 overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr className="text-white/40 text-xs uppercase tracking-wider">
+                  <th className="text-left px-2 py-2">Nation</th>
+                  <th className="text-center px-2 py-2">Grp</th>
+                  <th className="text-right px-2 py-2">GK</th>
+                  <th className="text-right px-2 py-2">DEF</th>
+                  <th className="text-right px-2 py-2">MID</th>
+                  <th className="text-right px-2 py-2">FWD</th>
+                  <th className="text-right px-2 py-2">Total</th>
+                  <th className="text-right px-2 py-2">N/A</th>
+                  <th className="text-left px-2 py-2">Issues</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.breakdown.map((n) => (
+                  <tr
+                    key={n.code}
+                    className={`border-t border-white/5 ${
+                      n.issues.length > 0 ? 'bg-amber-500/5' : ''
+                    }`}
+                  >
+                    <td className="px-2 py-2 text-white/90">
+                      <span className="font-mono text-xs text-white/40 mr-2">{n.code}</span>
+                      {n.name}
+                    </td>
+                    <td className="px-2 py-2 text-center text-white/60">{n.group}</td>
+                    <td className={`px-2 py-2 text-right tabular-nums ${n.gk < 2 ? 'text-amber-300' : 'text-white/70'}`}>{n.gk}</td>
+                    <td className={`px-2 py-2 text-right tabular-nums ${n.def < 6 ? 'text-amber-300' : 'text-white/70'}`}>{n.def}</td>
+                    <td className={`px-2 py-2 text-right tabular-nums ${n.mid < 6 ? 'text-amber-300' : 'text-white/70'}`}>{n.mid}</td>
+                    <td className={`px-2 py-2 text-right tabular-nums ${n.fwd < 4 ? 'text-amber-300' : 'text-white/70'}`}>{n.fwd}</td>
+                    <td className="px-2 py-2 text-right tabular-nums text-white font-semibold">{n.total}</td>
+                    <td className={`px-2 py-2 text-right tabular-nums ${n.unavailable > 0 ? 'text-rose-400' : 'text-white/30'}`}>
+                      {n.unavailable || '–'}
+                    </td>
+                    <td className="px-2 py-2 text-amber-300/90 text-xs">
+                      {n.issues.length === 0 ? <span className="text-emerald-400/80">OK</span> : n.issues.join(' · ')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Quick Actions */}
@@ -479,21 +685,52 @@ export default function AdminDashboard() {
       <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
         <h3 className="font-bold text-white mb-4">Setup Checklist</h3>
         <div className="space-y-3">
-          <ChecklistItem done={(stats?.nations || 0) >= 37} label="Nations seeded (37+ nations)" />
+          <ChecklistItem done={(stats?.nations || 0) >= 48} label="All 48 nations seeded" />
           <ChecklistItem done={(stats?.players || 0) > 0} label="Players added to nations" />
+          <ChecklistItem
+            done={(stats?.nationsWithIssues ?? 99) === 0}
+            label="Every nation has a healthy squad (see Squad Health above)"
+          />
+          <ChecklistItem
+            done={(stats?.playersWithoutPhotos ?? 99) === 0}
+            label="Every player has a photo (run Photo Sync from /admin/sync)"
+          />
           <ChecklistItem done={(stats?.matches || 0) > 0} label="Group stage fixtures created" />
           <ChecklistItem done={false} label="Deadline times set for each stage" />
+          <ChecklistItem
+            done={!!stats?.playerTableLocked}
+            label="Player table locked (do this once final squads are loaded)"
+          />
         </div>
       </div>
     </div>
   );
 }
 
-function StatCard({ icon, label, value }: { icon: string; label: string; value: number }) {
+function StatCard({
+  icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: string;
+  label: string;
+  value: number;
+  // `warn` highlights values that mean "something needs your attention"
+  // (e.g. unavailable players, missing photos). `ok` is the green variant
+  // we use when a zero is actually good news.
+  tone?: 'warn' | 'ok';
+}) {
+  const valueClass =
+    tone === 'warn'
+      ? 'text-amber-300'
+      : tone === 'ok'
+      ? 'text-emerald-400'
+      : 'text-white';
   return (
     <div className="bg-white/5 border border-white/10 rounded-xl p-4 hover:border-white/20 transition-all">
       <div className="text-2xl mb-2">{icon}</div>
-      <div className="text-2xl font-black text-white">{value}</div>
+      <div className={`text-2xl font-black ${valueClass}`}>{value}</div>
       <div className="text-xs text-white/40 font-medium">{label}</div>
     </div>
   );

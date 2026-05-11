@@ -716,6 +716,26 @@ async function main() {
   console.log('🏆 World Cup 2026 Fantasy - Database Seed');
   console.log('=========================================\n');
 
+  // 0. Respect the player-table lock. Once admin flips this flag from the
+  //    dashboard (typically after official squads drop on June 4), `db:seed`
+  //    must NOT wipe Player/Nation rows — doing so would nuke real squads.
+  //    Set FORCE_SEED=1 to override (used for emergency recovery; logs loud).
+  const lock = await prisma.appSetting
+    .findUnique({ where: { key: 'PLAYER_TABLE_LOCKED' } })
+    .catch(() => null);
+  if (lock?.value === 'true') {
+    if (process.env.FORCE_SEED === '1') {
+      console.warn('⚠️  PLAYER_TABLE_LOCKED is ON but FORCE_SEED=1 — proceeding anyway.');
+      console.warn('   Locked at:', lock.updatedAt, 'by user:', lock.updatedBy ?? 'unknown');
+    } else {
+      console.error('🔒 Player table is LOCKED. Aborting seed.');
+      console.error('   Locked at:', lock.updatedAt);
+      console.error('   To override (NOT recommended), re-run with FORCE_SEED=1.');
+      console.error('   To unlock cleanly, flip the toggle on /admin.');
+      process.exit(1);
+    }
+  }
+
   // Clear existing data (but preserve admin users)
   console.log('🗑️  Clearing existing data (preserving admin users)...');
   await prisma.auditLog.deleteMany();

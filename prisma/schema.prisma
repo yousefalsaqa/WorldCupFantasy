@@ -371,3 +371,17 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
 }
+
+// ============================================
+// APP SETTINGS
+// ============================================
+// Tiny key/value store for app-wide flags that need to be toggled at
+// runtime (vs env vars which require a redeploy). The only consumer right
+// now is the player-table lock, which the seed script reads to refuse to
+// wipe a production DB once admin has locked the table.
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}

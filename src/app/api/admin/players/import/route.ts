@@ -49,6 +49,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // 0. Refuse if the player table is locked. Bulk import is the most
+  //    destructive write surface in the admin UI, so this is the place the
+  //    lock has to bite (in addition to the seed script).
+  const lock = await prisma.appSetting.findUnique({ where: { key: 'PLAYER_TABLE_LOCKED' } });
+  if (lock?.value === 'true') {
+    return NextResponse.json(
+      {
+        error:
+          'Player table is locked. Unlock it from the admin dashboard before importing.',
+      },
+      { status: 423 }, // 423 Locked
+    );
+  }
+
   // 1. Pull CSV text out of whatever body shape the client sent.
   let csvText = '';
   const contentType = request.headers.get('content-type') || '';

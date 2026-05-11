@@ -20,6 +20,7 @@ interface Player {
   nation: Nation;
   shirtNumber: number | null;
   isAvailable: boolean;
+  availabilityNote?: string | null;
 }
 
 const POSITIONS = ['GK', 'DEF', 'MID', 'FWD'] as const;
@@ -43,6 +44,10 @@ export default function AdminPlayersPage() {
     outcomes: Array<{ row: number; status: string; reason?: string; displayName?: string; nationCode?: string }>;
   } | null>(null);
 
+  // Player-table lock state. We read it on mount so the lock badge and the
+  // CSV-disabled state stay in sync with whatever the dashboard toggle shows.
+  const [tableLocked, setTableLocked] = useState(false);
+
   // Form state
   const [form, setForm] = useState({
     firstName: '',
@@ -61,20 +66,74 @@ export default function AdminPlayersPage() {
   async function loadData() {
     setLoading(true);
     try {
-      const [nationsRes, playersRes] = await Promise.all([
+      const [nationsRes, playersRes, lockRes] = await Promise.all([
         fetch('/api/admin/nations'),
         fetch('/api/admin/players'),
+        fetch('/api/admin/settings/player-lock'),
       ]);
-      
+
       const nationsData = await nationsRes.json();
       const playersData = await playersRes.json();
-      
+      const lockData = lockRes.ok ? await lockRes.json() : { locked: false };
+
       setNations(nationsData.nations || []);
       setPlayers(playersData.players || []);
+      setTableLocked(!!lockData.locked);
     } catch (error) {
       console.error('Load error:', error);
     }
     setLoading(false);
+  }
+
+  // Flip a player's availability flag. When marking unavailable we prompt
+  // for an optional note (e.g. "ACL until Sept") so the admin remembers
+  // why later. The PUT endpoint already accepts both `isAvailable` and
+  // `availabilityNote`, so we just hit it directly.
+  async function toggleAvailability(player: Player) {
+    const becomingUnavailable = player.isAvailable;
+    let note: string | null = player.availabilityNote ?? null;
+
+    if (becomingUnavailable) {
+      const entered = prompt(
+        `Mark ${player.displayName} unavailable.\n\nOptional reason (e.g. "Injured – ACL", "Suspended", "Cut from squad"):`,
+        player.availabilityNote ?? '',
+      );
+      if (entered === null) return; // user cancelled
+      note = entered.trim() || null;
+    } else {
+      // Coming back from unavailable: clear the old note so it doesn't
+      // linger and confuse the next admin.
+      note = null;
+    }
+
+    // Optimistic update so the UI feels snappy.
+    const previous = players;
+    setPlayers(
+      players.map((p) =>
+        p.id === player.id
+          ? { ...p, isAvailable: !becomingUnavailable, availabilityNote: note }
+          : p,
+      ),
+    );
+
+    try {
+      const res = await fetch(`/api/admin/players/${player.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          isAvailable: !becomingUnavailable,
+          availabilityNote: note,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setPlayers(previous);
+        alert(data.error || 'Failed to update availability');
+      }
+    } catch (err) {
+      setPlayers(previous);
+      alert('Network error: ' + (err instanceof Error ? err.message : 'unknown'));
+    }
   }
 
   // Filter players
@@ -225,9 +284,19 @@ export default function AdminPlayersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-white">👥 Player Management</h2>
+          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+            👥 Player Management
+            {tableLocked && (
+              <span
+                title="The player table is locked. Bulk imports are disabled, but you can still edit individual players."
+                className="text-xs font-semibold bg-amber-500/15 border border-amber-500/40 text-amber-300 px-2 py-1 rounded-full"
+              >
+                🔒 Locked
+              </span>
+            )}
+          </h2>
           <p className="text-slate-400">{players.length} players total</p>
         </div>
         <button
@@ -237,6 +306,14 @@ export default function AdminPlayersPage() {
           ➕ Add Player
         </button>
       </div>
+
+      {tableLocked && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-sm text-amber-200">
+          <strong>Player table is locked.</strong> Bulk CSV imports and seed
+          wipes are blocked. You can still add, edit, or mark players
+          unavailable here. Toggle the lock from <a href="/admin" className="underline">/admin</a>.
+        </div>
+      )}
 
       {/* CSV bulk import */}
       <div className="bg-slate-900 rounded-xl p-5 border border-slate-800">
@@ -259,16 +336,17 @@ export default function AdminPlayersPage() {
             </button>
             <label
               className={`text-sm font-semibold px-3 py-2 rounded-lg cursor-pointer ${
-                importing
+                importing || tableLocked
                   ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
                   : 'bg-emerald-500 hover:bg-emerald-600 text-black'
               }`}
+              title={tableLocked ? 'Player table is locked. Unlock from /admin to bulk import.' : undefined}
             >
-              {importing ? 'Importing…' : '⬆ Upload CSV'}
+              {tableLocked ? '🔒 Locked' : importing ? 'Importing…' : '⬆ Upload CSV'}
               <input
                 type="file"
                 accept=".csv,text/csv"
-                disabled={importing}
+                disabled={importing || tableLocked}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) handleCsvUpload(file);
@@ -364,9 +442,9 @@ export default function AdminPlayersPage() {
                       return posOrder[a.position] - posOrder[b.position];
                     })
                     .map(player => (
-                      <div key={player.id} className="px-4 py-3 flex items-center justify-between hover:bg-slate-800/50">
-                        <div className="flex items-center gap-4">
-                          <span className={`px-2 py-1 rounded text-xs font-medium
+                      <div key={player.id} className={`px-4 py-3 flex items-center justify-between hover:bg-slate-800/50 ${!player.isAvailable ? 'opacity-60' : ''}`}>
+                        <div className="flex items-center gap-4 min-w-0">
+                          <span className={`px-2 py-1 rounded text-xs font-medium flex-shrink-0
                             ${player.position === 'GK' ? 'bg-amber-500/20 text-amber-400' : ''}
                             ${player.position === 'DEF' ? 'bg-green-500/20 text-green-400' : ''}
                             ${player.position === 'MID' ? 'bg-blue-500/20 text-blue-400' : ''}
@@ -374,20 +452,42 @@ export default function AdminPlayersPage() {
                           `}>
                             {player.position}
                           </span>
-                          <span className="text-white font-medium">
-                            {player.shirtNumber && 
-                              <span className="text-slate-500 mr-2">#{player.shirtNumber}</span>
-                            }
-                            {player.displayName}
-                          </span>
-                          {!player.isAvailable && (
-                            <span className="text-xs text-red-400">🚫 Unavailable</span>
-                          )}
+                          <div className="min-w-0">
+                            <div className="text-white font-medium truncate">
+                              {player.shirtNumber && (
+                                <span className="text-slate-500 mr-2">#{player.shirtNumber}</span>
+                              )}
+                              {player.displayName}
+                              {!player.isAvailable && (
+                                <span className="ml-2 text-xs text-red-400 font-normal">🚫 Unavailable</span>
+                              )}
+                            </div>
+                            {!player.isAvailable && player.availabilityNote && (
+                              <div className="text-xs text-red-400/70 italic truncate">
+                                {player.availabilityNote}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3 flex-shrink-0">
                           <span className="text-amber-400 font-bold">
                             £{player.currentPrice.toFixed(1)}m
                           </span>
+                          <button
+                            onClick={() => toggleAvailability(player)}
+                            className={`text-sm px-2 py-1 rounded border transition-colors ${
+                              player.isAvailable
+                                ? 'text-rose-400/80 hover:text-rose-300 border-rose-500/20 hover:border-rose-500/40 hover:bg-rose-500/10'
+                                : 'text-emerald-400/80 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40 hover:bg-emerald-500/10'
+                            }`}
+                            title={
+                              player.isAvailable
+                                ? 'Mark player unavailable (injury, suspension, cut from squad)'
+                                : 'Bring player back into the available pool'
+                            }
+                          >
+                            {player.isAvailable ? '🚫 Mark unavailable' : '✓ Mark available'}
+                          </button>
                           <button
                             onClick={() => openEditModal(player)}
                             className="text-slate-400 hover:text-white text-sm"

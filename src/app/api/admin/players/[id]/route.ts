@@ -39,7 +39,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { firstName, lastName, displayName, position, nationId, currentPrice, shirtNumber, isAvailable } = body;
+    const { firstName, lastName, displayName, position, nationId, currentPrice, shirtNumber, isAvailable, availabilityNote } = body;
 
     // Check player exists
     const existingPlayer = await prisma.player.findUnique({
@@ -78,6 +78,14 @@ export async function PUT(
     }
     if (shirtNumber !== undefined) updates.shirtNumber = shirtNumber;
     if (isAvailable !== undefined) updates.isAvailable = isAvailable;
+    // availabilityNote can legitimately be set to null (cleared when a
+    // player comes back from injury), so we accept any non-undefined value.
+    if (availabilityNote !== undefined) {
+      updates.availabilityNote =
+        typeof availabilityNote === 'string' && availabilityNote.length > 0
+          ? availabilityNote
+          : null;
+    }
 
     const player = await prisma.player.update({
       where: { id },
@@ -92,6 +100,22 @@ export async function PUT(
           userId: admin.id,
           action: 'PLAYER_PRICE_CHANGED',
           details: `${player.displayName}: £${existingPlayer.currentPrice}m → £${player.currentPrice}m`,
+        },
+      });
+    }
+
+    // Audit log for availability changes – the admin will want to see in
+    // the audit log when squad members got marked in/out of contention.
+    if (isAvailable !== undefined && isAvailable !== existingPlayer.isAvailable) {
+      await prisma.auditLog.create({
+        data: {
+          userId: admin.id,
+          action: isAvailable ? 'PLAYER_MARKED_AVAILABLE' : 'PLAYER_MARKED_UNAVAILABLE',
+          details: isAvailable
+            ? `${player.displayName} marked available`
+            : `${player.displayName} marked unavailable${
+                player.availabilityNote ? ` – ${player.availabilityNote}` : ''
+              }`,
         },
       });
     }
