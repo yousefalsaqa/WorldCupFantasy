@@ -343,6 +343,373 @@ const players = [
   { firstName: 'Bashar',    lastName: 'Resan',      displayName: 'B. Resan',   nationCode: 'IRQ', position: 'MID', price: 4.5, number: 6 },
   { firstName: 'Aymen',     lastName: 'Hussein',    displayName: 'A. Hussein', nationCode: 'IRQ', position: 'FWD', price: 5.5, number: 9 },
   { firstName: 'Mohanad',   lastName: 'Ali',        displayName: 'Mohanad Ali',nationCode: 'IRQ', position: 'FWD', price: 5.5, number: 11 },
+
+  // ===================================================================
+  // 17 PREVIOUSLY-MISSING SQUADS (researched May 2026)
+  // Prices align with the bands from the existing 204 entries:
+  //   GK 4.0–5.5  ·  DEF 4.5–6.0  ·  MID 5.0–7.5  ·  FWD 5.5–9.0
+  // Names sourced from FourFourTwo / ESPN / Yahoo Sport / Goal.com
+  // March 2026 squad announcements.
+  // ===================================================================
+
+  // QATAR – Group B
+  { firstName: 'Meshaal',    lastName: 'Barsham',     displayName: 'Barsham',     nationCode: 'QAT', position: 'GK',  price: 4.0, number: 1 },
+  { firstName: 'Pedro',      lastName: 'Miguel',      displayName: 'P. Miguel',   nationCode: 'QAT', position: 'DEF', price: 4.5, number: 4 },
+  { firstName: 'Tarek',      lastName: 'Salman',      displayName: 'T. Salman',   nationCode: 'QAT', position: 'DEF', price: 4.5, number: 3 },
+  { firstName: 'Bassam',     lastName: 'Al-Rawi',     displayName: 'Al-Rawi',     nationCode: 'QAT', position: 'DEF', price: 4.5, number: 15 },
+  { firstName: 'Boualem',    lastName: 'Khoukhi',     displayName: 'Khoukhi',     nationCode: 'QAT', position: 'DEF', price: 4.5, number: 5 },
+  { firstName: 'Karim',      lastName: 'Boudiaf',     displayName: 'Boudiaf',     nationCode: 'QAT', position: 'MID', price: 5.0, number: 8 },
+  { firstName: 'Hassan',     lastName: 'Al-Haydos',   displayName: 'Al-Haydos',   nationCode: 'QAT', position: 'MID', price: 5.0, number: 10 },
+  { firstName: 'Mohammed',   lastName: 'Waad',        displayName: 'M. Waad',     nationCode: 'QAT', position: 'MID', price: 5.0, number: 23 },
+  { firstName: 'Akram',      lastName: 'Afif',        displayName: 'Afif',        nationCode: 'QAT', position: 'FWD', price: 6.5, number: 11 },
+  { firstName: 'Almoez',     lastName: 'Ali',         displayName: 'A. Ali',      nationCode: 'QAT', position: 'FWD', price: 6.0, number: 19 },
+  { firstName: 'Ahmed',      lastName: 'Alaaeldin',   displayName: 'Alaaeldin',   nationCode: 'QAT', position: 'FWD', price: 5.5, number: 17 },
+
+  // SOUTH AFRICA – Group A
+  { firstName: 'Ronwen',     lastName: 'Williams',    displayName: 'R. Williams', nationCode: 'RSA', position: 'GK',  price: 4.5, number: 1 },
+  { firstName: 'Khuliso',    lastName: 'Mudau',       displayName: 'Mudau',       nationCode: 'RSA', position: 'DEF', price: 4.5, number: 2 },
+  { firstName: 'Nkosinathi', lastName: 'Sibisi',      displayName: 'Sibisi',      nationCode: 'RSA', position: 'DEF', price: 4.5, number: 4 },
+  { firstName: 'Aubrey',     lastName: 'Modiba',      displayName: 'Modiba',      nationCode: 'RSA', position: 'DEF', price: 4.5, number: 3 },
+  { firstName: 'Mbekezeli',  lastName: 'Mbokazi',     displayName: 'Mbokazi',     nationCode: 'RSA', position: 'DEF', price: 4.5, number: 5 },
+  { firstName: 'Teboho',     lastName: 'Mokoena',     displayName: 'Mokoena',     nationCode: 'RSA', position: 'MID', price: 5.5, number: 8 },
+  { firstName: 'Thalente',   lastName: 'Mbatha',      displayName: 'Mbatha',      nationCode: 'RSA', position: 'MID', price: 5.0, number: 6 },
+  { firstName: 'Sphephelo',  lastName: 'Sithole',     displayName: 'Sithole',     nationCode: 'RSA', position: 'MID', price: 5.0, number: 19 },
+  { firstName: 'Themba',     lastName: 'Zwane',       displayName: 'Zwane',       nationCode: 'RSA', position: 'MID', price: 5.5, number: 10 },
+  { firstName: 'Lyle',       lastName: 'Foster',      displayName: 'Foster',      nationCode: 'RSA', position: 'FWD', price: 6.5, number: 18 },
+  { firstName: 'Relebohile', lastName: 'Mofokeng',    displayName: 'Mofokeng',    nationCode: 'RSA', position: 'FWD', price: 5.5, number: 7 },
+  { firstName: 'Iqraam',     lastName: 'Rayners',     displayName: 'Rayners',     nationCode: 'RSA', position: 'FWD', price: 5.5, number: 20 },
+
+  // HAITI – Group C
+  { firstName: 'Johny',      lastName: 'Placide',     displayName: 'Placide',     nationCode: 'HAI', position: 'GK',  price: 4.0, number: 1 },
+  { firstName: 'Christian',  lastName: 'Mafla',       displayName: 'Mafla',       nationCode: 'HAI', position: 'DEF', price: 4.5, number: 3 },
+  { firstName: 'Ricardo',    lastName: 'Adé',         displayName: 'Adé',         nationCode: 'HAI', position: 'DEF', price: 4.5, number: 4 },
+  { firstName: 'Carlens',    lastName: 'Arcus',       displayName: 'Arcus',       nationCode: 'HAI', position: 'DEF', price: 4.5, number: 2 },
+  { firstName: 'Carl',       lastName: 'Sainté',      displayName: 'Sainté',      nationCode: 'HAI', position: 'MID', price: 5.0, number: 8 },
+  { firstName: 'Danley',     lastName: 'Jean Jacques',displayName: 'D. Jean Jacques',nationCode: 'HAI', position: 'MID', price: 5.0, number: 6 },
+  { firstName: 'Jean-Ricner',lastName: 'Bellegarde',  displayName: 'Bellegarde',  nationCode: 'HAI', position: 'MID', price: 6.5, number: 10 },
+  { firstName: 'Wilson',     lastName: 'Isidor',      displayName: 'Isidor',      nationCode: 'HAI', position: 'FWD', price: 7.0, number: 9 },
+  { firstName: 'Duckens',    lastName: 'Nazon',       displayName: 'Nazon',       nationCode: 'HAI', position: 'FWD', price: 5.5, number: 11 },
+  { firstName: 'Frantzdy',   lastName: 'Pierrot',     displayName: 'Pierrot',     nationCode: 'HAI', position: 'FWD', price: 5.5, number: 19 },
+
+  // PARAGUAY – Group D
+  { firstName: 'Roberto',    lastName: 'Junior Fernández',displayName: 'R. Fernández',nationCode: 'PAR', position: 'GK',  price: 4.5, number: 1 },
+  { firstName: 'Gustavo',    lastName: 'Gómez',       displayName: 'G. Gómez',    nationCode: 'PAR', position: 'DEF', price: 5.0, number: 3 },
+  { firstName: 'Omar',       lastName: 'Alderete',    displayName: 'Alderete',    nationCode: 'PAR', position: 'DEF', price: 5.0, number: 4 },
+  { firstName: 'Junior',     lastName: 'Alonso',      displayName: 'J. Alonso',   nationCode: 'PAR', position: 'DEF', price: 4.5, number: 5 },
+  { firstName: 'Diego',      lastName: 'León',        displayName: 'D. León',     nationCode: 'PAR', position: 'DEF', price: 4.5, number: 13 },
+  { firstName: 'Andrés',     lastName: 'Cubas',       displayName: 'Cubas',       nationCode: 'PAR', position: 'MID', price: 5.0, number: 6 },
+  { firstName: 'Diego',      lastName: 'Gómez',       displayName: 'D. Gómez',    nationCode: 'PAR', position: 'MID', price: 6.0, number: 7 },
+  { firstName: 'Miguel',     lastName: 'Almirón',     displayName: 'Almirón',     nationCode: 'PAR', position: 'MID', price: 7.0, number: 10 },
+  { firstName: 'Damián',     lastName: 'Bobadilla',   displayName: 'Bobadilla',   nationCode: 'PAR', position: 'MID', price: 5.0, number: 8 },
+  { firstName: 'Antonio',    lastName: 'Sanabria',    displayName: 'Sanabria',    nationCode: 'PAR', position: 'FWD', price: 6.5, number: 9 },
+  { firstName: 'Julio',      lastName: 'Enciso',      displayName: 'Enciso',      nationCode: 'PAR', position: 'FWD', price: 7.0, number: 19 },
+  { firstName: 'Ramón',      lastName: 'Sosa',        displayName: 'R. Sosa',     nationCode: 'PAR', position: 'FWD', price: 5.5, number: 11 },
+
+  // CURACAO – Group E
+  { firstName: 'Eloy',       lastName: 'Room',        displayName: 'Room',        nationCode: 'CUW', position: 'GK',  price: 4.0, number: 1 },
+  { firstName: 'Leandro',    lastName: 'Bacuna',      displayName: 'L. Bacuna',   nationCode: 'CUW', position: 'DEF', price: 4.5, number: 7 },
+  { firstName: 'Cuco',       lastName: 'Martina',     displayName: 'Martina',     nationCode: 'CUW', position: 'DEF', price: 4.5, number: 4 },
+  { firstName: 'Sherel',     lastName: 'Floranus',    displayName: 'Floranus',    nationCode: 'CUW', position: 'DEF', price: 4.5, number: 2 },
+  { firstName: 'Armando',    lastName: 'Obispo',      displayName: 'Obispo',      nationCode: 'CUW', position: 'DEF', price: 4.5, number: 5 },
+  { firstName: 'Juninho',    lastName: 'Bacuna',      displayName: 'J. Bacuna',   nationCode: 'CUW', position: 'MID', price: 5.5, number: 8 },
+  { firstName: 'Roly',       lastName: 'Bonevacia',   displayName: 'Bonevacia',   nationCode: 'CUW', position: 'MID', price: 5.0, number: 6 },
+  { firstName: 'Tahith',     lastName: 'Chong',       displayName: 'Chong',       nationCode: 'CUW', position: 'MID', price: 5.5, number: 11 },
+  { firstName: 'Livano',     lastName: 'Comenencia',  displayName: 'Comenencia',  nationCode: 'CUW', position: 'MID', price: 5.0, number: 14 },
+  { firstName: 'Kenji',      lastName: 'Gorré',       displayName: 'Gorré',       nationCode: 'CUW', position: 'FWD', price: 5.5, number: 9 },
+  { firstName: 'Jürgen',     lastName: 'Locadia',     displayName: 'Locadia',     nationCode: 'CUW', position: 'FWD', price: 5.5, number: 10 },
+
+  // ECUADOR – Group E
+  { firstName: 'Hernán',     lastName: 'Galíndez',    displayName: 'Galíndez',    nationCode: 'ECU', position: 'GK',  price: 4.5, number: 1 },
+  { firstName: 'Pervis',     lastName: 'Estupiñán',   displayName: 'Estupiñán',   nationCode: 'ECU', position: 'DEF', price: 6.0, number: 7 },
+  { firstName: 'Piero',      lastName: 'Hincapié',    displayName: 'Hincapié',    nationCode: 'ECU', position: 'DEF', price: 6.0, number: 3 },
+  { firstName: 'Willian',    lastName: 'Pacho',       displayName: 'Pacho',       nationCode: 'ECU', position: 'DEF', price: 6.0, number: 4 },
+  { firstName: 'Joel',       lastName: 'Ordóñez',     displayName: 'Ordóñez',     nationCode: 'ECU', position: 'DEF', price: 5.5, number: 5 },
+  { firstName: 'Angelo',     lastName: 'Preciado',    displayName: 'Preciado',    nationCode: 'ECU', position: 'DEF', price: 5.0, number: 17 },
+  { firstName: 'Moisés',     lastName: 'Caicedo',     displayName: 'Caicedo',     nationCode: 'ECU', position: 'MID', price: 7.5, number: 23 },
+  { firstName: 'Kendry',     lastName: 'Páez',        displayName: 'Páez',        nationCode: 'ECU', position: 'MID', price: 6.5, number: 20 },
+  { firstName: 'Alan',       lastName: 'Franco',      displayName: 'A. Franco',   nationCode: 'ECU', position: 'MID', price: 5.5, number: 13 },
+  { firstName: 'Pedro',      lastName: 'Vite',        displayName: 'Vite',        nationCode: 'ECU', position: 'MID', price: 5.5, number: 19 },
+  { firstName: 'Enner',      lastName: 'Valencia',    displayName: 'E. Valencia', nationCode: 'ECU', position: 'FWD', price: 6.5, number: 13 },
+  { firstName: 'Kevin',      lastName: 'Rodríguez',   displayName: 'K. Rodríguez',nationCode: 'ECU', position: 'FWD', price: 5.5, number: 9 },
+
+  // TUNISIA – Group F
+  { firstName: 'Aymen',      lastName: 'Dahmen',      displayName: 'Dahmen',      nationCode: 'TUN', position: 'GK',  price: 4.0, number: 1 },
+  { firstName: 'Sabri',      lastName: 'Ben Hessen',  displayName: 'Ben Hessen',  nationCode: 'TUN', position: 'GK',  price: 4.0, number: 22 },
+  { firstName: 'Yan',        lastName: 'Valery',      displayName: 'Valery',      nationCode: 'TUN', position: 'DEF', price: 4.5, number: 2 },
+  { firstName: 'Ali',        lastName: 'Abdi',        displayName: 'Abdi',        nationCode: 'TUN', position: 'DEF', price: 4.5, number: 3 },
+  { firstName: 'Montassar',  lastName: 'Talbi',       displayName: 'Talbi',       nationCode: 'TUN', position: 'DEF', price: 4.5, number: 5 },
+  { firstName: 'Yassine',    lastName: 'Meriah',      displayName: 'Meriah',      nationCode: 'TUN', position: 'DEF', price: 4.5, number: 4 },
+  { firstName: 'Ellyes',     lastName: 'Skhiri',      displayName: 'Skhiri',      nationCode: 'TUN', position: 'MID', price: 6.0, number: 13 },
+  { firstName: 'Hannibal',   lastName: 'Mejbri',      displayName: 'Mejbri',      nationCode: 'TUN', position: 'MID', price: 6.0, number: 14 },
+  { firstName: 'Aïssa',      lastName: 'Laïdouni',    displayName: 'Laïdouni',    nationCode: 'TUN', position: 'MID', price: 5.5, number: 6 },
+  { firstName: 'Ismael',     lastName: 'Gharbi',      displayName: 'Gharbi',      nationCode: 'TUN', position: 'FWD', price: 6.0, number: 11 },
+  { firstName: 'Elias',      lastName: 'Saad',        displayName: 'Saad',        nationCode: 'TUN', position: 'FWD', price: 5.5, number: 17 },
+  { firstName: 'Hazem',      lastName: 'Mastouri',    displayName: 'Mastouri',    nationCode: 'TUN', position: 'FWD', price: 5.5, number: 9 },
+
+  // IRAN – Group G
+  { firstName: 'Alireza',    lastName: 'Beiranvand',  displayName: 'Beiranvand',  nationCode: 'IRN', position: 'GK',  price: 4.5, number: 1 },
+  { firstName: 'Payam',      lastName: 'Niazmand',    displayName: 'Niazmand',    nationCode: 'IRN', position: 'GK',  price: 4.0, number: 22 },
+  { firstName: 'Ehsan',      lastName: 'Hajsafi',     displayName: 'Hajsafi',     nationCode: 'IRN', position: 'DEF', price: 4.5, number: 3 },
+  { firstName: 'Ramin',      lastName: 'Rezaeian',    displayName: 'Rezaeian',    nationCode: 'IRN', position: 'DEF', price: 4.5, number: 23 },
+  { firstName: 'Shojaa',     lastName: 'Khalilzadeh', displayName: 'Khalilzadeh', nationCode: 'IRN', position: 'DEF', price: 4.5, number: 19 },
+  { firstName: 'Majid',      lastName: 'Hosseini',    displayName: 'M. Hosseini', nationCode: 'IRN', position: 'DEF', price: 4.5, number: 15 },
+  { firstName: 'Rouzbeh',    lastName: 'Cheshmi',     displayName: 'Cheshmi',     nationCode: 'IRN', position: 'MID', price: 5.0, number: 8 },
+  { firstName: 'Mehdi',      lastName: 'Torabi',      displayName: 'Torabi',      nationCode: 'IRN', position: 'MID', price: 5.5, number: 17 },
+  { firstName: 'Saman',      lastName: 'Ghoddos',     displayName: 'Ghoddos',     nationCode: 'IRN', position: 'MID', price: 5.5, number: 21 },
+  { firstName: 'Alireza',    lastName: 'Jahanbakhsh', displayName: 'Jahanbakhsh', nationCode: 'IRN', position: 'MID', price: 5.5, number: 7 },
+  { firstName: 'Mehdi',      lastName: 'Taremi',      displayName: 'Taremi',      nationCode: 'IRN', position: 'FWD', price: 7.5, number: 9 },
+  { firstName: 'Sardar',     lastName: 'Azmoun',      displayName: 'Azmoun',      nationCode: 'IRN', position: 'FWD', price: 7.0, number: 20 },
+  { firstName: 'Mehdi',      lastName: 'Ghayedi',     displayName: 'Ghayedi',     nationCode: 'IRN', position: 'FWD', price: 5.5, number: 18 },
+
+  // NEW ZEALAND – Group G
+  { firstName: 'Max',        lastName: 'Crocombe',    displayName: 'Crocombe',    nationCode: 'NZL', position: 'GK',  price: 4.0, number: 1 },
+  { firstName: 'Tyler',      lastName: 'Bindon',      displayName: 'Bindon',      nationCode: 'NZL', position: 'DEF', price: 4.5, number: 4 },
+  { firstName: 'Michael',    lastName: 'Boxall',      displayName: 'Boxall',      nationCode: 'NZL', position: 'DEF', price: 4.5, number: 5 },
+  { firstName: 'Liberato',   lastName: 'Cacace',      displayName: 'Cacace',      nationCode: 'NZL', position: 'DEF', price: 5.0, number: 3 },
+  { firstName: 'Nando',      lastName: 'Pijnaker',    displayName: 'Pijnaker',    nationCode: 'NZL', position: 'DEF', price: 4.5, number: 17 },
+  { firstName: 'Marko',      lastName: 'Stamenić',    displayName: 'Stamenić',    nationCode: 'NZL', position: 'MID', price: 5.5, number: 6 },
+  { firstName: 'Joe',        lastName: 'Bell',        displayName: 'J. Bell',     nationCode: 'NZL', position: 'MID', price: 5.0, number: 8 },
+  { firstName: 'Alex',       lastName: 'Rufer',       displayName: 'Rufer',       nationCode: 'NZL', position: 'MID', price: 5.0, number: 14 },
+  { firstName: 'Matthew',    lastName: 'Garbett',     displayName: 'Garbett',     nationCode: 'NZL', position: 'MID', price: 5.0, number: 10 },
+  { firstName: 'Chris',      lastName: 'Wood',        displayName: 'C. Wood',     nationCode: 'NZL', position: 'FWD', price: 8.0, number: 9 },
+  { firstName: 'Kosta',      lastName: 'Barbarouses', displayName: 'Barbarouses', nationCode: 'NZL', position: 'FWD', price: 5.5, number: 7 },
+  { firstName: 'Ben',        lastName: 'Waine',       displayName: 'Waine',       nationCode: 'NZL', position: 'FWD', price: 5.5, number: 19 },
+
+  // CAPE VERDE – Group H
+  { firstName: 'Vozinha',    lastName: '',            displayName: 'Vozinha',     nationCode: 'CPV', position: 'GK',  price: 4.0, number: 1 },
+  { firstName: 'Roberto',    lastName: 'Lopes',       displayName: 'R. Lopes',    nationCode: 'CPV', position: 'DEF', price: 4.5, number: 5 },
+  { firstName: 'Stopira',    lastName: '',            displayName: 'Stopira',     nationCode: 'CPV', position: 'DEF', price: 4.5, number: 4 },
+  { firstName: 'Diney',      lastName: 'Borges',      displayName: 'Borges',      nationCode: 'CPV', position: 'DEF', price: 4.5, number: 3 },
+  { firstName: 'Logan',      lastName: 'Costa',       displayName: 'L. Costa',    nationCode: 'CPV', position: 'DEF', price: 5.0, number: 17 },
+  { firstName: 'Patrick',    lastName: 'Andrade',     displayName: 'Andrade',     nationCode: 'CPV', position: 'MID', price: 5.0, number: 8 },
+  { firstName: 'Jovane',     lastName: 'Cabral',      displayName: 'Cabral',      nationCode: 'CPV', position: 'MID', price: 5.5, number: 7 },
+  { firstName: 'Kenny',      lastName: 'Rocha Santos',displayName: 'K. Rocha',    nationCode: 'CPV', position: 'MID', price: 5.0, number: 6 },
+  { firstName: 'Laros',      lastName: 'Duarte',      displayName: 'Duarte',      nationCode: 'CPV', position: 'MID', price: 5.0, number: 10 },
+  { firstName: 'Ryan',       lastName: 'Mendes',      displayName: 'R. Mendes',   nationCode: 'CPV', position: 'FWD', price: 6.0, number: 9 },
+  { firstName: 'Garry',      lastName: 'Rodrigues',   displayName: 'G. Rodrigues',nationCode: 'CPV', position: 'FWD', price: 5.5, number: 11 },
+  { firstName: 'Fábio',      lastName: 'Domingos',    displayName: 'F. Domingos', nationCode: 'CPV', position: 'FWD', price: 5.5, number: 22 },
+
+  // SAUDI ARABIA – Group H
+  { firstName: 'Mohammed',   lastName: 'Al-Owais',    displayName: 'Al-Owais',    nationCode: 'KSA', position: 'GK',  price: 4.5, number: 21 },
+  { firstName: 'Nawaf',      lastName: 'Al-Aqidi',    displayName: 'Al-Aqidi',    nationCode: 'KSA', position: 'GK',  price: 4.0, number: 1 },
+  { firstName: 'Yasser',     lastName: 'Al-Shahrani', displayName: 'Al-Shahrani', nationCode: 'KSA', position: 'DEF', price: 4.5, number: 13 },
+  { firstName: 'Sultan',     lastName: 'Al-Ghannam',  displayName: 'Al-Ghannam',  nationCode: 'KSA', position: 'DEF', price: 4.5, number: 2 },
+  { firstName: 'Ali',        lastName: 'Al-Bulaihi',  displayName: 'Al-Bulaihi',  nationCode: 'KSA', position: 'DEF', price: 4.5, number: 5 },
+  { firstName: 'Hassan',     lastName: 'Tambakti',    displayName: 'Tambakti',    nationCode: 'KSA', position: 'DEF', price: 4.5, number: 17 },
+  { firstName: 'Salman',     lastName: 'Al-Faraj',    displayName: 'Al-Faraj',    nationCode: 'KSA', position: 'MID', price: 5.0, number: 7 },
+  { firstName: 'Mohamed',    lastName: 'Kanno',       displayName: 'Kanno',       nationCode: 'KSA', position: 'MID', price: 5.0, number: 23 },
+  { firstName: 'Abdulellah', lastName: 'Al-Malki',    displayName: 'Al-Malki',    nationCode: 'KSA', position: 'MID', price: 5.0, number: 14 },
+  { firstName: 'Salem',      lastName: 'Al-Dawsari',  displayName: 'Al-Dawsari',  nationCode: 'KSA', position: 'FWD', price: 6.5, number: 10 },
+  { firstName: 'Saleh',      lastName: 'Al-Shehri',   displayName: 'Al-Shehri',   nationCode: 'KSA', position: 'FWD', price: 5.5, number: 11 },
+  { firstName: 'Firas',      lastName: 'Al-Buraikan', displayName: 'Al-Buraikan', nationCode: 'KSA', position: 'FWD', price: 5.5, number: 9 },
+
+  // SENEGAL – Group I
+  { firstName: 'Édouard',    lastName: 'Mendy',       displayName: 'E. Mendy',    nationCode: 'SEN', position: 'GK',  price: 5.0, number: 16 },
+  { firstName: 'Yehvann',    lastName: 'Diouf',       displayName: 'Y. Diouf',    nationCode: 'SEN', position: 'GK',  price: 4.0, number: 1 },
+  { firstName: 'Kalidou',    lastName: 'Koulibaly',   displayName: 'Koulibaly',   nationCode: 'SEN', position: 'DEF', price: 5.5, number: 3 },
+  { firstName: 'Moussa',     lastName: 'Niakhaté',    displayName: 'Niakhaté',    nationCode: 'SEN', position: 'DEF', price: 5.0, number: 22 },
+  { firstName: 'Ismail',     lastName: 'Jakobs',      displayName: 'Jakobs',      nationCode: 'SEN', position: 'DEF', price: 4.5, number: 2 },
+  { firstName: 'Abdoulaye',  lastName: 'Seck',        displayName: 'Seck',        nationCode: 'SEN', position: 'DEF', price: 4.5, number: 4 },
+  { firstName: 'El Hadji',   lastName: 'Malick Diouf',displayName: 'M. Diouf',    nationCode: 'SEN', position: 'DEF', price: 5.0, number: 12 },
+  { firstName: 'Idrissa',    lastName: 'Gueye',       displayName: 'I. Gueye',    nationCode: 'SEN', position: 'MID', price: 5.5, number: 5 },
+  { firstName: 'Pape Matar', lastName: 'Sarr',        displayName: 'P.M. Sarr',   nationCode: 'SEN', position: 'MID', price: 6.5, number: 17 },
+  { firstName: 'Lamine',     lastName: 'Camara',      displayName: 'Camara',      nationCode: 'SEN', position: 'MID', price: 6.0, number: 14 },
+  { firstName: 'Habib',      lastName: 'Diarra',      displayName: 'H. Diarra',   nationCode: 'SEN', position: 'MID', price: 6.0, number: 8 },
+  { firstName: 'Sadio',      lastName: 'Mané',        displayName: 'Mané',        nationCode: 'SEN', position: 'FWD', price: 8.5, number: 10 },
+  { firstName: 'Nicolas',    lastName: 'Jackson',     displayName: 'Jackson',     nationCode: 'SEN', position: 'FWD', price: 7.5, number: 7 },
+  { firstName: 'Iliman',     lastName: 'Ndiaye',      displayName: 'I. Ndiaye',   nationCode: 'SEN', position: 'FWD', price: 7.0, number: 11 },
+  { firstName: 'Ismaïla',    lastName: 'Sarr',        displayName: 'I. Sarr',     nationCode: 'SEN', position: 'FWD', price: 7.0, number: 18 },
+  { firstName: 'Boulaye',    lastName: 'Dia',         displayName: 'Dia',         nationCode: 'SEN', position: 'FWD', price: 6.0, number: 9 },
+
+  // ALGERIA – Group J
+  { firstName: 'Luca',       lastName: 'Zidane',      displayName: 'L. Zidane',   nationCode: 'ALG', position: 'GK',  price: 4.5, number: 16 },
+  { firstName: 'Anthony',    lastName: 'Mandrea',     displayName: 'Mandrea',     nationCode: 'ALG', position: 'GK',  price: 4.0, number: 1 },
+  { firstName: 'Aïssa',      lastName: 'Mandi',       displayName: 'Mandi',       nationCode: 'ALG', position: 'DEF', price: 5.0, number: 21 },
+  { firstName: 'Ramy',       lastName: 'Bensebaini',  displayName: 'Bensebaini',  nationCode: 'ALG', position: 'DEF', price: 5.5, number: 5 },
+  { firstName: 'Rayan',      lastName: 'Aït-Nouri',   displayName: 'Aït-Nouri',   nationCode: 'ALG', position: 'DEF', price: 5.5, number: 3 },
+  { firstName: 'Youcef',     lastName: 'Atal',        displayName: 'Atal',        nationCode: 'ALG', position: 'DEF', price: 4.5, number: 2 },
+  { firstName: 'Hocine',     lastName: 'Benabderrahmane',displayName: 'Benabderrahmane',nationCode: 'ALG', position: 'DEF', price: 4.5, number: 15 },
+  { firstName: 'Ismaël',     lastName: 'Bennacer',    displayName: 'Bennacer',    nationCode: 'ALG', position: 'MID', price: 6.5, number: 4 },
+  { firstName: 'Houssem',    lastName: 'Aouar',       displayName: 'Aouar',       nationCode: 'ALG', position: 'MID', price: 6.0, number: 8 },
+  { firstName: 'Adam',       lastName: 'Ounas',       displayName: 'Ounas',       nationCode: 'ALG', position: 'MID', price: 5.5, number: 14 },
+  { firstName: 'Riyad',      lastName: 'Mahrez',      displayName: 'Mahrez',      nationCode: 'ALG', position: 'FWD', price: 8.0, number: 7 },
+  { firstName: 'Amine',      lastName: 'Gouiri',      displayName: 'Gouiri',      nationCode: 'ALG', position: 'FWD', price: 6.5, number: 19 },
+  { firstName: 'Saïd',       lastName: 'Benrahma',    displayName: 'Benrahma',    nationCode: 'ALG', position: 'FWD', price: 6.5, number: 11 },
+  { firstName: 'Mohamed',    lastName: 'Amoura',      displayName: 'Amoura',      nationCode: 'ALG', position: 'FWD', price: 6.0, number: 9 },
+
+  // JORDAN – Group J
+  { firstName: 'Yazeed',     lastName: 'Abulaila',    displayName: 'Abulaila',    nationCode: 'JOR', position: 'GK',  price: 4.0, number: 1 },
+  { firstName: 'Salem',      lastName: 'Al-Ajalin',   displayName: 'Al-Ajalin',   nationCode: 'JOR', position: 'DEF', price: 4.5, number: 4 },
+  { firstName: 'Bara\'a',    lastName: 'Marei',       displayName: 'Marei',       nationCode: 'JOR', position: 'DEF', price: 4.5, number: 3 },
+  { firstName: 'Yazan',      lastName: 'Al-Arab',     displayName: 'Al-Arab',     nationCode: 'JOR', position: 'DEF', price: 4.5, number: 5 },
+  { firstName: 'Ehsan',      lastName: 'Haddad',      displayName: 'Haddad',      nationCode: 'JOR', position: 'DEF', price: 4.5, number: 13 },
+  { firstName: 'Nizar',      lastName: 'Al-Rashdan',  displayName: 'Al-Rashdan',  nationCode: 'JOR', position: 'MID', price: 5.0, number: 8 },
+  { firstName: 'Noor',       lastName: 'Al-Rawabdeh', displayName: 'Al-Rawabdeh', nationCode: 'JOR', position: 'MID', price: 5.0, number: 6 },
+  { firstName: 'Mahmoud',    lastName: 'Al-Mardi',    displayName: 'Al-Mardi',    nationCode: 'JOR', position: 'MID', price: 5.0, number: 14 },
+  { firstName: 'Ibrahim',    lastName: 'Sabra',       displayName: 'Sabra',       nationCode: 'JOR', position: 'MID', price: 5.0, number: 11 },
+  { firstName: 'Musa',       lastName: 'Al-Taamari',  displayName: 'Al-Taamari',  nationCode: 'JOR', position: 'FWD', price: 7.0, number: 7 },
+  { firstName: 'Yazan',      lastName: 'Al-Naimat',   displayName: 'Al-Naimat',   nationCode: 'JOR', position: 'FWD', price: 5.5, number: 9 },
+  { firstName: 'Ali',        lastName: 'Olwan',       displayName: 'Olwan',       nationCode: 'JOR', position: 'FWD', price: 5.5, number: 10 },
+
+  // UZBEKISTAN – Group K
+  { firstName: 'Utkir',      lastName: 'Yusupov',     displayName: 'Yusupov',     nationCode: 'UZB', position: 'GK',  price: 4.0, number: 1 },
+  { firstName: 'Abdukodir',  lastName: 'Khusanov',    displayName: 'Khusanov',    nationCode: 'UZB', position: 'DEF', price: 6.0, number: 5 },
+  { firstName: 'Rustam',     lastName: 'Ashurmatov',  displayName: 'Ashurmatov',  nationCode: 'UZB', position: 'DEF', price: 4.5, number: 4 },
+  { firstName: 'Khojimat',   lastName: 'Erkinov',     displayName: 'Erkinov',     nationCode: 'UZB', position: 'DEF', price: 4.5, number: 3 },
+  { firstName: 'Sherzod',    lastName: 'Nasrullaev',  displayName: 'Nasrullaev',  nationCode: 'UZB', position: 'DEF', price: 4.5, number: 2 },
+  { firstName: 'Jaloliddin', lastName: 'Masharipov',  displayName: 'Masharipov',  nationCode: 'UZB', position: 'MID', price: 5.5, number: 7 },
+  { firstName: 'Abbosbek',   lastName: 'Fayzullaev',  displayName: 'Fayzullaev',  nationCode: 'UZB', position: 'MID', price: 6.0, number: 10 },
+  { firstName: 'Otabek',     lastName: 'Shukurov',    displayName: 'Shukurov',    nationCode: 'UZB', position: 'MID', price: 5.0, number: 6 },
+  { firstName: 'Azizbek',    lastName: 'Turgunboev',  displayName: 'Turgunboev',  nationCode: 'UZB', position: 'MID', price: 5.0, number: 14 },
+  { firstName: 'Eldor',      lastName: 'Shomurodov',  displayName: 'Shomurodov',  nationCode: 'UZB', position: 'FWD', price: 6.5, number: 9 },
+  { firstName: 'Oston',      lastName: 'Urunov',      displayName: 'Urunov',      nationCode: 'UZB', position: 'FWD', price: 5.5, number: 11 },
+  { firstName: 'Sardor',     lastName: 'Sayfiyev',    displayName: 'Sayfiyev',    nationCode: 'UZB', position: 'FWD', price: 5.5, number: 18 },
+
+  // GHANA – Group L
+  { firstName: 'Benjamin',   lastName: 'Asare',       displayName: 'Asare',       nationCode: 'GHA', position: 'GK',  price: 4.0, number: 1 },
+  { firstName: 'Lawrence',   lastName: 'Ati-Zigi',    displayName: 'Ati-Zigi',    nationCode: 'GHA', position: 'GK',  price: 4.0, number: 12 },
+  { firstName: 'Tariq',      lastName: 'Lamptey',     displayName: 'Lamptey',     nationCode: 'GHA', position: 'DEF', price: 5.0, number: 2 },
+  { firstName: 'Alexander',  lastName: 'Djiku',       displayName: 'Djiku',       nationCode: 'GHA', position: 'DEF', price: 4.5, number: 4 },
+  { firstName: 'Mohammed',   lastName: 'Salisu',      displayName: 'Salisu',      nationCode: 'GHA', position: 'DEF', price: 5.0, number: 5 },
+  { firstName: 'Gideon',     lastName: 'Mensah',      displayName: 'Mensah',      nationCode: 'GHA', position: 'DEF', price: 4.5, number: 3 },
+  { firstName: 'Thomas',     lastName: 'Partey',      displayName: 'Partey',      nationCode: 'GHA', position: 'MID', price: 7.0, number: 5 },
+  { firstName: 'Mohammed',   lastName: 'Kudus',       displayName: 'Kudus',       nationCode: 'GHA', position: 'MID', price: 8.0, number: 20 },
+  { firstName: 'Salis',      lastName: 'Abdul Samed', displayName: 'Abdul Samed', nationCode: 'GHA', position: 'MID', price: 5.0, number: 6 },
+  { firstName: 'Antoine',    lastName: 'Semenyo',     displayName: 'Semenyo',     nationCode: 'GHA', position: 'FWD', price: 7.0, number: 14 },
+  { firstName: 'Iñaki',      lastName: 'Williams',    displayName: 'I. Williams', nationCode: 'GHA', position: 'FWD', price: 6.5, number: 19 },
+  { firstName: 'Jordan',     lastName: 'Ayew',        displayName: 'J. Ayew',     nationCode: 'GHA', position: 'FWD', price: 6.5, number: 10 },
+  { firstName: 'Ernest',     lastName: 'Nuamah',      displayName: 'Nuamah',      nationCode: 'GHA', position: 'FWD', price: 6.0, number: 11 },
+
+  // PANAMA – Group L
+  { firstName: 'Luis',       lastName: 'Mejía',       displayName: 'L. Mejía',    nationCode: 'PAN', position: 'GK',  price: 4.0, number: 1 },
+  { firstName: 'Orlando',    lastName: 'Mosquera',    displayName: 'Mosquera',    nationCode: 'PAN', position: 'GK',  price: 4.0, number: 22 },
+  { firstName: 'César',      lastName: 'Blackman',    displayName: 'Blackman',    nationCode: 'PAN', position: 'DEF', price: 4.5, number: 2 },
+  { firstName: 'José',       lastName: 'Córdoba',     displayName: 'Córdoba',     nationCode: 'PAN', position: 'DEF', price: 4.5, number: 4 },
+  { firstName: 'Eric',       lastName: 'Davis',       displayName: 'E. Davis',    nationCode: 'PAN', position: 'DEF', price: 4.5, number: 15 },
+  { firstName: 'Amir',       lastName: 'Murillo',     displayName: 'Murillo',     nationCode: 'PAN', position: 'DEF', price: 5.0, number: 17 },
+  { firstName: 'Andrés',     lastName: 'Andrade',     displayName: 'Andrade',     nationCode: 'PAN', position: 'DEF', price: 4.5, number: 5 },
+  { firstName: 'Aníbal',     lastName: 'Godoy',       displayName: 'Godoy',       nationCode: 'PAN', position: 'MID', price: 5.0, number: 20 },
+  { firstName: 'Adalberto',  lastName: 'Carrasquilla',displayName: 'Carrasquilla',nationCode: 'PAN', position: 'MID', price: 5.5, number: 10 },
+  { firstName: 'José Luis',  lastName: 'Rodríguez',   displayName: 'J.L. Rodríguez',nationCode: 'PAN', position: 'MID', price: 5.0, number: 21 },
+  { firstName: 'Carlos',     lastName: 'Harvey',      displayName: 'Harvey',      nationCode: 'PAN', position: 'MID', price: 5.0, number: 6 },
+  { firstName: 'Cecilio',    lastName: 'Waterman',    displayName: 'Waterman',    nationCode: 'PAN', position: 'FWD', price: 6.0, number: 9 },
+  { firstName: 'Ismael',     lastName: 'Díaz',        displayName: 'I. Díaz',     nationCode: 'PAN', position: 'FWD', price: 5.5, number: 16 },
+  { firstName: 'José',       lastName: 'Fajardo',     displayName: 'Fajardo',     nationCode: 'PAN', position: 'FWD', price: 5.5, number: 19 },
+
+  // ===================================================================
+  // UNDER-STAFFED EXISTING NATIONS: bump to ~8 players each
+  // ===================================================================
+
+  // EGYPT (was 2 → +8)
+  { firstName: 'Mohamed',    lastName: 'El-Shenawy',  displayName: 'El-Shenawy',  nationCode: 'EGY', position: 'GK',  price: 4.5, number: 1 },
+  { firstName: 'Mohamed',    lastName: 'Hany',        displayName: 'M. Hany',     nationCode: 'EGY', position: 'DEF', price: 4.5, number: 2 },
+  { firstName: 'Ahmed',      lastName: 'Hegazi',      displayName: 'Hegazi',      nationCode: 'EGY', position: 'DEF', price: 4.5, number: 6 },
+  { firstName: 'Omar',       lastName: 'Kamal',       displayName: 'O. Kamal',    nationCode: 'EGY', position: 'DEF', price: 4.5, number: 3 },
+  { firstName: 'Mohamed',    lastName: 'Elneny',      displayName: 'Elneny',      nationCode: 'EGY', position: 'MID', price: 5.0, number: 17 },
+  { firstName: 'Mahmoud',    lastName: 'Trezeguet',   displayName: 'Trezeguet',   nationCode: 'EGY', position: 'MID', price: 6.0, number: 21 },
+  { firstName: 'Mostafa',    lastName: 'Mohamed',     displayName: 'M. Mohamed',  nationCode: 'EGY', position: 'FWD', price: 6.0, number: 9 },
+  { firstName: 'Omar',       lastName: 'Marmoush',    displayName: 'Marmoush',    nationCode: 'EGY', position: 'FWD', price: 7.5, number: 11 },
+
+  // JAPAN (was 1 → +9)
+  { firstName: 'Shuichi',    lastName: 'Gonda',       displayName: 'Gonda',       nationCode: 'JPN', position: 'GK',  price: 4.5, number: 12 },
+  { firstName: 'Maya',       lastName: 'Yoshida',     displayName: 'Yoshida',     nationCode: 'JPN', position: 'DEF', price: 4.5, number: 22 },
+  { firstName: 'Shogo',      lastName: 'Taniguchi',   displayName: 'Taniguchi',   nationCode: 'JPN', position: 'DEF', price: 4.5, number: 4 },
+  { firstName: 'Hiroki',     lastName: 'Sakai',       displayName: 'Sakai',       nationCode: 'JPN', position: 'DEF', price: 4.5, number: 19 },
+  { firstName: 'Wataru',     lastName: 'Endo',        displayName: 'Endo',        nationCode: 'JPN', position: 'MID', price: 6.0, number: 6 },
+  { firstName: 'Daichi',     lastName: 'Kamada',      displayName: 'Kamada',      nationCode: 'JPN', position: 'MID', price: 6.5, number: 14 },
+  { firstName: 'Ao',         lastName: 'Tanaka',      displayName: 'A. Tanaka',   nationCode: 'JPN', position: 'MID', price: 5.5, number: 17 },
+  { firstName: 'Kaoru',      lastName: 'Mitoma',      displayName: 'Mitoma',      nationCode: 'JPN', position: 'FWD', price: 7.5, number: 11 },
+  { firstName: 'Takefusa',   lastName: 'Kubo',        displayName: 'Kubo',        nationCode: 'JPN', position: 'FWD', price: 7.5, number: 20 },
+
+  // AUSTRALIA (was 1 → +9)
+  { firstName: 'Mathew',     lastName: 'Ryan',        displayName: 'M. Ryan',     nationCode: 'AUS', position: 'GK',  price: 4.5, number: 1 },
+  { firstName: 'Aziz',       lastName: 'Behich',      displayName: 'Behich',      nationCode: 'AUS', position: 'DEF', price: 4.5, number: 16 },
+  { firstName: 'Milos',      lastName: 'Degenek',     displayName: 'Degenek',     nationCode: 'AUS', position: 'DEF', price: 4.5, number: 5 },
+  { firstName: 'Alessandro', lastName: 'Circati',     displayName: 'Circati',     nationCode: 'AUS', position: 'DEF', price: 4.5, number: 13 },
+  { firstName: 'Jordan',     lastName: 'Bos',         displayName: 'Bos',         nationCode: 'AUS', position: 'DEF', price: 4.5, number: 3 },
+  { firstName: 'Ajdin',      lastName: 'Hrustic',     displayName: 'Hrustic',     nationCode: 'AUS', position: 'MID', price: 5.0, number: 7 },
+  { firstName: 'Riley',      lastName: 'McGree',      displayName: 'McGree',      nationCode: 'AUS', position: 'MID', price: 5.0, number: 22 },
+  { firstName: 'Awer',       lastName: 'Mabil',       displayName: 'Mabil',       nationCode: 'AUS', position: 'FWD', price: 5.5, number: 17 },
+  { firstName: 'Nestory',    lastName: 'Irankunda',   displayName: 'Irankunda',   nationCode: 'AUS', position: 'FWD', price: 5.5, number: 20 },
+
+  // SWITZERLAND (was 1 → +9)
+  { firstName: 'Yann',       lastName: 'Sommer',      displayName: 'Sommer',      nationCode: 'SUI', position: 'GK',  price: 5.0, number: 1 },
+  { firstName: 'Manuel',     lastName: 'Akanji',      displayName: 'Akanji',      nationCode: 'SUI', position: 'DEF', price: 5.5, number: 5 },
+  { firstName: 'Nico',       lastName: 'Elvedi',      displayName: 'Elvedi',      nationCode: 'SUI', position: 'DEF', price: 5.0, number: 4 },
+  { firstName: 'Ricardo',    lastName: 'Rodríguez',   displayName: 'R. Rodríguez',nationCode: 'SUI', position: 'DEF', price: 5.0, number: 13 },
+  { firstName: 'Granit',     lastName: 'Xhaka',       displayName: 'Xhaka',       nationCode: 'SUI', position: 'MID', price: 6.5, number: 10 },
+  { firstName: 'Remo',       lastName: 'Freuler',     displayName: 'Freuler',     nationCode: 'SUI', position: 'MID', price: 5.5, number: 15 },
+  { firstName: 'Xherdan',    lastName: 'Shaqiri',     displayName: 'Shaqiri',     nationCode: 'SUI', position: 'MID', price: 6.0, number: 23 },
+  { firstName: 'Breel',      lastName: 'Embolo',      displayName: 'Embolo',      nationCode: 'SUI', position: 'FWD', price: 6.5, number: 7 },
+  { firstName: 'Zeki',       lastName: 'Amdouni',     displayName: 'Amdouni',     nationCode: 'SUI', position: 'FWD', price: 6.0, number: 19 },
+
+  // CÔTE D'IVOIRE (was 1 → +8)
+  { firstName: 'Yahia',      lastName: 'Fofana',      displayName: 'Fofana',      nationCode: 'CIV', position: 'GK',  price: 4.5, number: 23 },
+  { firstName: 'Willy',      lastName: 'Boly',        displayName: 'Boly',        nationCode: 'CIV', position: 'DEF', price: 5.0, number: 5 },
+  { firstName: 'Odilon',     lastName: 'Kossounou',   displayName: 'Kossounou',   nationCode: 'CIV', position: 'DEF', price: 5.0, number: 4 },
+  { firstName: 'Evan',       lastName: 'Ndicka',      displayName: 'Ndicka',      nationCode: 'CIV', position: 'DEF', price: 5.5, number: 24 },
+  { firstName: 'Franck',     lastName: 'Kessié',      displayName: 'Kessié',      nationCode: 'CIV', position: 'MID', price: 6.5, number: 19 },
+  { firstName: 'Ibrahim',    lastName: 'Sangaré',     displayName: 'Sangaré',     nationCode: 'CIV', position: 'MID', price: 6.0, number: 6 },
+  { firstName: 'Sébastien',  lastName: 'Haller',      displayName: 'Haller',      nationCode: 'CIV', position: 'FWD', price: 7.0, number: 22 },
+  { firstName: 'Simon',      lastName: 'Adingra',     displayName: 'Adingra',     nationCode: 'CIV', position: 'FWD', price: 6.5, number: 14 },
+
+  // CANADA (was 2 → +7)
+  { firstName: 'Maxime',     lastName: 'Crépeau',     displayName: 'Crépeau',     nationCode: 'CAN', position: 'GK',  price: 4.5, number: 16 },
+  { firstName: 'Alistair',   lastName: 'Johnston',    displayName: 'Johnston',    nationCode: 'CAN', position: 'DEF', price: 5.0, number: 2 },
+  { firstName: 'Moïse',      lastName: 'Bombito',     displayName: 'Bombito',     nationCode: 'CAN', position: 'DEF', price: 5.0, number: 6 },
+  { firstName: 'Sam',        lastName: 'Adekugbe',    displayName: 'Adekugbe',    nationCode: 'CAN', position: 'DEF', price: 4.5, number: 3 },
+  { firstName: 'Stephen',    lastName: 'Eustáquio',   displayName: 'Eustáquio',   nationCode: 'CAN', position: 'MID', price: 6.0, number: 7 },
+  { firstName: 'Ismaël',     lastName: 'Koné',        displayName: 'Koné',        nationCode: 'CAN', position: 'MID', price: 5.5, number: 13 },
+  { firstName: 'Cyle',       lastName: 'Larin',       displayName: 'Larin',       nationCode: 'CAN', position: 'FWD', price: 6.0, number: 17 },
+
+  // BELGIUM (was 2 → +7)
+  { firstName: 'Maarten',    lastName: 'Vandevoordt', displayName: 'Vandevoordt', nationCode: 'BEL', position: 'GK',  price: 4.5, number: 13 },
+  { firstName: 'Wout',       lastName: 'Faes',        displayName: 'Faes',        nationCode: 'BEL', position: 'DEF', price: 5.0, number: 4 },
+  { firstName: 'Zeno',       lastName: 'Debast',      displayName: 'Debast',      nationCode: 'BEL', position: 'DEF', price: 5.0, number: 6 },
+  { firstName: 'Timothy',    lastName: 'Castagne',    displayName: 'Castagne',    nationCode: 'BEL', position: 'DEF', price: 5.5, number: 15 },
+  { firstName: 'Amadou',     lastName: 'Onana',       displayName: 'Onana',       nationCode: 'BEL', position: 'MID', price: 6.5, number: 8 },
+  { firstName: 'Youri',      lastName: 'Tielemans',   displayName: 'Tielemans',   nationCode: 'BEL', position: 'MID', price: 7.0, number: 17 },
+  { firstName: 'Charles',    lastName: 'De Ketelaere',displayName: 'De Ketelaere',nationCode: 'BEL', position: 'FWD', price: 7.0, number: 19 },
+
+  // NORWAY (was 2 → +6)
+  { firstName: 'Ørjan',      lastName: 'Nyland',      displayName: 'Nyland',      nationCode: 'NOR', position: 'GK',  price: 4.5, number: 1 },
+  { firstName: 'Kristoffer',lastName: 'Ajer',        displayName: 'Ajer',        nationCode: 'NOR', position: 'DEF', price: 5.0, number: 5 },
+  { firstName: 'Leo',        lastName: 'Østigård',    displayName: 'Østigård',    nationCode: 'NOR', position: 'DEF', price: 5.0, number: 4 },
+  { firstName: 'Sander',     lastName: 'Berge',       displayName: 'Berge',       nationCode: 'NOR', position: 'MID', price: 6.0, number: 6 },
+  { firstName: 'Patrick',    lastName: 'Berg',        displayName: 'P. Berg',     nationCode: 'NOR', position: 'MID', price: 5.5, number: 14 },
+  { firstName: 'Alexander',  lastName: 'Sørloth',     displayName: 'Sørloth',     nationCode: 'NOR', position: 'FWD', price: 7.5, number: 9 },
+
+  // CROATIA (was 3 → +6)
+  { firstName: 'Josip',      lastName: 'Stanišić',    displayName: 'Stanišić',    nationCode: 'CRO', position: 'DEF', price: 5.0, number: 2 },
+  { firstName: 'Joško',      lastName: 'Gvardiol',    displayName: 'Gvardiol',    nationCode: 'CRO', position: 'DEF', price: 6.5, number: 20 },
+  { firstName: 'Mateo',      lastName: 'Kovačić',     displayName: 'Kovačić',     nationCode: 'CRO', position: 'MID', price: 7.0, number: 8 },
+  { firstName: 'Marcelo',    lastName: 'Brozović',    displayName: 'Brozović',    nationCode: 'CRO', position: 'MID', price: 6.0, number: 11 },
+  { firstName: 'Mario',      lastName: 'Pašalić',     displayName: 'Pašalić',     nationCode: 'CRO', position: 'MID', price: 6.0, number: 15 },
+  { firstName: 'Andrej',     lastName: 'Kramarić',    displayName: 'Kramarić',    nationCode: 'CRO', position: 'FWD', price: 6.5, number: 9 },
+
+  // MEXICO (was 3 → +6)
+  { firstName: 'Guillermo',  lastName: 'Ochoa',       displayName: 'Ochoa',       nationCode: 'MEX', position: 'GK',  price: 5.0, number: 13 },
+  { firstName: 'César',      lastName: 'Montes',      displayName: 'Montes',      nationCode: 'MEX', position: 'DEF', price: 5.0, number: 3 },
+  { firstName: 'Johan',      lastName: 'Vásquez',     displayName: 'Vásquez',     nationCode: 'MEX', position: 'DEF', price: 5.0, number: 4 },
+  { firstName: 'Edson',      lastName: 'Álvarez',     displayName: 'Álvarez',     nationCode: 'MEX', position: 'MID', price: 6.5, number: 4 },
+  { firstName: 'Luis',       lastName: 'Chávez',      displayName: 'Chávez',      nationCode: 'MEX', position: 'MID', price: 5.5, number: 18 },
+  { firstName: 'Santiago',   lastName: 'Giménez',     displayName: 'S. Giménez',  nationCode: 'MEX', position: 'FWD', price: 7.0, number: 9 },
+
+  // SCOTLAND (was 3 → +6)
+  { firstName: 'Andy',       lastName: 'Robertson',   displayName: 'Robertson',   nationCode: 'SCO', position: 'DEF', price: 5.5, number: 3 },
+  { firstName: 'Kieran',     lastName: 'Tierney',     displayName: 'Tierney',     nationCode: 'SCO', position: 'DEF', price: 5.0, number: 6 },
+  { firstName: 'Jack',       lastName: 'Hendry',      displayName: 'Hendry',      nationCode: 'SCO', position: 'DEF', price: 5.0, number: 4 },
+  { firstName: 'Billy',      lastName: 'Gilmour',     displayName: 'Gilmour',     nationCode: 'SCO', position: 'MID', price: 5.5, number: 8 },
+  { firstName: 'Lewis',      lastName: 'Ferguson',    displayName: 'Ferguson',    nationCode: 'SCO', position: 'MID', price: 5.5, number: 14 },
+  { firstName: 'Che',        lastName: 'Adams',       displayName: 'Adams',       nationCode: 'SCO', position: 'FWD', price: 6.5, number: 10 },
+
+  // COLOMBIA (was 3 → +6)
+  { firstName: 'Camilo',     lastName: 'Vargas',      displayName: 'Vargas',      nationCode: 'COL', position: 'GK',  price: 4.5, number: 12 },
+  { firstName: 'Daniel',     lastName: 'Muñoz',       displayName: 'D. Muñoz',    nationCode: 'COL', position: 'DEF', price: 5.5, number: 4 },
+  { firstName: 'Davinson',   lastName: 'Sánchez',     displayName: 'D. Sánchez',  nationCode: 'COL', position: 'DEF', price: 5.5, number: 23 },
+  { firstName: 'Jhon',       lastName: 'Lucumí',      displayName: 'Lucumí',      nationCode: 'COL', position: 'DEF', price: 5.0, number: 16 },
+  { firstName: 'Jefferson',  lastName: 'Lerma',       displayName: 'Lerma',       nationCode: 'COL', position: 'MID', price: 5.5, number: 5 },
+  { firstName: 'Richard',    lastName: 'Ríos',        displayName: 'Ríos',        nationCode: 'COL', position: 'MID', price: 6.0, number: 8 },
 ];
 
 async function main() {

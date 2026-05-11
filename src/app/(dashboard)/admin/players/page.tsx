@@ -32,7 +32,17 @@ export default function AdminPlayersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
-  
+
+  // CSV bulk-import state
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    totalRows: number;
+    created: number;
+    updated: number;
+    skipped: number;
+    outcomes: Array<{ row: number; status: string; reason?: string; displayName?: string; nationCode?: string }>;
+  } | null>(null);
+
   // Form state
   const [form, setForm] = useState({
     firstName: '',
@@ -160,6 +170,55 @@ export default function AdminPlayersPage() {
     setShowAddModal(true);
   }
 
+  // ---------------------- CSV bulk import ----------------------
+
+  /** Build a starter CSV template containing one row per existing nation
+   * (currently empty squad-wise). Lets the admin open it in Excel/Sheets
+   * and fill in players without hunting for the right nation codes. */
+  function downloadCsvTemplate() {
+    const header = 'nationCode,position,displayName,firstName,lastName,shirtNumber,price';
+    const example = [
+      // A handful of example rows to show the expected shape.
+      'BRA,GK,Alisson,Alisson,Becker,1,6.0',
+      'ARG,FWD,L. Messi,Lionel,Messi,10,12.0',
+      // Then one comment-style placeholder per nation – CSV doesn't have
+      // real comments so we leave them as empty data rows the user can fill.
+      ...nations.map((n) => `${n.code},,,,,,`),
+    ];
+    const blob = new Blob([[header, ...example].join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'wc26-players-template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleCsvUpload(file: File) {
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const text = await file.text();
+      const res = await fetch('/api/admin/players/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csv: text }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Import failed');
+      } else {
+        setImportResult(data);
+        loadData();
+      }
+    } catch (err) {
+      console.error('CSV import error:', err);
+      alert('CSV import failed – see console.');
+    } finally {
+      setImporting(false);
+    }
+  }
+
   if (loading) {
     return <div className="text-white">Loading players...</div>;
   }
@@ -177,6 +236,77 @@ export default function AdminPlayersPage() {
         >
           ➕ Add Player
         </button>
+      </div>
+
+      {/* CSV bulk import */}
+      <div className="bg-slate-900 rounded-xl p-5 border border-slate-800">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-white">📥 Bulk import (CSV)</h3>
+            <p className="text-sm text-slate-400 mt-1">
+              Upload a CSV with columns&nbsp;
+              <code className="bg-slate-800 px-1.5 py-0.5 rounded text-amber-300 text-xs">nationCode, position, displayName, firstName, lastName, shirtNumber, price</code>.
+              Rows are upserted by <span className="text-white">(nationCode + displayName)</span> – safe to re-run.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={downloadCsvTemplate}
+              className="text-sm bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white px-3 py-2 rounded-lg"
+            >
+              ⬇ Template
+            </button>
+            <label
+              className={`text-sm font-semibold px-3 py-2 rounded-lg cursor-pointer ${
+                importing
+                  ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                  : 'bg-emerald-500 hover:bg-emerald-600 text-black'
+              }`}
+            >
+              {importing ? 'Importing…' : '⬆ Upload CSV'}
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                disabled={importing}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleCsvUpload(file);
+                  // Reset so re-uploading the same file works.
+                  e.target.value = '';
+                }}
+                className="hidden"
+              />
+            </label>
+          </div>
+        </div>
+
+        {importResult && (
+          <div className="mt-4 bg-slate-950 border border-slate-800 rounded-lg p-4 text-sm">
+            <div className="flex flex-wrap gap-4 mb-2">
+              <span className="text-emerald-400 font-semibold">{importResult.created} created</span>
+              <span className="text-sky-400 font-semibold">{importResult.updated} updated</span>
+              <span className={importResult.skipped > 0 ? 'text-amber-400 font-semibold' : 'text-slate-500'}>
+                {importResult.skipped} skipped
+              </span>
+              <span className="text-slate-500">{importResult.totalRows} total rows</span>
+            </div>
+            {importResult.skipped > 0 && (
+              <details className="text-slate-400">
+                <summary className="cursor-pointer hover:text-white">Show skipped rows</summary>
+                <ul className="mt-2 space-y-1 max-h-40 overflow-y-auto font-mono text-xs">
+                  {importResult.outcomes
+                    .filter((o) => o.status === 'skipped')
+                    .map((o, i) => (
+                      <li key={i}>
+                        Row {o.row}: <span className="text-amber-300">{o.reason}</span>
+                      </li>
+                    ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Filters */}

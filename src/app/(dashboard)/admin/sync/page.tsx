@@ -34,13 +34,53 @@ export default function AdminSyncPage() {
     setLoading(true);
     addLog('Starting players sync...');
     addLog('Note: World Cup squads not announced yet. Check API-Football closer to tournament.');
-    
+
     // This would sync from API-Football once squads are announced
     setTimeout(() => {
       addLog('⚠️ World Cup 2026 squads not yet available in API');
       addLog('Add players manually via Admin → Players');
       setLoading(false);
     }, 1500);
+  }
+
+  /**
+   * Calls /api/admin/sync/photos which hits API-Football's /players/squads
+   * endpoint once per nation and patches existing rows with photoUrl and
+   * shirtNumber. Display name / position / price are intentionally
+   * preserved so admin curation isn't clobbered.
+   */
+  async function syncPhotos(dryRun: boolean) {
+    setLoading(true);
+    addLog(dryRun ? '🔎 Photo sync DRY-RUN starting…' : '📸 Photo sync starting…');
+    addLog('  This walks every nation with an apiFootballId and updates photos + shirt numbers only.');
+
+    try {
+      const res = await fetch('/api/admin/sync/photos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dryRun }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        addLog(`❌ Failed: ${data.error || 'Unknown error'}`);
+      } else {
+        addLog(`✅ Matched: ${data.matched} players ${dryRun ? '(no DB writes)' : 'updated'}`);
+        addLog(`   Unmatched from API: ${data.unmatched?.length ?? 0}`);
+        addLog(`   Nations skipped (no apiFootballId): ${data.skippedNations?.length ?? 0}`);
+        if (data.errors?.length) {
+          addLog(`   ⚠️ Errors: ${data.errors.length}`);
+          for (const e of data.errors.slice(0, 5)) {
+            addLog(`     ${e.nationCode}: ${e.message}`);
+          }
+        }
+        addLog(`   API requests remaining: ${data.remainingRequests ?? 'N/A'}`);
+      }
+    } catch (err) {
+      addLog(`❌ Error: ${err}`);
+    }
+
+    setLoading(false);
   }
 
   async function syncFixtures() {
@@ -132,6 +172,34 @@ export default function AdminSyncPage() {
             disabled={loading}
             icon="📅"
             label="Sync Fixtures"
+          />
+        </div>
+      </div>
+
+      {/* Photos & Shirt Numbers — separate card because this one is safer:
+       * it only patches photoUrl and shirtNumber on existing players, never
+       * touching displayName / position / price. Run after manual curation. */}
+      <div className="bg-slate-900 rounded-xl p-6 border border-slate-800">
+        <h3 className="font-semibold text-white mb-1">📸 Photos & Shirt Numbers</h3>
+        <p className="text-sm text-slate-400 mb-4">
+          Fetches each nation&apos;s squad from API-Football and patches only
+          <code className="mx-1 bg-slate-800 px-1.5 py-0.5 rounded text-amber-300 text-xs">photoUrl</code>
+          and
+          <code className="mx-1 bg-slate-800 px-1.5 py-0.5 rounded text-amber-300 text-xs">shirtNumber</code>.
+          Display names, positions, and prices are never overwritten.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <SyncButton
+            onClick={() => syncPhotos(true)}
+            disabled={loading}
+            icon="🔎"
+            label="Photo Sync (Dry-run)"
+          />
+          <SyncButton
+            onClick={() => syncPhotos(false)}
+            disabled={loading}
+            icon="📸"
+            label="Photo Sync (Apply)"
           />
         </div>
       </div>
