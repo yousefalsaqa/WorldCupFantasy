@@ -82,6 +82,34 @@ async function maybeRevertFreeHit(teamId: string, snapshotJson: string | null): 
   return true;
 }
 
+// Mirrors the logic in /api/transfers: transfers are unlimited when (a) the
+// global compile-time flag is on (pre-launch testing), (b) no stage is
+// currently active (i.e. pre-tournament or between gameweeks), or (c) the
+// active stage has Wildcard / Free Hit applied. Surfacing this to the squad
+// page lets the transfer UI hide hit-cost messaging when it doesn't apply.
+//
+// Keep this in lockstep with /api/transfers/route.ts → the constant there
+// IS the source of truth; we mirror it here.
+const UNLIMITED_TRANSFERS = true;
+
+async function computeUnlimitedTransfers(teamId: string): Promise<boolean> {
+  if (UNLIMITED_TRANSFERS) return true;
+  const activeStage = await prisma.stage.findFirst({
+    where: { isActive: true },
+    select: { id: true },
+  });
+  if (!activeStage) return true;
+  const teamStage = await prisma.teamStage.findUnique({
+    where: { teamId_stageId: { teamId, stageId: activeStage.id } },
+    select: { chipUsed: true },
+  });
+  return (
+    teamStage?.chipUsed === 'WILDCARD_1' ||
+    teamStage?.chipUsed === 'WILDCARD_2' ||
+    teamStage?.chipUsed === 'FREE_HIT'
+  );
+}
+
 export async function GET(request: NextRequest) {
   try {
     const token = request.cookies.get('auth_token')?.value;
@@ -164,6 +192,8 @@ export async function GET(request: NextRequest) {
       },
     }));
 
+    const unlimitedTransfers = await computeUnlimitedTransfers(team.id);
+
     return NextResponse.json({
       squad,
       teamId: team.id,
@@ -173,6 +203,9 @@ export async function GET(request: NextRequest) {
       // transfer-mode UI (free transfers badge + hits calculation).
       freeTransfers: refreshedTeam?.freeTransfers ?? team.freeTransfers,
       transfersUsed: refreshedTeam?.transfersUsed ?? team.transfersUsed,
+      // When true the squad page suppresses point-hit messaging since
+      // transfers are effectively free.
+      unlimitedTransfers,
     });
 
   } catch (error) {

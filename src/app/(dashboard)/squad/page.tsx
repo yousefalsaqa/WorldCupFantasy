@@ -19,6 +19,10 @@ import {
   parseFixtureDateTime,
 } from '@/lib/format-time';
 import { Trophy, Wallet, Coins, Sparkles, Zap, RefreshCw, Crown, Users, Save, X, Search, Wand2 } from 'lucide-react';
+import {
+  ALL_WC_FIXTURES,
+  NATION_NAMES as WC_NATION_NAMES,
+} from '@/lib/world-cup-fixtures';
 
 // Chips
 interface ChipData {
@@ -64,7 +68,10 @@ interface Player {
 
 type Position = 'GK' | 'DEF' | 'MID' | 'FWD';
 
-// World Cup 2026 Fixtures (Group Stage)
+// Local Fixture interface used by the squad page's "next fixture" tile and
+// the per-player results modal. The actual fixture table is imported from
+// `@/lib/world-cup-fixtures` (single source of truth); the played-game
+// fields below are layered on at runtime when the API returns results.
 interface Fixture {
   id: string;
   home: string;
@@ -75,7 +82,6 @@ interface Fixture {
   isPlayed?: boolean;
   homeScore?: number;
   awayScore?: number;
-  // Player-specific stats (populated when viewing a player's fixtures)
   playerGoals?: number;
   playerAssists?: number;
   playerPoints?: number;
@@ -83,120 +89,21 @@ interface Fixture {
   playerSubbedOff?: boolean;
 }
 
-const WORLD_CUP_FIXTURES: Fixture[] = [
-  // Group A — Mexico, South Africa, South Korea, Czechia
-  { id: '1', home: 'MEX', away: 'RSA', date: '2026-06-11', time: '20:00', stage: 'Group A' },
-  { id: '2', home: 'KOR', away: 'CZE', date: '2026-06-12', time: '14:00', stage: 'Group A' },
-  { id: '3', home: 'RSA', away: 'KOR', date: '2026-06-16', time: '14:00', stage: 'Group A' },
-  { id: '4', home: 'CZE', away: 'MEX', date: '2026-06-16', time: '17:00', stage: 'Group A' },
-  { id: '5', home: 'MEX', away: 'KOR', date: '2026-06-20', time: '17:00', stage: 'Group A' },
-  { id: '6', home: 'CZE', away: 'RSA', date: '2026-06-20', time: '17:00', stage: 'Group A' },
-  // Group B — Canada, Bosnia & Herzegovina, Qatar, Switzerland
-  { id: '7', home: 'CAN', away: 'QAT', date: '2026-06-12', time: '17:00', stage: 'Group B' },
-  { id: '8', home: 'SUI', away: 'BIH', date: '2026-06-12', time: '20:00', stage: 'Group B' },
-  { id: '9', home: 'QAT', away: 'SUI', date: '2026-06-17', time: '14:00', stage: 'Group B' },
-  { id: '10', home: 'BIH', away: 'CAN', date: '2026-06-17', time: '17:00', stage: 'Group B' },
-  { id: '11', home: 'CAN', away: 'SUI', date: '2026-06-21', time: '14:00', stage: 'Group B' },
-  { id: '12', home: 'BIH', away: 'QAT', date: '2026-06-21', time: '14:00', stage: 'Group B' },
-  // Group C — Brazil, Morocco, Haiti, Scotland
-  { id: '13', home: 'BRA', away: 'MAR', date: '2026-06-13', time: '14:00', stage: 'Group C' },
-  { id: '14', home: 'HAI', away: 'SCO', date: '2026-06-13', time: '17:00', stage: 'Group C' },
-  { id: '15', home: 'MAR', away: 'HAI', date: '2026-06-18', time: '14:00', stage: 'Group C' },
-  { id: '16', home: 'SCO', away: 'BRA', date: '2026-06-18', time: '17:00', stage: 'Group C' },
-  { id: '17', home: 'BRA', away: 'HAI', date: '2026-06-23', time: '17:00', stage: 'Group C' },
-  { id: '18', home: 'SCO', away: 'MAR', date: '2026-06-23', time: '17:00', stage: 'Group C' },
-  // Group D — USA, Paraguay, Australia, Türkiye
-  { id: '19', home: 'USA', away: 'PAR', date: '2026-06-13', time: '20:00', stage: 'Group D' },
-  { id: '20', home: 'AUS', away: 'TUR', date: '2026-06-14', time: '14:00', stage: 'Group D' },
-  { id: '21', home: 'PAR', away: 'AUS', date: '2026-06-18', time: '20:00', stage: 'Group D' },
-  { id: '22', home: 'TUR', away: 'USA', date: '2026-06-19', time: '14:00', stage: 'Group D' },
-  { id: '23', home: 'USA', away: 'AUS', date: '2026-06-23', time: '20:00', stage: 'Group D' },
-  { id: '24', home: 'TUR', away: 'PAR', date: '2026-06-23', time: '20:00', stage: 'Group D' },
-  // Group E — Germany, Curaçao, Ivory Coast, Ecuador
-  { id: '25', home: 'GER', away: 'CUW', date: '2026-06-14', time: '14:00', stage: 'Group E' },
-  { id: '26', home: 'CIV', away: 'ECU', date: '2026-06-14', time: '17:00', stage: 'Group E' },
-  { id: '27', home: 'ECU', away: 'GER', date: '2026-06-19', time: '14:00', stage: 'Group E' },
-  { id: '28', home: 'CUW', away: 'CIV', date: '2026-06-19', time: '17:00', stage: 'Group E' },
-  { id: '29', home: 'GER', away: 'CIV', date: '2026-06-24', time: '17:00', stage: 'Group E' },
-  { id: '30', home: 'ECU', away: 'CUW', date: '2026-06-24', time: '17:00', stage: 'Group E' },
-  // Group F — Netherlands, Japan, Sweden, Tunisia
-  { id: '31', home: 'NED', away: 'JPN', date: '2026-06-14', time: '20:00', stage: 'Group F' },
-  { id: '32', home: 'TUN', away: 'SWE', date: '2026-06-15', time: '14:00', stage: 'Group F' },
-  { id: '33', home: 'JPN', away: 'TUN', date: '2026-06-19', time: '20:00', stage: 'Group F' },
-  { id: '34', home: 'SWE', away: 'NED', date: '2026-06-20', time: '14:00', stage: 'Group F' },
-  { id: '35', home: 'NED', away: 'TUN', date: '2026-06-24', time: '20:00', stage: 'Group F' },
-  { id: '36', home: 'SWE', away: 'JPN', date: '2026-06-24', time: '20:00', stage: 'Group F' },
-  // Group G — Belgium, Egypt, Iran, New Zealand
-  { id: '37', home: 'BEL', away: 'EGY', date: '2026-06-15', time: '17:00', stage: 'Group G' },
-  { id: '38', home: 'IRN', away: 'NZL', date: '2026-06-15', time: '20:00', stage: 'Group G' },
-  { id: '39', home: 'EGY', away: 'IRN', date: '2026-06-20', time: '17:00', stage: 'Group G' },
-  { id: '40', home: 'NZL', away: 'BEL', date: '2026-06-20', time: '20:00', stage: 'Group G' },
-  { id: '41', home: 'BEL', away: 'IRN', date: '2026-06-25', time: '14:00', stage: 'Group G' },
-  { id: '42', home: 'NZL', away: 'EGY', date: '2026-06-25', time: '14:00', stage: 'Group G' },
-  // Group H — Spain, Cabo Verde, Saudi Arabia, Uruguay
-  { id: '43', home: 'ESP', away: 'CPV', date: '2026-06-16', time: '14:00', stage: 'Group H' },
-  { id: '44', home: 'KSA', away: 'URU', date: '2026-06-16', time: '17:00', stage: 'Group H' },
-  { id: '45', home: 'URU', away: 'ESP', date: '2026-06-21', time: '14:00', stage: 'Group H' },
-  { id: '46', home: 'CPV', away: 'KSA', date: '2026-06-21', time: '17:00', stage: 'Group H' },
-  { id: '47', home: 'ESP', away: 'KSA', date: '2026-06-26', time: '14:00', stage: 'Group H' },
-  { id: '48', home: 'URU', away: 'CPV', date: '2026-06-26', time: '14:00', stage: 'Group H' },
-  // Group I — France, Senegal, Iraq, Norway
-  { id: '49', home: 'FRA', away: 'SEN', date: '2026-06-16', time: '20:00', stage: 'Group I' },
-  { id: '50', home: 'NOR', away: 'IRQ', date: '2026-06-17', time: '14:00', stage: 'Group I' },
-  { id: '51', home: 'SEN', away: 'NOR', date: '2026-06-21', time: '20:00', stage: 'Group I' },
-  { id: '52', home: 'IRQ', away: 'FRA', date: '2026-06-22', time: '14:00', stage: 'Group I' },
-  { id: '53', home: 'FRA', away: 'NOR', date: '2026-06-26', time: '20:00', stage: 'Group I' },
-  { id: '54', home: 'IRQ', away: 'SEN', date: '2026-06-26', time: '20:00', stage: 'Group I' },
-  // Group J — Argentina, Algeria, Austria, Jordan
-  { id: '55', home: 'ARG', away: 'ALG', date: '2026-06-17', time: '17:00', stage: 'Group J' },
-  { id: '56', home: 'AUT', away: 'JOR', date: '2026-06-17', time: '20:00', stage: 'Group J' },
-  { id: '57', home: 'ALG', away: 'AUT', date: '2026-06-22', time: '14:00', stage: 'Group J' },
-  { id: '58', home: 'ARG', away: 'JOR', date: '2026-06-22', time: '17:00', stage: 'Group J' },
-  { id: '59', home: 'JOR', away: 'ALG', date: '2026-06-27', time: '14:00', stage: 'Group J' },
-  { id: '60', home: 'AUT', away: 'ARG', date: '2026-06-27', time: '14:00', stage: 'Group J' },
-  // Group K — Portugal, DR Congo, Uzbekistan, Colombia
-  { id: '61', home: 'POR', away: 'UZB', date: '2026-06-18', time: '14:00', stage: 'Group K' },
-  { id: '62', home: 'COL', away: 'COD', date: '2026-06-18', time: '17:00', stage: 'Group K' },
-  { id: '63', home: 'UZB', away: 'COL', date: '2026-06-23', time: '14:00', stage: 'Group K' },
-  { id: '64', home: 'COD', away: 'POR', date: '2026-06-23', time: '17:00', stage: 'Group K' },
-  { id: '65', home: 'POR', away: 'COL', date: '2026-06-28', time: '17:00', stage: 'Group K' },
-  { id: '66', home: 'COD', away: 'UZB', date: '2026-06-28', time: '17:00', stage: 'Group K' },
-  // Group L — England, Croatia, Ghana, Panama
-  { id: '67', home: 'ENG', away: 'CRO', date: '2026-06-18', time: '20:00', stage: 'Group L' },
-  { id: '68', home: 'GHA', away: 'PAN', date: '2026-06-19', time: '14:00', stage: 'Group L' },
-  { id: '69', home: 'CRO', away: 'GHA', date: '2026-06-23', time: '20:00', stage: 'Group L' },
-  { id: '70', home: 'PAN', away: 'ENG', date: '2026-06-24', time: '14:00', stage: 'Group L' },
-  { id: '71', home: 'ENG', away: 'GHA', date: '2026-06-28', time: '20:00', stage: 'Group L' },
-  { id: '72', home: 'CRO', away: 'PAN', date: '2026-06-28', time: '20:00', stage: 'Group L' },
-];
+// All 104 World Cup matches (group + knockout). Source of truth lives in
+// `src/lib/world-cup-fixtures.ts`. The cast drops the shared module's
+// `stadium`/`group` fields which the squad page doesn't use.
+const WORLD_CUP_FIXTURES: Fixture[] = ALL_WC_FIXTURES.map((f) => ({
+  id: f.id,
+  home: f.home,
+  away: f.away,
+  date: f.date,
+  time: f.time,
+  stage: f.stage,
+}));
 
-// Nation names for display – all 48 qualified nations
-const NATION_NAMES: Record<string, string> = {
-  // Group A
-  MEX: 'Mexico', RSA: 'South Africa', KOR: 'Korea Republic', CZE: 'Czechia',
-  // Group B
-  CAN: 'Canada', BIH: 'Bosnia & Herzegovina', QAT: 'Qatar', SUI: 'Switzerland',
-  // Group C
-  BRA: 'Brazil', MAR: 'Morocco', HAI: 'Haiti', SCO: 'Scotland',
-  // Group D
-  USA: 'USA', PAR: 'Paraguay', AUS: 'Australia', TUR: 'Türkiye',
-  // Group E
-  GER: 'Germany', CUW: 'Curaçao', CIV: 'Ivory Coast', ECU: 'Ecuador',
-  // Group F
-  NED: 'Netherlands', JPN: 'Japan', SWE: 'Sweden', TUN: 'Tunisia',
-  // Group G
-  BEL: 'Belgium', EGY: 'Egypt', IRN: 'Iran', NZL: 'New Zealand',
-  // Group H
-  ESP: 'Spain', CPV: 'Cabo Verde', KSA: 'Saudi Arabia', URU: 'Uruguay',
-  // Group I
-  FRA: 'France', SEN: 'Senegal', IRQ: 'Iraq', NOR: 'Norway',
-  // Group J
-  ARG: 'Argentina', ALG: 'Algeria', AUT: 'Austria', JOR: 'Jordan',
-  // Group K
-  POR: 'Portugal', COD: 'DR Congo', UZB: 'Uzbekistan', COL: 'Colombia',
-  // Group L
-  ENG: 'England', CRO: 'Croatia', GHA: 'Ghana', PAN: 'Panama',
-};
+// Nation names re-exported from the shared fixture module so squad page,
+// fixtures page and admin dashboards never disagree.
+const NATION_NAMES = WC_NATION_NAMES;
 
 // Get fixtures for a nation
 function getNationFixtures(nationCode: string): Fixture[] {
@@ -306,6 +213,10 @@ export default function SquadPage() {
   // display via `transferDisplaySquad` below.
   const [transferMode, setTransferMode] = useState(false);
   const [freeTransfers, setFreeTransfers] = useState(0);
+  // Mirrors the server-side rule in /api/transfers + /api/squad/get. When
+  // true the transfer UI hides the "Hit" pill and "−X pts" labels so we
+  // don't scare users with a deduction that won't be applied.
+  const [unlimitedTransfers, setUnlimitedTransfers] = useState(false);
   const [pendingTransfers, setPendingTransfers] = useState<
     Array<{ playerOut: Player; playerIn: Player }>
   >([]);
@@ -458,6 +369,7 @@ export default function SquadPage() {
             // correct "X free transfers" badge. The API may not return this
             // pre-tournament — fall back to 0 in that case.
             setFreeTransfers(squadData.freeTransfers ?? 0);
+            setUnlimitedTransfers(Boolean(squadData.unlimitedTransfers));
             
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const players: Player[] = squadData.squad.map((sp: any) => ({
@@ -624,11 +536,14 @@ export default function SquadPage() {
   const projectedBank = bankBalance + transferBudgetImpact;
 
   // Points hit cost = (transfers beyond freeTransfers) × 4. Matches the
-  // server-side rule in /api/transfers.
+  // server-side rule in /api/transfers. Forced to 0 when transfers are
+  // unlimited (pre-tournament, wildcard, free hit) so the UI doesn't show
+  // a deduction the API won't actually apply.
   const transferHitCost = useMemo(() => {
+    if (unlimitedTransfers) return 0;
     const extra = Math.max(0, pendingTransfers.length - freeTransfers);
     return extra * 4;
-  }, [pendingTransfers.length, freeTransfers]);
+  }, [pendingTransfers.length, freeTransfers, unlimitedTransfers]);
 
   // Nation counts after applying pending transfers, used by the picker to
   // grey out players who would breach the 3-per-nation cap. We start from
@@ -1516,18 +1431,36 @@ export default function SquadPage() {
     const tMids = transferDisplaySquad.filter((p) => p.position === 'MID');
     const tFwds = transferDisplaySquad.filter((p) => p.position === 'FWD');
 
-    // Renders one player card with a 44pt-min tap target in the bottom-right
-    // corner. When the player is a pending incoming transfer the button
-    // becomes Undo (amber, prominent); otherwise it's Replace (subtle gold).
+    // Renders one player card as a single tap target.
+    //
+    // Earlier iterations rendered a 44×44pt SWAP/UNDO button overlapping
+    // the bottom-right corner — on xs cards (~58px wide) that button was
+    // larger than the card itself, crowded the name plate, AND overlapped
+    // the SWAP button on the adjacent card thanks to the tight pitch
+    // spacing. The fix:
+    //   • The entire card is the button. Tapping a normal slot opens the
+    //     replacement picker. Tapping a pending-incoming card reverts it.
+    //   • The amber glow ring stays as the primary "this is pending"
+    //     affordance, and a compact UNDO pill renders below the name
+    //     plate so users can spot the action without poking around.
+    //   • A small swap-arrows icon sits in the top-right corner of the
+    //     kit (where the live-points pill normally lives, which is never
+    //     shown in transfer mode) as a discoverability hint.
     const renderTransferCard = (p: Player) => {
       const incoming = isPendingIncoming(p.id);
       return (
-        <div key={p.id} className="relative flex-shrink-0">
+        <button
+          key={p.id}
+          type="button"
+          onClick={() => (incoming ? undoTransfer(p.id) : startReplace(p))}
+          aria-label={incoming ? `Undo swap for ${p.displayName}` : `Replace ${p.displayName}`}
+          className="relative flex-shrink-0 group focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 rounded-2xl"
+        >
           <div
             className={
               incoming
                 ? 'rounded-2xl ring-2 ring-amber-400 shadow-[0_0_22px_rgba(251,191,36,0.45)]'
-                : ''
+                : 'rounded-2xl ring-1 ring-transparent group-active:ring-laliga-gold/40 transition'
             }
           >
             <PlayerCard
@@ -1540,39 +1473,38 @@ export default function SquadPage() {
               size="xs"
             />
           </div>
-          {/* Bottom-right corner action. 44×44pt min tap target per Apple
-              HIG (~11 Tailwind units). The button visually clips below the
-              card so it doesn't crowd the points/captain badges. */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (incoming) {
-                undoTransfer(p.id);
-              } else {
-                startReplace(p);
-              }
-            }}
-            className={`absolute -bottom-2 -right-2 min-w-[44px] min-h-[44px] px-2 rounded-full text-[10px] font-black tracking-wide inline-flex items-center justify-center gap-1 shadow-lg transition-transform active:scale-95 ${
+
+          {/* Top-right corner affordance — sits inside the card, never
+              spills past the kit edge, so adjacent cards never collide.
+              The points-pill slot is unused in transfer mode so this
+              never fights for space with anything else. */}
+          <span
+            className={`absolute -top-1 -right-1 z-20 w-[22px] h-[22px] rounded-full flex items-center justify-center shadow-md pointer-events-none ${
               incoming
                 ? 'bg-amber-400 text-amber-950 ring-2 ring-amber-200'
-                : 'bg-laliga-gold text-laliga-dark ring-2 ring-amber-100/20 hover:bg-amber-300'
+                : 'bg-laliga-gold text-laliga-dark ring-1 ring-amber-100/30'
             }`}
-            aria-label={incoming ? 'Undo transfer' : 'Replace player'}
+            aria-hidden="true"
           >
             {incoming ? (
-              <>
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>UNDO</span>
-              </>
+              <RotateCcw className="w-3 h-3" />
             ) : (
-              <>
-                <ArrowLeftRight className="w-3.5 h-3.5" />
-                <span>SWAP</span>
-              </>
+              <ArrowLeftRight className="w-3 h-3" />
             )}
-          </button>
-        </div>
+          </span>
+
+          {/* Pending-incoming caption. Sits *below* the name plate so the
+              card itself stays the same size — keeps the pitch layout
+              identical between pending and clean states. */}
+          {incoming && (
+            <span
+              className="mt-1 mx-auto block w-fit px-2 py-[2px] rounded-full bg-amber-400 text-amber-950 text-[9px] font-black tracking-wider shadow"
+              aria-hidden="true"
+            >
+              UNDO
+            </span>
+          )}
+        </button>
       );
     };
 
@@ -1615,29 +1547,41 @@ export default function SquadPage() {
                   £{projectedBank.toFixed(1)}m
                 </span>
               </div>
+              {/* Free-transfer counter. While transfers are unlimited
+                  (pre-tournament + wildcard/free-hit weeks) we show ∞
+                  rather than a number, and we drop the Hit pill entirely
+                  below since no deduction can apply. */}
               <div className="px-2.5 py-1 rounded-lg bg-sky-500/10 border border-sky-500/20">
                 <span className="text-white/50 mr-1">Free</span>
                 <span className="font-black text-sky-300">
-                  {Math.max(0, freeTransfers - pendingTransfers.length)}
+                  {unlimitedTransfers
+                    ? '∞'
+                    : Math.max(0, freeTransfers - pendingTransfers.length)}
                 </span>
               </div>
-              <div
-                className={`px-2.5 py-1 rounded-lg border ${
-                  transferHitCost > 0
-                    ? 'bg-red-500/15 border-red-500/30'
-                    : 'bg-white/5 border-white/10'
-                }`}
-              >
-                <span className="text-white/50 mr-1">Hit</span>
-                <span className={`font-black ${transferHitCost > 0 ? 'text-red-300' : 'text-white/70'}`}>
-                  {transferHitCost > 0 ? `-${transferHitCost}` : '0'}
-                </span>
-              </div>
+              {!unlimitedTransfers && (
+                <div
+                  className={`px-2.5 py-1 rounded-lg border ${
+                    transferHitCost > 0
+                      ? 'bg-red-500/15 border-red-500/30'
+                      : 'bg-white/5 border-white/10'
+                  }`}
+                >
+                  <span className="text-white/50 mr-1">Hit</span>
+                  <span
+                    className={`font-black ${transferHitCost > 0 ? 'text-red-300' : 'text-white/70'}`}
+                  >
+                    {transferHitCost > 0 ? `-${transferHitCost}` : '0'}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
           <p className="text-[11px] text-white/40">
-            Tap <span className="text-laliga-gold font-bold">SWAP</span> on a card to replace that player.
-            Tap <span className="text-amber-300 font-bold">UNDO</span> to revert a pending change.
+            Tap a player to{' '}
+            <span className="text-laliga-gold font-bold">replace</span> them.
+            Pending swaps glow amber — tap again to{' '}
+            <span className="text-amber-300 font-bold">undo</span>.
           </p>
         </div>
 
@@ -1700,7 +1644,11 @@ export default function SquadPage() {
                 ? 'Confirming…'
                 : pendingTransfers.length === 0
                 ? 'No transfers yet'
-                : `Confirm ${pendingTransfers.length} transfer${pendingTransfers.length === 1 ? '' : 's'}${transferHitCost > 0 ? ` · -${transferHitCost} pts` : ''}`}
+                : `Confirm ${pendingTransfers.length} transfer${pendingTransfers.length === 1 ? '' : 's'}${
+                    !unlimitedTransfers && transferHitCost > 0
+                      ? ` · -${transferHitCost} pts`
+                      : ''
+                  }`}
             </button>
           </div>
         </div>
@@ -1731,9 +1679,18 @@ export default function SquadPage() {
                     <h2 className="text-base sm:text-lg font-bold text-white truncate">
                       Replace {transferReplacingFor?.displayName}
                     </h2>
+                    {/* The previous "Budget after refund" copy read like a
+                        post-transfer bank balance and was confusing — it's
+                        actually the maximum price for a *single* replacement
+                        (current bank + refund from the player going out). */}
                     <p className="text-xs text-white/40">
-                      Budget after refund: £
-                      {(bankBalance + (transferReplacingFor?.currentPrice ?? 0)).toFixed(1)}m
+                      Bank £{bankBalance.toFixed(1)}m + refund £
+                      {(transferReplacingFor?.currentPrice ?? 0).toFixed(1)}m ·
+                      max £
+                      {(
+                        bankBalance + (transferReplacingFor?.currentPrice ?? 0)
+                      ).toFixed(1)}
+                      m per pick
                     </p>
                   </div>
                 </div>
