@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import IosInstallPrompt from '@/components/ios-install-prompt';
+import SplashRemover from '@/components/splash-remover';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -50,8 +51,25 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
+        {/* Static splash – rendered as part of the initial HTML so it appears
+         * the instant the page is parsed, long before the React bundle
+         * finishes downloading and hydrating. <SplashRemover /> tears this
+         * down once the real app paints. */}
+        <div id="app-splash" aria-hidden="true">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            id="app-splash__logo"
+            src="/icons/apple-touch-icon.png"
+            alt=""
+            width={96}
+            height={96}
+          />
+          <div id="app-splash__spinner" />
+          <div id="app-splash__label">Loading</div>
+        </div>
         {children}
         <IosInstallPrompt />
+        <SplashRemover />
       </body>
     </html>
   );
