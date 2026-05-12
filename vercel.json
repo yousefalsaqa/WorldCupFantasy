@@ -2,5 +2,19 @@
   "buildCommand": "prisma generate && next build",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "regions": ["iad1"]
+  "regions": ["iad1"],
+
+  "_live_scoring_cron_README": [
+    "DISABLED until WC2026 kickoff. To activate live scoring:",
+    "  1. Rename `_crons_disabled` below to `crons`.",
+    "  2. Verify CRON_SECRET is set in Vercel project env vars.",
+    "  3. Redeploy.",
+    "Schedule = every 2 minutes. API-Football refreshes /fixtures/players",
+    "on ~60s. /api/live/update no-ops when no Match is in progress, so",
+    "this cadence is safe on the Pro plan (7,500 req/day)."
+  ],
+
+  "_crons_disabled": [
+    { "path": "/api/live/update", "schedule": "*/2 * * * *" }
+  ]
 }

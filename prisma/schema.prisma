@@ -186,7 +186,12 @@ model PlayerPerformance {
   redCards              Int      @default(0)
   ownGoals              Int      @default(0)
   bonusPoints           Int      @default(0)
-  
+
+  // Defensive Contributions — raw count of (tackles + interceptions +
+  // blocks + duels.won). Used to recompute the per-match points
+  // breakdown when admins/users open the player modal.
+  defensiveActions      Int      @default(0)
+
   totalPoints           Int      @default(0)
   
   // Live tracking

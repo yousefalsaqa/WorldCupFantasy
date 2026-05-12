@@ -164,7 +164,17 @@ export const SCORING = {
   YELLOW_CARD: -1,
   RED_CARD: -3,
   OWN_GOAL: -2,
-  
+
+  // Defensive contributions (mirrors FPL 2024-25 rule). The threshold is
+  // lower for defensive positions because they accumulate fewer of these
+  // actions per match. A "defensive action" sums:
+  //   tackles.total + tackles.interceptions + tackles.blocks + duels.won
+  // (duels.won added intentionally — covers aerial duels won by CBs,
+  // ground duels won when shielding the ball, etc.)
+  DC_BONUS: 2,
+  DC_THRESHOLD_DEF: 10, // also applies to GK
+  DC_THRESHOLD_MID_FWD: 12,
+
   // Bonus (knockout stage goals worth more?)
   KNOCKOUT_GOAL_BONUS: 1, // Extra point for knockout goals
   

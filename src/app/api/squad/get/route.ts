@@ -157,40 +157,80 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const squad = squadPlayers.map(sp => ({
-      id: sp.id,
-      playerId: sp.playerId,
-      purchasePrice: sp.purchasePrice,
-      points: sp.points,
-      isStarting: sp.isStarting,
-      isCaptain: sp.isCaptain,
-      isViceCaptain: sp.isViceCaptain,
-      benchOrder: sp.benchOrder,
-      player: {
-        id: sp.player.id,
-        name: sp.player.displayName,
-        displayName: sp.player.displayName,
-        position: sp.player.position,
-        currentPrice: sp.player.currentPrice,
-        shirtNumber: sp.player.shirtNumber,
-        nation: {
-          id: sp.player.nation.id,
-          name: sp.player.nation.name,
-          code: sp.player.nation.code,
-          kitColor1: sp.player.nation.kitColor1,
-          kitColor2: sp.player.nation.kitColor2,
+    // Live points overlay — when a match is currently in progress and
+    // /api/live/update has written PlayerPerformance rows with
+    // `isLive=true`, we surface a `livePoints` field so the squad page
+    // pill can tick up every 60s without waiting for `SquadPlayer.points`
+    // to be incremented at FT. We keep `points` as the persisted total
+    // so any view that wants the finalized number can still read it.
+    //
+    // Captain multiplier is INTENTIONALLY NOT applied here — `points`
+    // stores raw per-player contributions, not captain-doubled values
+    // (the doubling lives in `Team.totalPoints` via `updateSquadPoints`).
+    // Doubling only the live additions would create an inconsistent
+    // "pill jumps down at FT" UX, so we keep the pill raw and let the
+    // captain armband communicate the multiplier visually.
+    const playerIds = squadPlayers.map(sp => sp.playerId);
+    const livePerfs = playerIds.length > 0
+      ? await prisma.playerPerformance.findMany({
+          where: { playerId: { in: playerIds }, isLive: true },
+          select: { playerId: true, totalPoints: true },
+        })
+      : [];
+    const livePointsByPlayer = new Map<string, number>();
+    for (const perf of livePerfs) {
+      livePointsByPlayer.set(
+        perf.playerId,
+        (livePointsByPlayer.get(perf.playerId) ?? 0) + perf.totalPoints,
+      );
+    }
+
+    // Drive client-side polling. We treat "any match in progress" as the
+    // signal — even if the user's bench is playing, they want the pill
+    // ticking. Count is cheap (indexed bool fields) so we keep it in
+    // every squad-get response.
+    const liveMatchCount = await prisma.match.count({
+      where: { isStarted: true, isFinished: false },
+    });
+
+    const squad = squadPlayers.map(sp => {
+      const liveAdd = livePointsByPlayer.get(sp.playerId) ?? 0;
+      return {
+        id: sp.id,
+        playerId: sp.playerId,
+        purchasePrice: sp.purchasePrice,
+        points: sp.points,
+        livePoints: sp.points + liveAdd,
+        isStarting: sp.isStarting,
+        isCaptain: sp.isCaptain,
+        isViceCaptain: sp.isViceCaptain,
+        benchOrder: sp.benchOrder,
+        player: {
+          id: sp.player.id,
+          name: sp.player.displayName,
+          displayName: sp.player.displayName,
+          position: sp.player.position,
+          currentPrice: sp.player.currentPrice,
+          shirtNumber: sp.player.shirtNumber,
+          nation: {
+            id: sp.player.nation.id,
+            name: sp.player.nation.name,
+            code: sp.player.nation.code,
+            kitColor1: sp.player.nation.kitColor1,
+            kitColor2: sp.player.nation.kitColor2,
+          },
         },
-      },
-      stats: {
-        goals: 0,
-        assists: 0,
-        passAccuracy: 0,
-        interceptions: 0,
-        tackles: 0,
-        dribbles: 0,
-        minutes: 0,
-      },
-    }));
+        stats: {
+          goals: 0,
+          assists: 0,
+          passAccuracy: 0,
+          interceptions: 0,
+          tackles: 0,
+          dribbles: 0,
+          minutes: 0,
+        },
+      };
+    });
 
     const unlimitedTransfers = await computeUnlimitedTransfers(team.id);
 
@@ -206,6 +246,13 @@ export async function GET(request: NextRequest) {
       // When true the squad page suppresses point-hit messaging since
       // transfers are effectively free.
       unlimitedTransfers,
+      // True iff there is at least one match currently in progress. The
+      // squad page polls this endpoint every 60s while this is true so
+      // the live-points pill ticks up. We keep the signal at the response
+      // level (rather than embedded in each squad entry) so the client
+      // can decide whether to start/stop its interval without diffing
+      // per-row data.
+      anyMatchLive: liveMatchCount > 0,
     });
 
   } catch (error) {

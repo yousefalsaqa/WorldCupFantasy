@@ -44,3 +44,6 @@ next-env.d.ts
 
 .vercel
 .env*.local
+
+# Live-test snapshots saved from /admin/live-test
+live-test-*.json

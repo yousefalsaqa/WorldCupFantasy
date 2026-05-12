@@ -136,6 +136,19 @@ export interface APIPlayerStats {
       key: number | null;
       accuracy: string | null;
     };
+    // Defensive stat block — feeds the DC bonus (10 actions for DEF/GK,
+    // 12 for MID/FWD → +2). Every field is independently nullable
+    // because not every league/season populates them, but in major
+    // competitions API-Football fills them in reliably.
+    tackles?: {
+      total: number | null;
+      blocks: number | null;
+      interceptions: number | null;
+    };
+    duels?: {
+      total: number | null;
+      won: number | null;
+    };
   }>;
 }
 
@@ -162,7 +175,16 @@ export const MATCH_STATUS = {
 // ============================================
 
 class APIFootballClient {
-  private rateLimitRemaining = 100;
+  // The two independent counters API-Football enforces. We surface both
+  // so the admin UI can warn before a polling loop blows the daily quota
+  // OR trips the per-minute burst limit.
+  //
+  // Defaults assume the free plan (100/day, 10/min) — the real values
+  // come back in headers on the very first response.
+  private dailyRemaining = 100;
+  private minuteRemaining = 10;
+  private dailyLimit = 100;
+  private minuteLimit = 10;
   private lastRequestTime = 0;
   private minRequestInterval = 1000; // 1 second between requests
 
@@ -193,12 +215,22 @@ class APIFootballClient {
       throw new Error(`API-Football request failed: ${response.status} ${response.statusText}`);
     }
 
-    // Track rate limits
-    const remaining = response.headers.get('x-ratelimit-requests-remaining');
-    if (remaining) {
-      this.rateLimitRemaining = parseInt(remaining, 10);
-      console.log(`[API-Football] Rate limit remaining: ${this.rateLimitRemaining}`);
-    }
+    // Track rate limits — both daily (x-ratelimit-requests-*) and
+    // per-minute (X-Ratelimit-*) are returned on every response.
+    const dailyRemaining = response.headers.get('x-ratelimit-requests-remaining');
+    const dailyLimit = response.headers.get('x-ratelimit-requests-limit');
+    const minuteRemaining = response.headers.get('x-ratelimit-remaining');
+    const minuteLimit = response.headers.get('x-ratelimit-limit');
+
+    if (dailyRemaining) this.dailyRemaining = parseInt(dailyRemaining, 10);
+    if (dailyLimit) this.dailyLimit = parseInt(dailyLimit, 10);
+    if (minuteRemaining) this.minuteRemaining = parseInt(minuteRemaining, 10);
+    if (minuteLimit) this.minuteLimit = parseInt(minuteLimit, 10);
+
+    console.log(
+      `[API-Football] Rate limits: day ${this.dailyRemaining}/${this.dailyLimit}, ` +
+        `min ${this.minuteRemaining}/${this.minuteLimit}`,
+    );
 
     const data = await response.json();
     
@@ -242,6 +274,38 @@ class APIFootballClient {
       season: WORLD_CUP_SEASON,
       live: 'all',
     });
+    return response.response;
+  }
+
+  /**
+   * Live fixtures across ALL leagues, anywhere in the world. Used by the
+   * admin live-test UI to pick a real in-progress match to validate the
+   * scoring engine against before WC kickoff. Costs 1 daily request.
+   */
+  async getLiveFixturesGlobal(): Promise<APIFixture[]> {
+    const response = await this.makeRequest<APIFixture[]>('/fixtures', {
+      live: 'all',
+    });
+    return response.response;
+  }
+
+  /**
+   * Fixtures on a specific date (YYYY-MM-DD). Optional `league` filter +
+   * required-when-league-given `season` (API-Football enforces this pair).
+   * For European leagues the season is the START year of the season —
+   * e.g. La Liga 2025-26 = season 2025. Costs 1 daily request.
+   */
+  async getFixturesByDate(
+    date: string,
+    league?: number,
+    season?: number,
+  ): Promise<APIFixture[]> {
+    const params: Record<string, string | number> = { date };
+    if (league !== undefined) {
+      params.league = league;
+      if (season !== undefined) params.season = season;
+    }
+    const response = await this.makeRequest<APIFixture[]>('/fixtures', params);
     return response.response;
   }
 
@@ -309,8 +373,23 @@ class APIFootballClient {
   // UTILITY METHODS
   // ============================================
 
+  /** Daily request quota remaining (free plan = 100/day). */
   getRateLimitRemaining(): number {
-    return this.rateLimitRemaining;
+    return this.dailyRemaining;
+  }
+
+  /**
+   * Snapshot of both rate-limit counters. Used by the admin live-test UI
+   * to render a quota gauge before polling and decide whether to back off.
+   */
+  getRateLimits(): {
+    daily: { remaining: number; limit: number };
+    minute: { remaining: number; limit: number };
+  } {
+    return {
+      daily: { remaining: this.dailyRemaining, limit: this.dailyLimit },
+      minute: { remaining: this.minuteRemaining, limit: this.minuteLimit },
+    };
   }
 
   isMatchLive(status: string): boolean {
@@ -331,7 +410,7 @@ class APIFootballClient {
   // ============================================
 
   getRemainingRequests(): number {
-    return this.rateLimitRemaining;
+    return this.dailyRemaining;
   }
 
   async getTeams(): Promise<APITeam[]> {

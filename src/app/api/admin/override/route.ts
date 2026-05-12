@@ -89,8 +89,11 @@ export async function POST(request: NextRequest) {
         reason: reason || 'Manual adjustment',
       });
     } else {
-      // Total adjustment - add to the most recent match or create adjustment record
-      // Find the most recent match for this player's nation
+      // Total adjustment - try to attach to a finished match first; if the
+      // player's nation has no finished matches yet (eg. pre-tournament),
+      // fall back to incrementing SquadPlayer.points directly across every
+      // team that owns the player. That keeps the override working as a
+      // pure "test bonus" knob before any real fixtures exist.
       const recentMatch = await prisma.match.findFirst({
         where: {
           OR: [
@@ -102,8 +105,9 @@ export async function POST(request: NextRequest) {
         orderBy: { id: 'desc' },
       });
 
+      let squadRowsTouched = 0;
+
       if (recentMatch) {
-        // Add to the most recent match performance
         const performance = await prisma.playerPerformance.findFirst({
           where: { playerId, matchId: recentMatch.id },
         });
@@ -126,14 +130,18 @@ export async function POST(request: NextRequest) {
             },
           });
         }
-      } else {
-        return NextResponse.json(
-          { error: 'No matches found for this player. Use match-specific adjustment.' },
-          { status: 400 }
-        );
       }
 
-      // Log the action
+      // Always increment every squad-row that owns this player so the
+      // adjustment is visible on the squad page regardless of whether the
+      // player has any PlayerPerformance row to attach to. This is the
+      // path Haaland-pre-WC hit before — now it just works.
+      const squadUpdate = await prisma.squadPlayer.updateMany({
+        where: { playerId },
+        data: { points: { increment: points } },
+      });
+      squadRowsTouched = squadUpdate.count;
+
       await prisma.auditLog.create({
         data: {
           action: 'MANUAL_OVERRIDE_TOTAL',
@@ -143,6 +151,8 @@ export async function POST(request: NextRequest) {
             pointsAdded: points,
             reason: reason || 'Manual total adjustment',
             adminUserId: admin.userId,
+            attachedToMatchId: recentMatch?.id ?? null,
+            squadRowsTouched,
           }),
           userId: admin.userId,
         },
@@ -154,6 +164,8 @@ export async function POST(request: NextRequest) {
         player: player.displayName,
         pointsAdded: points,
         reason: reason || 'Manual total adjustment',
+        attachedToMatch: recentMatch?.id ?? null,
+        squadRowsTouched,
       });
     }
   } catch (error) {

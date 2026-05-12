@@ -3,12 +3,13 @@
 // Polls API-Football for live match data and updates performances
 // ============================================
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { apiFootball, MATCH_STATUS } from '@/lib/api-football';
 import { LiveScoringCalculator } from '@/lib/live-scoring';
 import { API_ID_TO_NATION } from '@/lib/team-mappings';
-import { requireAdmin } from '@/lib/auth';
+import { getSession } from '@/lib/auth';
+import { updateSquadPoints } from '@/lib/squad-points';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,17 +22,44 @@ interface UpdateResult {
 }
 
 // Support both GET and POST for cron services
-export async function GET() {
-  return handleUpdate();
+export async function GET(request: NextRequest) {
+  return handleUpdate(request);
 }
 
-export async function POST() {
-  return handleUpdate();
+export async function POST(request: NextRequest) {
+  return handleUpdate(request);
 }
 
-async function handleUpdate() {
+/**
+ * Allow access from one of two callers:
+ *   1. Vercel Cron — sends `Authorization: Bearer ${CRON_SECRET}` on every
+ *      scheduled invocation (per Vercel's cron docs).
+ *   2. An authenticated admin — so the manual "Update Live Scores" button
+ *      on /admin keeps working without leaking the cron secret to the
+ *      browser.
+ *
+ * If CRON_SECRET is unset we fall back to admin-only access — protects
+ * dev/preview environments where the env var hasn't been configured yet
+ * (better to break cron than to leave the endpoint world-writable).
+ */
+async function isAuthorized(request: NextRequest): Promise<boolean> {
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret) {
+    const authHeader = request.headers.get('authorization');
+    if (authHeader === `Bearer ${cronSecret}`) return true;
+  }
+  const session = await getSession();
+  return !!session?.isAdmin;
+}
+
+async function handleUpdate(request: NextRequest) {
   try {
-    // Cron jobs don't have auth, so we allow unauthenticated calls
+    if (!(await isAuthorized(request))) {
+      return NextResponse.json(
+        { error: 'Unauthorized — provide a valid CRON_SECRET bearer token or an admin session' },
+        { status: 401 },
+      );
+    }
     console.log('[Live Update] Running update...');
 
     const results: UpdateResult[] = [];
@@ -189,6 +217,7 @@ async function handleUpdate() {
               yellowCards: perf.yellowCards,
               redCards: perf.redCards,
               ownGoals: perf.ownGoals,
+              defensiveActions: perf.defensiveActions ?? 0,
               totalPoints: perf.totalPoints,
               isLive: isLive,
               lastUpdated: new Date(),
@@ -205,6 +234,7 @@ async function handleUpdate() {
               yellowCards: perf.yellowCards,
               redCards: perf.redCards,
               ownGoals: perf.ownGoals,
+              defensiveActions: perf.defensiveActions ?? 0,
               totalPoints: perf.totalPoints,
               isLive: isLive,
               lastUpdated: new Date(),
@@ -259,80 +289,6 @@ async function handleUpdate() {
   }
 }
 
-/**
- * Update squad player points from their performances
- */
-async function updateSquadPoints(matchId: string) {
-  // Get all performances for this match
-  const performances = await prisma.playerPerformance.findMany({
-    where: { matchId },
-    include: { player: true },
-  });
-
-  // Update each player's squad entry
-  for (const perf of performances) {
-    await prisma.squadPlayer.updateMany({
-      where: { playerId: perf.playerId },
-      data: {
-        points: {
-          increment: perf.totalPoints,
-        },
-      },
-    });
-  }
-
-  // Update team total points
-  const teamsWithPlayers = await prisma.team.findMany({
-    include: {
-      squadPlayers: {
-        where: {
-          player: {
-            performances: {
-              some: { matchId },
-            },
-          },
-        },
-        include: {
-          player: {
-            include: {
-              performances: {
-                where: { matchId },
-              },
-            },
-          },
-        },
-      },
-    },
-  });
-
-  for (const team of teamsWithPlayers) {
-    let stagePoints = 0;
-
-    for (const sp of team.squadPlayers) {
-      const perf = sp.player.performances[0];
-      if (perf) {
-        let points = perf.totalPoints;
-        
-        // Apply captain/vice-captain multiplier
-        if (sp.isCaptain) {
-          points *= 2; // Captain gets 2x
-        }
-        
-        // Only count starting XI + auto-subs
-        if (sp.isStarting) {
-          stagePoints += points;
-        }
-      }
-    }
-
-    // Update team total points
-    await prisma.team.update({
-      where: { id: team.id },
-      data: {
-        totalPoints: {
-          increment: stagePoints,
-        },
-      },
-    });
-  }
-}
+// updateSquadPoints lives in @/lib/squad-points so the admin match
+// simulator can call the same finalization routine without duplicating
+// the captain-multiplier / starting-XI math.

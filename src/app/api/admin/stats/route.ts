@@ -82,7 +82,10 @@ export async function GET() {
       byNation.set(n.id, {
         code: n.code,
         name: n.name,
-        group: n.group,
+        // Prisma column is nullable (some nations are pre-draw / friendlies);
+        // collapse null to empty string so the dashboard renders "—" instead
+        // of crashing on the typed interface.
+        group: n.group ?? '',
         total: 0,
         gk: 0,
         def: 0,

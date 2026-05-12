@@ -68,6 +68,59 @@ interface Player {
 
 type Position = 'GK' | 'DEF' | 'MID' | 'FWD';
 
+// Per-match performance payload returned by GET /api/players/[id]/performances.
+// Mirrors the response shape exactly so the modal can render points
+// breakdowns without any client-side scoring logic.
+interface BreakdownLine {
+  label: string;
+  points: number;
+  detail?: string;
+}
+interface PlayerPerformancePayload {
+  id: string;
+  matchId: string;
+  isLive: boolean;
+  lastUpdated: string | null;
+  match: {
+    id: string;
+    stageId: string;
+    stageName: string;
+    kickoffTime: string;
+    homeNation: { code: string; name: string };
+    awayNation: { code: string; name: string };
+    homeScore: number | null;
+    awayScore: number | null;
+    isFinished: boolean;
+    isStarted: boolean;
+    currentMinute: number | null;
+  };
+  stats: {
+    minutesPlayed: number;
+    goals: number;
+    assists: number;
+    cleanSheet: boolean;
+    goalsConceeded: number;
+    saves: number;
+    penaltiesSaved: number;
+    penaltiesMissed: number;
+    yellowCards: number;
+    redCards: number;
+    ownGoals: number;
+    defensiveActions: number;
+    bonusPoints: number;
+  };
+  breakdown: { lines: BreakdownLine[]; total: number };
+  totalPoints: number;
+}
+interface PlayerAdjustmentPayload {
+  id: string;
+  action: string;
+  createdAt: string;
+  pointsAdded?: number;
+  reason?: string;
+  matchId: string | null;
+}
+
 // Local Fixture interface used by the squad page's "next fixture" tile and
 // the per-player results modal. The actual fixture table is imported from
 // `@/lib/world-cup-fixtures` (single source of truth); the played-game
@@ -203,6 +256,17 @@ export default function SquadPage() {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [playerToSub, setPlayerToSub] = useState<Player | null>(null);
 
+  // Real per-match performance data for the player detail modal. Loaded
+  // lazily when a player is selected. Drives the "click a match → see
+  // points breakdown" UX. We store an empty array (not null) while
+  // loading so the table renders skeletons instead of remounting.
+  const [playerPerformances, setPlayerPerformances] = useState<PlayerPerformancePayload[] | null>(null);
+  const [playerAdjustments, setPlayerAdjustments] = useState<PlayerAdjustmentPayload[]>([]);
+  const [performancesLoading, setPerformancesLoading] = useState(false);
+  const [performancesError, setPerformancesError] = useState<string | null>(null);
+  // Which performance row is expanded in the modal (matches perf.id).
+  const [expandedPerformanceId, setExpandedPerformanceId] = useState<string | null>(null);
+
   // Transfer mode state
   //
   // Transfer mode is a sub-state of "view" mode — the team is built and we're
@@ -217,6 +281,10 @@ export default function SquadPage() {
   // true the transfer UI hides the "Hit" pill and "−X pts" labels so we
   // don't scare users with a deduction that won't be applied.
   const [unlimitedTransfers, setUnlimitedTransfers] = useState(false);
+  // True iff at least one match is currently in progress. Drives the
+  // 60-second `livePoints` polling effect below — when nothing's live we
+  // don't burn DB cycles on a useless poll loop.
+  const [anyMatchLive, setAnyMatchLive] = useState(false);
   const [pendingTransfers, setPendingTransfers] = useState<
     Array<{ playerOut: Player; playerIn: Player }>
   >([]);
@@ -316,6 +384,46 @@ export default function SquadPage() {
     }
   };
 
+  // Fetch real per-match performances when the player modal opens. Resets
+  // expansion + cached data when the user switches to a different player
+  // (or closes the modal). The endpoint is cheap (one player, one
+  // performance query, one audit-log scan) so we don't bother debouncing.
+  useEffect(() => {
+    if (!selectedPlayer) {
+      setPlayerPerformances(null);
+      setPlayerAdjustments([]);
+      setExpandedPerformanceId(null);
+      setPerformancesError(null);
+      return;
+    }
+    const playerId = selectedPlayer.id;
+    let cancelled = false;
+    setPerformancesLoading(true);
+    setPerformancesError(null);
+    setExpandedPerformanceId(null);
+    (async () => {
+      try {
+        const res = await fetch(`/api/players/${playerId}/performances`, {
+          credentials: 'include',
+        });
+        if (!res.ok) throw new Error(`Status ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        setPlayerPerformances(data.performances || []);
+        setPlayerAdjustments(data.adjustments || []);
+      } catch (err) {
+        if (cancelled) return;
+        console.error('Failed to load performances:', err);
+        setPerformancesError('Failed to load match history');
+        setPlayerPerformances([]);
+        setPlayerAdjustments([]);
+      } finally {
+        if (!cancelled) setPerformancesLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedPlayer]);
+
   // Prevent body scroll when modal is open. Keep this minimal – the previous
   // position:fixed + scroll-restore dance was a known iOS Safari freeze trigger.
   useEffect(() => {
@@ -370,7 +478,8 @@ export default function SquadPage() {
             // pre-tournament — fall back to 0 in that case.
             setFreeTransfers(squadData.freeTransfers ?? 0);
             setUnlimitedTransfers(Boolean(squadData.unlimitedTransfers));
-            
+            setAnyMatchLive(Boolean(squadData.anyMatchLive));
+
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const players: Player[] = squadData.squad.map((sp: any) => ({
               id: sp.player.id,
@@ -382,7 +491,10 @@ export default function SquadPage() {
               isStarting: sp.isStarting,
               isCaptain: sp.isCaptain,
               isViceCaptain: sp.isViceCaptain,
-              points: sp.points || 0,
+              // Prefer the server-computed `livePoints` (raw stored + any
+              // in-progress PlayerPerformance totals). Falls back to plain
+              // `points` for partial squads / pre-tournament responses.
+              points: sp.livePoints ?? sp.points ?? 0,
               stats: sp.stats || {
                 goals: 0,
                 assists: 0,
@@ -467,6 +579,55 @@ export default function SquadPage() {
       ctrl.abort();
     };
   }, [loadAttempt]);
+
+  // ============================================
+  // LIVE POINTS POLLING
+  // ============================================
+  // Refetch /api/squad/get every 60s while a match is in progress so the
+  // green points pill ticks up without the user needing to reload. We
+  // intentionally only update `points` on the existing player rows (not
+  // mode/formation/captain etc.) so polling doesn't disturb UI state
+  // that the user may be actively manipulating (transfers, captaincy).
+  //
+  // The 60-second cadence matches API-Football's own update floor for
+  // /fixtures/players (the upstream signal `/api/live/update` reads).
+  // Going faster wouldn't surface any new data.
+  useEffect(() => {
+    if (!anyMatchLive) return;
+    if (mode !== 'view') return; // builder mode doesn't display live points
+
+    let cancelled = false;
+    const intervalId = window.setInterval(async () => {
+      try {
+        const res = await fetch('/api/squad/get', { credentials: 'include' });
+        if (cancelled || !res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setAnyMatchLive(Boolean(data.anyMatchLive));
+        if (!Array.isArray(data.squad)) return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const livePointsByPlayerId = new Map<string, number>();
+        for (const sp of data.squad as Array<{ player: { id: string }; livePoints?: number; points?: number }>) {
+          livePointsByPlayerId.set(sp.player.id, sp.livePoints ?? sp.points ?? 0);
+        }
+        const applyLive = (players: Player[]) =>
+          players.map((p) => {
+            const live = livePointsByPlayerId.get(p.id);
+            return live !== undefined ? { ...p, points: live } : p;
+          });
+        setSquad((prev) => applyLive(prev));
+        setStartingXI((prev) => applyLive(prev));
+        setBench((prev) => applyLive(prev));
+      } catch {
+        // Network blips are non-fatal during polling — try again next tick.
+      }
+    }, 60_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [anyMatchLive, mode]);
 
   // Calculate squad stats
   const squadValue = useMemo(() => squad.reduce((sum, p) => sum + p.currentPrice, 0), [squad]);
@@ -2400,96 +2561,156 @@ export default function SquadPage() {
                 </div>
               </div>
 
-              {/* Fixtures Table */}
+              {/* Match History — real per-match performances with a
+                  click-to-expand points breakdown. Replaces the old static
+                  fixtures table that always showed dashes. */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Fixtures</h3>
-                  <FdrLegend />
+                  <h3 className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Match History</h3>
+                  {performancesLoading && (
+                    <span className="text-[9px] text-white/30">Loading…</span>
+                  )}
                 </div>
                 <div className="rounded-lg border border-white/10 overflow-hidden">
-                  {/* Table Header */}
                   <div className="grid grid-cols-12 gap-1 bg-white/5 px-2 py-1.5 text-[9px] font-bold text-white/40 uppercase tracking-wider items-center">
-                    <div className="col-span-3">Date</div>
-                    <div className="col-span-5">Opponent</div>
+                    <div className="col-span-4">Match</div>
+                    <div className="col-span-2 text-center">Min</div>
                     <div className="col-span-1 text-center">G</div>
                     <div className="col-span-1 text-center">A</div>
-                    <div className="col-span-2 text-center">Pts</div>
+                    <div className="col-span-1 text-center">DC</div>
+                    <div className="col-span-3 text-right">Pts</div>
                   </div>
 
-                  {/* Table Body */}
-                  <div className="max-h-40 overflow-y-auto">
-                    {getNationFixtures(selectedPlayer.nation?.code || '').map((fixture) => {
-                      const opponent = fixture.home === selectedPlayer.nation?.code ? fixture.away : fixture.home;
-                      const opponentName = NATION_NAMES[opponent] || opponent;
-                      const fixtureDate = parseFixtureDateTime(fixture.date, fixture.time);
-                      const isPast = fixtureDate < new Date();
-                      const isPlayed = fixture.isPlayed;
-                      const isHome = fixture.home === selectedPlayer.nation?.code;
-                      const fdr = getFixtureDifficulty(selectedPlayer.nation?.code || '', opponent);
-
-                      const goals = isPlayed ? (fixture.playerGoals || 0) : null;
-                      const assists = isPlayed ? (fixture.playerAssists || 0) : null;
-                      const points = isPlayed ? (fixture.playerPoints || 0) : null;
-
+                  <div className="max-h-72 overflow-y-auto">
+                    {performancesError && (
+                      <div className="text-center text-rose-400 text-[11px] py-3">{performancesError}</div>
+                    )}
+                    {!performancesError && playerPerformances && playerPerformances.length === 0 && (
+                      <div className="text-center text-white/30 text-xs py-3">No matches yet</div>
+                    )}
+                    {(playerPerformances || []).map((perf) => {
+                      const playerNation = selectedPlayer.nation?.code || '';
+                      const isHome = perf.match.homeNation.code === playerNation;
+                      const opponent = isHome ? perf.match.awayNation : perf.match.homeNation;
+                      const isExpanded = expandedPerformanceId === perf.id;
+                      const score = perf.match.homeScore != null && perf.match.awayScore != null
+                        ? `${perf.match.homeScore}-${perf.match.awayScore}`
+                        : '–';
                       return (
-                        <div
-                          key={fixture.id}
-                          className={`grid grid-cols-12 gap-1 px-2 py-1.5 border-t border-white/5 items-center ${
-                            isPast && !isPlayed ? 'opacity-40' : ''
-                          }`}
-                        >
-                          {/* Date */}
-                          <div className="col-span-3 text-[10px] text-white/60">
-                            {formatFixtureDate(fixture.date)}
-                          </div>
+                        <div key={perf.id} className="border-t border-white/5">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedPerformanceId(isExpanded ? null : perf.id)}
+                            className={`w-full grid grid-cols-12 gap-1 px-2 py-1.5 items-center text-left hover:bg-white/5 transition-colors ${
+                              perf.isLive ? 'bg-emerald-500/5' : ''
+                            }`}
+                          >
+                            <div className="col-span-4 flex items-center gap-1.5 min-w-0">
+                              <img
+                                src={getFlagUrl(opponent.code)}
+                                alt={opponent.code}
+                                className="w-4 h-3 rounded-sm object-cover ring-1 ring-white/10 shrink-0"
+                              />
+                              <span className="text-[10px] text-white/80 font-medium truncate">
+                                {isHome ? 'vs' : '@'} {opponent.code}
+                              </span>
+                              <span className="text-[9px] text-white/40 ml-auto shrink-0">{score}</span>
+                              {perf.isLive && (
+                                <span className="inline-flex items-center gap-1 px-1 py-[1px] rounded bg-emerald-500/20 text-emerald-300 text-[8px] font-bold ring-1 ring-emerald-400/40">
+                                  <span className="w-1 h-1 bg-emerald-400 rounded-full animate-pulse" />
+                                  LIVE
+                                </span>
+                              )}
+                            </div>
+                            <div className="col-span-2 text-center text-[10px] text-white/60 font-medium">{perf.stats.minutesPlayed}'</div>
+                            <div className="col-span-1 text-center">
+                              <span className={`text-[10px] font-bold ${perf.stats.goals > 0 ? 'text-emerald-400' : 'text-white/40'}`}>{perf.stats.goals}</span>
+                            </div>
+                            <div className="col-span-1 text-center">
+                              <span className={`text-[10px] font-bold ${perf.stats.assists > 0 ? 'text-emerald-400' : 'text-white/40'}`}>{perf.stats.assists}</span>
+                            </div>
+                            <div className="col-span-1 text-center">
+                              <span className={`text-[10px] font-bold ${perf.stats.defensiveActions > 0 ? 'text-sky-300' : 'text-white/40'}`}>{perf.stats.defensiveActions}</span>
+                            </div>
+                            <div className="col-span-3 text-right flex items-center justify-end gap-1">
+                              <span className={`text-[11px] font-black ${perf.totalPoints > 0 ? 'text-emerald-400' : perf.totalPoints < 0 ? 'text-rose-400' : 'text-white/50'}`}>
+                                {perf.totalPoints}
+                              </span>
+                              <span className={`text-white/30 text-[10px] transition-transform ${isExpanded ? 'rotate-90' : ''}`}>›</span>
+                            </div>
+                          </button>
 
-                          {/* Opponent (flag + difficulty pill) */}
-                          <div className="col-span-5 flex items-center gap-1.5 min-w-0">
-                            <img
-                              src={getFlagUrl(opponent)}
-                              alt={opponent}
-                              className="w-4 h-3 rounded-sm object-cover ring-1 ring-white/10 shrink-0"
-                            />
-                            <span className="text-[10px] text-white/80 font-medium truncate">
-                              {isHome ? 'vs' : '@'} {opponentName}
-                            </span>
-                            <span
-                              className={`shrink-0 ml-auto inline-flex items-center justify-center w-4 h-4 rounded-sm text-[9px] font-black ${fdrPill(fdr)}`}
-                              title={`FDR ${fdr}`}
-                            >
-                              {fdr}
-                            </span>
-                          </div>
-
-                          {/* Goals */}
-                          <div className="col-span-1 text-center">
-                            <span className={`text-[10px] font-bold ${goals && goals > 0 ? 'text-emerald-400' : 'text-white/40'}`}>
-                              {goals ?? '–'}
-                            </span>
-                          </div>
-
-                          {/* Assists */}
-                          <div className="col-span-1 text-center">
-                            <span className={`text-[10px] font-bold ${assists && assists > 0 ? 'text-emerald-400' : 'text-white/40'}`}>
-                              {assists ?? '–'}
-                            </span>
-                          </div>
-
-                          {/* Points */}
-                          <div className="col-span-2 text-center">
-                            <span className={`text-[10px] font-bold ${points && points > 0 ? 'text-emerald-400' : 'text-white/40'}`}>
-                              {points ?? '–'}
-                            </span>
-                          </div>
+                          {isExpanded && (
+                            <div className="bg-black/30 px-3 py-2 border-t border-white/5">
+                              <div className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-1.5">
+                                {perf.match.stageName} · {new Date(perf.match.kickoffTime).toLocaleDateString()}
+                              </div>
+                              {perf.breakdown.lines.length === 0 ? (
+                                <div className="text-[10px] text-white/30 italic">No scoring events yet.</div>
+                              ) : (
+                                <div className="space-y-1">
+                                  {perf.breakdown.lines.map((line, idx) => (
+                                    <div key={idx} className="flex items-center justify-between gap-2 text-[10px]">
+                                      <span className="text-white/70 truncate">
+                                        {line.label}
+                                        {line.detail && (
+                                          <span className="text-white/30 ml-1">({line.detail})</span>
+                                        )}
+                                      </span>
+                                      <span className={`font-bold tabular-nums ${
+                                        line.points > 0 ? 'text-emerald-400' :
+                                        line.points < 0 ? 'text-rose-400' : 'text-white/40'
+                                      }`}>
+                                        {line.points > 0 ? `+${line.points}` : line.points}
+                                      </span>
+                                    </div>
+                                  ))}
+                                  <div className="flex items-center justify-between gap-2 text-[10px] pt-1 mt-1 border-t border-white/10">
+                                    <span className="text-white/80 font-bold uppercase tracking-wider">Total</span>
+                                    <span className={`font-black tabular-nums ${
+                                      perf.breakdown.total > 0 ? 'text-emerald-400' :
+                                      perf.breakdown.total < 0 ? 'text-rose-400' : 'text-white/60'
+                                    }`}>
+                                      {perf.breakdown.total > 0 ? `+${perf.breakdown.total}` : perf.breakdown.total}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
-                    {getNationFixtures(selectedPlayer.nation?.code || '').length === 0 && (
-                      <div className="text-center text-white/30 text-xs py-3">No fixtures</div>
-                    )}
                   </div>
                 </div>
               </div>
+
+              {/* Manual Adjustments — shows recent admin overrides for
+                  this player so users can see (e.g.) the +8 "crad test"
+                  applied via the Emergency Override panel. */}
+              {playerAdjustments.length > 0 && (
+                <div>
+                  <h3 className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2">Adjustments</h3>
+                  <div className="rounded-lg border border-white/10 overflow-hidden divide-y divide-white/5">
+                    {playerAdjustments.slice(0, 5).map((adj) => (
+                      <div key={adj.id} className="px-2 py-1.5 flex items-center gap-2 text-[10px]">
+                        <span className={`font-bold tabular-nums shrink-0 ${
+                          (adj.pointsAdded ?? 0) > 0 ? 'text-emerald-400' :
+                          (adj.pointsAdded ?? 0) < 0 ? 'text-rose-400' : 'text-white/50'
+                        }`}>
+                          {(adj.pointsAdded ?? 0) > 0 ? '+' : ''}{adj.pointsAdded ?? 0}
+                        </span>
+                        <span className="text-white/70 truncate flex-1">
+                          {adj.reason || (adj.action === 'MANUAL_OVERRIDE_MATCH' ? 'Match adjustment' : 'Total adjustment')}
+                        </span>
+                        <span className="text-white/30 text-[9px] shrink-0">
+                          {new Date(adj.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
