@@ -300,11 +300,16 @@ export async function GET(
 
     // Recent manual-override audit entries that mention this player.
     // We can't index AuditLog by playerId (it's just a JSON blob), so we
-    // do a coarse filter on action + LIKE on details, capped at 20.
+    // do a coarse filter on action + LIKE on details. We exclude
+    // reverted entries (revertedAt != null) AND we never return the
+    // paired MANUAL_OVERRIDE_REVERTED bookkeeping rows. The result is
+    // a clean "what's actually in effect on this player right now"
+    // list — no +X/-X audit ladder.
     const rawAdjustments = await prisma.auditLog.findMany({
       where: {
         action: { in: ['MANUAL_OVERRIDE_MATCH', 'MANUAL_OVERRIDE_TOTAL'] },
         details: { contains: playerId },
+        revertedAt: null,
       },
       orderBy: { createdAt: 'desc' },
       take: 20,

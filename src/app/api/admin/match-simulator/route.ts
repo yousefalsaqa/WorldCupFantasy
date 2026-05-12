@@ -25,7 +25,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth';
 import { SCORING } from '@/lib/wc-constants';
-import { updateSquadPoints } from '@/lib/squad-points';
+import { updateSquadPoints, rollbackSquadPoints } from '@/lib/squad-points';
 import { maybeAdvanceStage } from '@/lib/stage-advance';
 
 export const dynamic = 'force-dynamic';
@@ -128,6 +128,21 @@ export async function GET(request: NextRequest) {
         orderBy: { displayName: 'asc' },
       });
 
+      // Stages + nations are surfaced so the simulator UI can render an
+      // inline "Create test match" form when the DB has zero matches
+      // (or when the admin wants a quick throw-away fixture for testing
+      // without bouncing to /admin/fixtures).
+      const [stages, nations] = await Promise.all([
+        prisma.stage.findMany({
+          orderBy: { order: 'asc' },
+          select: { id: true, stageId: true, name: true, isActive: true },
+        }),
+        prisma.nation.findMany({
+          orderBy: { name: 'asc' },
+          select: { id: true, code: true, name: true },
+        }),
+      ]);
+
       return NextResponse.json({
         matches: matches.map((m) => ({
           id: m.id,
@@ -159,6 +174,8 @@ export async function GET(request: NextRequest) {
           nationCode: p.nation?.code ?? null,
           nationName: p.nation?.name ?? null,
         })),
+        stages,
+        nations,
       });
     }
 
@@ -172,12 +189,115 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/**
+ * Create a test Match between two nations in a given stage. This is the
+ * simulator's "self-service" path so admins don't need to bounce out to
+ * /admin/fixtures to seed a fixture before running the live → FT loop.
+ *
+ * Body shape:
+ *   { action: 'create-match',
+ *     stageId: string,        // Prisma Stage.id (NOT Stage.stageId)
+ *     homeNationId: string,
+ *     awayNationId: string,
+ *     kickoffTime?: string }  // ISO; defaults to "now" so the cron
+ *                              // would-treat it as recently-started
+ *
+ * Returns the created Match with stage + nations included so the UI can
+ * auto-select it on the next context refresh.
+ */
+async function handleCreateMatch(body: Record<string, unknown>) {
+  const stageId = typeof body.stageId === 'string' ? body.stageId : null;
+  const homeNationId = typeof body.homeNationId === 'string' ? body.homeNationId : null;
+  const awayNationId = typeof body.awayNationId === 'string' ? body.awayNationId : null;
+  const kickoffTimeRaw = typeof body.kickoffTime === 'string' ? body.kickoffTime : null;
+
+  if (!stageId || !homeNationId || !awayNationId) {
+    return NextResponse.json(
+      { error: 'stageId, homeNationId, and awayNationId are required' },
+      { status: 400 },
+    );
+  }
+  if (homeNationId === awayNationId) {
+    return NextResponse.json(
+      { error: 'Home and away nations must be different' },
+      { status: 400 },
+    );
+  }
+
+  // Validate stage + nations exist. Cheap and protects against typos
+  // from the client (much friendlier error than a Prisma FK violation).
+  const [stage, homeNation, awayNation] = await Promise.all([
+    prisma.stage.findUnique({ where: { id: stageId } }),
+    prisma.nation.findUnique({ where: { id: homeNationId } }),
+    prisma.nation.findUnique({ where: { id: awayNationId } }),
+  ]);
+  if (!stage) return NextResponse.json({ error: 'Stage not found' }, { status: 404 });
+  if (!homeNation) return NextResponse.json({ error: 'Home nation not found' }, { status: 404 });
+  if (!awayNation) return NextResponse.json({ error: 'Away nation not found' }, { status: 404 });
+
+  const kickoffTime = kickoffTimeRaw ? new Date(kickoffTimeRaw) : new Date();
+  if (Number.isNaN(kickoffTime.getTime())) {
+    return NextResponse.json({ error: 'Invalid kickoffTime' }, { status: 400 });
+  }
+
+  const match = await prisma.match.create({
+    data: {
+      stageId,
+      homeNationId,
+      awayNationId,
+      kickoffTime,
+    },
+    include: {
+      stage: { select: { stageId: true, name: true } },
+      homeNation: { select: { code: true, name: true } },
+      awayNation: { select: { code: true, name: true } },
+    },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: null,
+      action: 'SIMULATOR_MATCH_CREATED',
+      details: JSON.stringify({
+        matchId: match.id,
+        stage: match.stage.stageId,
+        home: match.homeNation.code,
+        away: match.awayNation.code,
+        kickoffTime: kickoffTime.toISOString(),
+      }),
+    },
+  });
+
+  return NextResponse.json({
+    ok: true,
+    action: 'create-match',
+    match: {
+      id: match.id,
+      stageId: match.stage.stageId,
+      stageName: match.stage.name,
+      homeNation: match.homeNation,
+      awayNation: match.awayNation,
+      kickoffTime: match.kickoffTime,
+      isStarted: false,
+      isFinished: false,
+    },
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     await requireAdmin();
     const body = await request.json();
-    const { action, matchId } = body as { action: string; matchId: string };
+    const { action } = body as { action: string };
 
+    // The `create-match` action is the only one that doesn't operate on
+    // an existing matchId — it CREATES the match. Handle it first so the
+    // matchId-required guard below doesn't reject the call.
+    if (action === 'create-match') {
+      return await handleCreateMatch(body);
+    }
+
+    const { matchId } = body as { matchId: string };
     if (!matchId) {
       return NextResponse.json({ error: 'matchId is required' }, { status: 400 });
     }
@@ -378,11 +498,20 @@ export async function POST(request: NextRequest) {
 
     if (action === 'reset') {
       // Wipe perf rows AND revert match flags so the simulator can re-seed.
-      // This deletes data — only safe in dev. Intended workflow:
-      //   start → tick → tick → finish → reset → start fresh.
-      // Note: this does NOT roll back SquadPlayer.points (no audit
-      // for those increments). If you want to clean those, do it
-      // manually in psql / via the admin override panel.
+      // Intended workflow: start → tick → tick → finish → reset → start fresh.
+      //
+      // If the match was previously Finished, we run the inverse of
+      // updateSquadPoints FIRST (before deleting perf rows — otherwise
+      // we'd lose the data we need to subtract). This makes Reset
+      // round-trip clean: finishing and then resetting leaves the DB
+      // in the same `SquadPlayer.points` + `Team.totalPoints` state as
+      // before the Finish ever happened.
+      let rolledBack = false;
+      if (match.isFinished) {
+        await rollbackSquadPoints(matchId);
+        rolledBack = true;
+      }
+
       await prisma.playerPerformance.deleteMany({ where: { matchId } });
       await prisma.match.update({
         where: { id: matchId },
@@ -395,7 +524,7 @@ export async function POST(request: NextRequest) {
           lastUpdated: new Date(),
         },
       });
-      return NextResponse.json({ ok: true, action: 'reset' });
+      return NextResponse.json({ ok: true, action: 'reset', rolledBack });
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });

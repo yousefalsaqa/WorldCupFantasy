@@ -54,6 +54,17 @@ interface AdminSquadEntry {
   isCaptain: boolean;
   points: number;
 }
+interface SimStage {
+  id: string;          // Prisma id
+  stageId: string;     // 'GR1' etc.
+  name: string;
+  isActive: boolean;
+}
+interface SimNation {
+  id: string;
+  code: string;
+  name: string;
+}
 
 export default function MatchSimulatorPage() {
   const [loading, setLoading] = useState(true);
@@ -63,7 +74,17 @@ export default function MatchSimulatorPage() {
   const [matches, setMatches] = useState<SimMatch[]>([]);
   const [adminSquad, setAdminSquad] = useState<AdminSquadEntry[]>([]);
   const [allPlayers, setAllPlayers] = useState<SimPlayer[]>([]);
+  const [stages, setStages] = useState<SimStage[]>([]);
+  const [nations, setNations] = useState<SimNation[]>([]);
   const [selectedMatchId, setSelectedMatchId] = useState<string>('');
+
+  // Inline "Create test match" form state. Hidden by default and
+  // auto-expanded when the matches list is empty.
+  const [showCreateMatch, setShowCreateMatch] = useState(false);
+  const [newMatchStageId, setNewMatchStageId] = useState<string>('');
+  const [newMatchHomeId, setNewMatchHomeId] = useState<string>('');
+  const [newMatchAwayId, setNewMatchAwayId] = useState<string>('');
+  const [creatingMatch, setCreatingMatch] = useState(false);
 
   // Local seed lineup (10 players, 5 per nation) that's about to be
   // written to the DB when admin clicks "Go LIVE".
@@ -83,6 +104,21 @@ export default function MatchSimulatorPage() {
       setMatches(data.matches || []);
       setAdminSquad(data.adminSquad || []);
       setAllPlayers(data.allPlayers || []);
+      setStages(data.stages || []);
+      setNations(data.nations || []);
+
+      // Pre-fill the create-match form with the active stage so the
+      // first-time-empty case is one click away from a usable match.
+      const active = (data.stages as SimStage[] | undefined)?.find((s) => s.isActive);
+      if (active) {
+        setNewMatchStageId((prev) => prev || active.id);
+      }
+
+      // Auto-expand the create form if there are zero matches — that's
+      // the only path forward when starting from a fresh DB.
+      if ((data.matches?.length ?? 0) === 0) {
+        setShowCreateMatch(true);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load matches');
     } finally {
@@ -147,6 +183,53 @@ export default function MatchSimulatorPage() {
       throw new Error(data.error || `Status ${res.status}`);
     }
     return res.json();
+  };
+
+  const onCreateMatch = async () => {
+    if (!newMatchStageId || !newMatchHomeId || !newMatchAwayId) {
+      setError('Pick a stage and two different nations');
+      return;
+    }
+    if (newMatchHomeId === newMatchAwayId) {
+      setError('Home and away must be different nations');
+      return;
+    }
+    setError(null);
+    setCreatingMatch(true);
+    setStatusMsg('Creating test match...');
+    try {
+      const res = await fetch('/api/admin/match-simulator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'create-match',
+          stageId: newMatchStageId,
+          homeNationId: newMatchHomeId,
+          awayNationId: newMatchAwayId,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Status ${res.status}`);
+      }
+      const data = await res.json();
+      await loadContext();
+      // Auto-select the newly created match so admin can immediately
+      // click "Seed lineup → Go LIVE" without scrolling the dropdown.
+      if (data.match?.id) {
+        setSelectedMatchId(data.match.id);
+      }
+      setShowCreateMatch(false);
+      setNewMatchHomeId('');
+      setNewMatchAwayId('');
+      setStatusMsg(`Created ${data.match?.homeNation?.code} vs ${data.match?.awayNation?.code} — ready to seed.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create match');
+      setStatusMsg(null);
+    } finally {
+      setCreatingMatch(false);
+    }
   };
 
   const onGoLive = async () => {
@@ -223,13 +306,22 @@ export default function MatchSimulatorPage() {
 
   const onReset = async () => {
     if (!selectedMatchId) return;
-    if (!confirm('Wipe all PlayerPerformance rows for this match and reset its flags?\n\nNote: This does NOT roll back SquadPlayer.points that were already banked by a previous Finish.')) {
-      return;
-    }
+    const wasFinished = selectedMatch?.isFinished ?? false;
+    const msg = wasFinished
+      ? 'This match was Finished. Reset will roll back banked points\n(decrement SquadPlayer.points + Team.totalPoints) AND wipe perf rows.\n\nContinue?'
+      : 'Wipe all PlayerPerformance rows for this match and reset its flags?';
+    if (!confirm(msg)) return;
     setStatusMsg('Resetting...');
     try {
-      await post({ action: 'reset', matchId: selectedMatchId });
-      setStatusMsg('Match reset to pre-kickoff.');
+      const result = (await post({
+        action: 'reset',
+        matchId: selectedMatchId,
+      })) as { rolledBack?: boolean };
+      setStatusMsg(
+        result.rolledBack
+          ? 'Match reset to pre-kickoff. Points rolled back.'
+          : 'Match reset to pre-kickoff.',
+      );
       setSeedLineup([]);
       await refresh();
     } catch (err) {
@@ -255,9 +347,24 @@ export default function MatchSimulatorPage() {
         )}
 
         <section className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-white/60">1 · Pick a match</h2>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-white/60">1 · Pick a match</h2>
+            <button
+              type="button"
+              onClick={() => setShowCreateMatch((v) => !v)}
+              className="text-xs px-2.5 py-1 rounded-md bg-white/5 border border-white/10 text-white/70 hover:bg-white/10"
+            >
+              {showCreateMatch ? 'Hide create form' : '+ Create test match'}
+            </button>
+          </div>
+
           {loading ? (
             <div className="text-white/40 text-sm">Loading matches…</div>
+          ) : matches.length === 0 ? (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-amber-200 text-sm">
+              No matches in the database yet. Use the form below to spin up a quick test fixture
+              — or seed the real WC bracket via <a href="/admin/fixtures" className="underline">/admin/fixtures</a>.
+            </div>
           ) : (
             <select
               value={selectedMatchId}
@@ -292,6 +399,60 @@ export default function MatchSimulatorPage() {
               )}
               <span>·</span>
               <span>{selectedMatch.performanceCount} perf rows ({selectedMatch.liveCount} live)</span>
+            </div>
+          )}
+
+          {showCreateMatch && (
+            <div className="rounded-lg border border-white/10 bg-slate-900/50 p-3 space-y-2 mt-2">
+              <p className="text-white/50 text-xs">
+                Quick-create a Match row between two nations in a stage. Kickoff time defaults to "now"
+                so the live cron treats it as in-progress immediately. After creation you can Seed →
+                Go LIVE → Tick → Finish as usual.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+                <select
+                  value={newMatchStageId}
+                  onChange={(e) => setNewMatchStageId(e.target.value)}
+                  className="bg-slate-900 border border-white/10 rounded-lg px-2 py-1.5"
+                >
+                  <option value="">— Stage —</option>
+                  {stages.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      [{s.stageId}] {s.name}{s.isActive ? ' (active)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={newMatchHomeId}
+                  onChange={(e) => setNewMatchHomeId(e.target.value)}
+                  className="bg-slate-900 border border-white/10 rounded-lg px-2 py-1.5"
+                >
+                  <option value="">— Home nation —</option>
+                  {nations.map((n) => (
+                    <option key={n.id} value={n.id}>{n.code} · {n.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={newMatchAwayId}
+                  onChange={(e) => setNewMatchAwayId(e.target.value)}
+                  className="bg-slate-900 border border-white/10 rounded-lg px-2 py-1.5"
+                >
+                  <option value="">— Away nation —</option>
+                  {nations.map((n) => (
+                    <option key={n.id} value={n.id} disabled={n.id === newMatchHomeId}>
+                      {n.code} · {n.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={onCreateMatch}
+                disabled={creatingMatch || !newMatchStageId || !newMatchHomeId || !newMatchAwayId}
+                className="px-3 py-1.5 rounded-md bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 text-sm font-bold hover:bg-emerald-500/30 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {creatingMatch ? 'Creating…' : 'Create test match'}
+              </button>
             </div>
           )}
         </section>

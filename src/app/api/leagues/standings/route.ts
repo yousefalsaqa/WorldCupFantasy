@@ -41,13 +41,23 @@ export async function GET() {
       .sort((a, b) => b.totalPoints - a.totalPoints)
       .map((team, index) => ({ ...team, rank: index + 1 }));
 
-    return NextResponse.json({ 
+    // Tell the client whether there's at least one match in progress.
+    // The /leagues page uses this to drive a "poll while live, refresh
+    // once after FT" loop — we don't want continuous polling when
+    // nothing is happening (per user-requested behavior: "the league
+    // should poll at the end of the gameday").
+    const liveMatchCount = await prisma.match.count({
+      where: { isStarted: true, isFinished: false },
+    });
+
+    return NextResponse.json({
       leagueName: globalLeague.name,
-      standings 
+      standings,
+      anyMatchLive: liveMatchCount > 0,
     });
   } catch (error) {
     console.error('Error fetching standings:', error);
-    return NextResponse.json({ standings: [] }, { status: 500 });
+    return NextResponse.json({ standings: [], anyMatchLive: false }, { status: 500 });
   }
 }
 

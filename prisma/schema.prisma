@@ -377,6 +377,14 @@ model AuditLog {
   details   String
   ipAddress String?
   createdAt DateTime @default(now())
+  // When this entry was reverted (via /api/admin/override DELETE for
+  // manual point adjustments). Null = still in effect. UIs hide
+  // reverted entries from default views so they don't clutter the
+  // Adjustments list with +X/-X pairs.
+  revertedAt        DateTime?
+  // ID of the audit entry that reverted this one (a row whose action
+  // is "MANUAL_OVERRIDE_REVERTED"). Lets admins trace cause/effect.
+  revertedByAuditId String?
   
   @@index([userId])
   @@index([action])

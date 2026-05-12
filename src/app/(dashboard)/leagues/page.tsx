@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 
 interface Standing {
@@ -18,34 +18,68 @@ export default function LeaguesPage() {
   const [leagueName, setLeagueName] = useState('');
   const [loading, setLoading] = useState(true);
   const [currentUserTeamId, setCurrentUserTeamId] = useState<string | null>(null);
+  const [anyMatchLive, setAnyMatchLive] = useState(false);
+  // Last time we successfully refreshed standings. Surfaced in the UI
+  // so the user can see how stale the table is without F5'ing.
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  // Track previous "live" state across polls so we can fire one final
+  // refresh when matches transition from in-progress to all-FT (the
+  // "end of gameday" moment).
+  const wasLiveRef = useRef(false);
+
+  const refreshStandings = useCallback(async () => {
+    try {
+      const res = await fetch('/api/leagues/standings');
+      if (res.ok) {
+        const data = await res.json();
+        setStandings(data.standings ?? []);
+        setLeagueName(data.leagueName || 'Global League');
+        setAnyMatchLive(!!data.anyMatchLive);
+        setLastUpdated(new Date());
+      }
+    } catch (error) {
+      console.error('Failed to refresh standings:', error);
+    }
+  }, []);
 
   useEffect(() => {
-    async function fetchData() {
+    async function fetchInitial() {
       try {
-        // Fetch current user's team
         const teamRes = await fetch('/api/team', { credentials: 'include' });
         if (teamRes.ok) {
           const teamData = await teamRes.json();
-          if (teamData.team) {
-            setCurrentUserTeamId(teamData.team.id);
-          }
+          if (teamData.team) setCurrentUserTeamId(teamData.team.id);
         }
-        
-        // Fetch standings
-        const res = await fetch('/api/leagues/standings');
-        if (res.ok) {
-          const data = await res.json();
-          setStandings(data.standings);
-          setLeagueName(data.leagueName || 'Global League');
-        }
-      } catch (error) {
-        console.error('Failed to fetch data:', error);
+        await refreshStandings();
       } finally {
         setLoading(false);
       }
     }
-    fetchData();
-  }, []);
+    fetchInitial();
+  }, [refreshStandings]);
+
+  // Polling loop. Per user-requested behavior: only poll while at least
+  // one match is in progress (so we catch the moment a goal banks in
+  // real time and the end-of-gameday transition), and stop once
+  // everything has settled to FT. The "one final refresh after the
+  // last live match flips" is handled by the wasLiveRef check below.
+  useEffect(() => {
+    if (!anyMatchLive) {
+      if (wasLiveRef.current) {
+        // Live → all FT transition. Do one last refresh so the table
+        // reflects whatever just got banked in the closing minute.
+        wasLiveRef.current = false;
+        refreshStandings();
+      }
+      return;
+    }
+    wasLiveRef.current = true;
+    // 60s cadence mirrors /squad's live pill — fast enough to feel
+    // responsive, slow enough not to hammer Neon during a full slate
+    // of WC matches.
+    const interval = setInterval(refreshStandings, 60_000);
+    return () => clearInterval(interval);
+  }, [anyMatchLive, refreshStandings]);
 
   if (loading) {
     return (
@@ -58,9 +92,38 @@ export default function LeaguesPage() {
   return (
     <div className="max-w-4xl mx-auto p-6">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">{leagueName}</h1>
-        <p className="text-white/60">Click on any team to view their squad</p>
+      <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
+        <div>
+          <h1 className="text-3xl font-bold text-white mb-2">{leagueName}</h1>
+          <p className="text-white/60">Click on any team to view their squad</p>
+        </div>
+        {/* Live indicator + last-refresh stamp. We only show "Live" while
+            matches are actually in progress; otherwise it sits at "Idle" so
+            users can tell the table isn't auto-updating (per the
+            poll-only-during-gameday rule). */}
+        <div className="flex items-center gap-2 text-xs text-white/40">
+          {anyMatchLive ? (
+            <span className="flex items-center gap-1.5 text-emerald-400">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              Live — auto-refreshing
+            </span>
+          ) : (
+            <span className="text-white/30">Idle (no live matches)</span>
+          )}
+          {lastUpdated && (
+            <>
+              <span className="text-white/20">·</span>
+              <span>Updated {lastUpdated.toLocaleTimeString()}</span>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={refreshStandings}
+            className="ml-2 px-2 py-0.5 rounded border border-white/10 text-white/60 hover:text-white hover:border-white/20"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Standings Table */}

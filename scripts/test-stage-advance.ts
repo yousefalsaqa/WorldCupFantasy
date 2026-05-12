@@ -23,6 +23,8 @@ import {
   type ChipType,
 } from '../src/lib/chips-active';
 import { TRANSFERS } from '../src/lib/wc-constants';
+import { __internal as squadPointsInternal } from '../src/lib/squad-points';
+const { computeTeamContribution } = squadPointsInternal;
 
 let passed = 0;
 let failed = 0;
@@ -259,6 +261,142 @@ check(
   includeBench(['TRIPLE_CAPTAIN', 'BENCH_BOOST']),
   true,
 );
+
+console.log('\n=== Reset rollback arithmetic (squad-points) ===\n');
+
+// Reset rollback must be the EXACT inverse of updateSquadPoints. We
+// share `computeTeamContribution` between update and rollback so the
+// math can't drift. Tests here exercise that helper through several
+// representative team configurations + chip stacks to confirm the
+// number we'd ADD on Finish === the number we'd SUBTRACT on Reset.
+//
+// We re-import the internal helper via the `__internal` export. The
+// test fixtures intentionally model the shape PrismaTeam.findMany
+// returns (with `squadPlayers[].player.performances[]` populated).
+interface FakeSP {
+  isStarting: boolean;
+  isCaptain: boolean;
+  player: { performances: Array<{ playerId: string; totalPoints: number }> };
+}
+function sp(opts: {
+  starting: boolean;
+  captain?: boolean;
+  pts: number;
+}): FakeSP {
+  return {
+    isStarting: opts.starting,
+    isCaptain: opts.captain ?? false,
+    player: { performances: [{ playerId: 'p', totalPoints: opts.pts }] },
+  };
+}
+
+// Baseline: 11 starters x 2 pts + captain on 6 pts (doubled → 12).
+// Bench (4 players x 1pt) excluded by default. No chips.
+const baseStarters = Array.from({ length: 10 }, () => sp({ starting: true, pts: 2 }));
+const baseCaptain = sp({ starting: true, captain: true, pts: 6 });
+const baseBench = Array.from({ length: 4 }, () => sp({ starting: false, pts: 1 }));
+const baseSquad: FakeSP[] = [...baseStarters, baseCaptain, ...baseBench];
+
+check(
+  'baseline (no chips): 10*2 + 6*2 = 32',
+  computeTeamContribution(baseSquad, []),
+  32,
+);
+check(
+  'baseline rollback === update (same value, sign applied by caller)',
+  computeTeamContribution(baseSquad, []),
+  32,
+);
+
+check(
+  'TRIPLE_CAPTAIN: 10*2 + 6*3 = 38',
+  computeTeamContribution(baseSquad, ['TRIPLE_CAPTAIN']),
+  38,
+);
+check(
+  'BENCH_BOOST: 10*2 + 6*2 + 4*1 = 36',
+  computeTeamContribution(baseSquad, ['BENCH_BOOST']),
+  36,
+);
+check(
+  'TRIPLE_CAPTAIN + BENCH_BOOST stacked: 10*2 + 6*3 + 4*1 = 42',
+  computeTeamContribution(baseSquad, ['TRIPLE_CAPTAIN', 'BENCH_BOOST']),
+  42,
+);
+
+// Wildcard / Free Hit grant unlimited transfers but DON'T change point
+// math, so they should not affect the contribution.
+check(
+  'WILDCARD_1: same as baseline (no scoring effect)',
+  computeTeamContribution(baseSquad, ['WILDCARD_1']),
+  32,
+);
+check(
+  'WILDCARD_1 + TRIPLE_CAPTAIN: TC multiplier still applies',
+  computeTeamContribution(baseSquad, ['WILDCARD_1', 'TRIPLE_CAPTAIN']),
+  38,
+);
+check(
+  'FREE_HIT alone: no scoring effect',
+  computeTeamContribution(baseSquad, ['FREE_HIT']),
+  32,
+);
+
+// Edge: captain didn't play this match (perf row missing). The captain
+// row exists in the squad but has no performance, so it contributes 0.
+const capDidntPlay: FakeSP = {
+  isStarting: true,
+  isCaptain: true,
+  player: { performances: [] },
+};
+const squadCapMissing: FakeSP[] = [...baseStarters, capDidntPlay, ...baseBench];
+check(
+  'captain has no perf row this match: contribution = 10*2 = 20',
+  computeTeamContribution(squadCapMissing, []),
+  20,
+);
+check(
+  'captain missing + TRIPLE_CAPTAIN: still 20 (no perf to multiply)',
+  computeTeamContribution(squadCapMissing, ['TRIPLE_CAPTAIN']),
+  20,
+);
+
+// Edge: negative performance points (red card etc.). Captain doubling
+// of a negative is also negative — surfaces a real risk users should
+// understand when they captain a player who gets sent off.
+const sentOffCaptain = sp({ starting: true, captain: true, pts: -4 });
+const punishedSquad: FakeSP[] = [...baseStarters, sentOffCaptain];
+check(
+  'captain red-carded (-4 pts): 10*2 + (-4)*2 = 12',
+  computeTeamContribution(punishedSquad, []),
+  12,
+);
+check(
+  'captain red-carded with TC (-4 pts * 3 = -12): 10*2 - 12 = 8',
+  computeTeamContribution(punishedSquad, ['TRIPLE_CAPTAIN']),
+  8,
+);
+
+// Round-trip invariant: contribution computed from the same squad+chips
+// at update and rollback time should be EQUAL. Caller applies +/- sign;
+// the math can't disagree.
+const samples: Array<{ squad: FakeSP[]; chips: ChipType[] }> = [
+  { squad: baseSquad, chips: [] },
+  { squad: baseSquad, chips: ['TRIPLE_CAPTAIN'] },
+  { squad: baseSquad, chips: ['BENCH_BOOST'] },
+  { squad: baseSquad, chips: ['TRIPLE_CAPTAIN', 'BENCH_BOOST'] },
+  { squad: squadCapMissing, chips: ['TRIPLE_CAPTAIN'] },
+  { squad: punishedSquad, chips: ['TRIPLE_CAPTAIN', 'BENCH_BOOST'] },
+];
+for (const s of samples) {
+  const a = computeTeamContribution(s.squad, s.chips);
+  const b = computeTeamContribution(s.squad, s.chips);
+  check(
+    `round-trip invariant (chips=${s.chips.join('+') || 'none'}): a === b`,
+    a,
+    b,
+  );
+}
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);

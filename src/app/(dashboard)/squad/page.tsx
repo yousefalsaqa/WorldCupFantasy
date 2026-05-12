@@ -264,6 +264,12 @@ export default function SquadPage() {
   const [playerAdjustments, setPlayerAdjustments] = useState<PlayerAdjustmentPayload[]>([]);
   const [performancesLoading, setPerformancesLoading] = useState(false);
   const [performancesError, setPerformancesError] = useState<string | null>(null);
+  // Only admins see the "Undo" button on each Adjustment row inside the
+  // player modal. We fetch isAdmin once on mount via /api/auth/me — the
+  // endpoint is shared with the dashboard layout so the response is hot
+  // by the time the squad page hydrates.
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [undoingAdjustmentId, setUndoingAdjustmentId] = useState<string | null>(null);
   // Which performance row is expanded in the modal (matches perf.id).
   const [expandedPerformanceId, setExpandedPerformanceId] = useState<string | null>(null);
 
@@ -383,6 +389,26 @@ export default function SquadPage() {
       setChipCancelConfirm(null);
     }
   };
+
+  // One-shot fetch on mount to learn whether the viewer is an admin.
+  // Drives visibility of the "Undo" button on Adjustment rows. We don't
+  // gate any data access on this — the override DELETE endpoint
+  // re-validates admin server-side. This is purely UI affordance.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setIsAdmin(Boolean(data?.user?.isAdmin));
+      } catch {
+        /* non-fatal — non-admins just don't see the Undo button */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Fetch real per-match performances when the player modal opens. Resets
   // expansion + cached data when the user switches to a different player
@@ -1093,6 +1119,78 @@ export default function SquadPage() {
       return;
     }
     performSwap(playerToSub, player);
+  };
+
+  // Undo a manual override (admin-only). Calls the override DELETE
+  // endpoint which:
+  //   1. Decrements PlayerPerformance.bonusPoints + totalPoints (if attached)
+  //   2. Decrements every SquadPlayer.points row owning this player
+  //   3. Decrements every Team.totalPoints owning this player (captain ×2)
+  //   4. Marks the original audit entry as reverted + writes a paired
+  //      MANUAL_OVERRIDE_REVERTED row (both hidden from the modal feed)
+  // The modal feed is refreshed after success so the row disappears in
+  // place rather than leaving a stale "+8" lingering.
+  const handleUndoAdjustment = async (auditId: string) => {
+    if (!selectedPlayer || undoingAdjustmentId) return;
+    if (typeof window !== 'undefined' && !window.confirm(
+      'Undo this adjustment? Points will be reversed across every team that owns this player and the entry will be hidden from this list.'
+    )) {
+      return;
+    }
+    setUndoingAdjustmentId(auditId);
+    try {
+      const res = await fetch(
+        `/api/admin/override?auditId=${encodeURIComponent(auditId)}`,
+        { method: 'DELETE', credentials: 'include' },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data?.error || 'Failed to undo adjustment');
+        return;
+      }
+      // Optimistically drop the row, then trigger a full refresh so
+      // squad pill points + Team.totalPoints reflect the reversal.
+      setPlayerAdjustments((prev) => prev.filter((a) => a.id !== auditId));
+      try {
+        const refreshed = await fetch(
+          `/api/players/${selectedPlayer.id}/performances`,
+          { credentials: 'include' },
+        );
+        if (refreshed.ok) {
+          const fresh = await refreshed.json();
+          setPlayerPerformances(fresh.performances || []);
+          setPlayerAdjustments(fresh.adjustments || []);
+        }
+      } catch { /* non-fatal */ }
+      // Also re-pull the squad endpoint so the per-card points pill
+      // updates in place (without disturbing modes/captaincy/transfers).
+      // Mirrors the 60s live-poll path above.
+      try {
+        const sres = await fetch('/api/squad/get', { credentials: 'include' });
+        if (sres.ok) {
+          const sdata = await sres.json();
+          if (Array.isArray(sdata.squad)) {
+            const livePointsByPlayerId = new Map<string, number>();
+            for (const sp of sdata.squad as Array<{ player: { id: string }; livePoints?: number; points?: number }>) {
+              livePointsByPlayerId.set(sp.player.id, sp.livePoints ?? sp.points ?? 0);
+            }
+            const apply = (players: Player[]) =>
+              players.map((p) => {
+                const v = livePointsByPlayerId.get(p.id);
+                return v !== undefined ? { ...p, points: v } : p;
+              });
+            setSquad((prev) => apply(prev));
+            setStartingXI((prev) => apply(prev));
+            setBench((prev) => apply(prev));
+          }
+        }
+      } catch { /* non-fatal */ }
+    } catch (err) {
+      console.error('Undo failed:', err);
+      alert('Failed to undo adjustment');
+    } finally {
+      setUndoingAdjustmentId(null);
+    }
   };
 
   // Drag handlers
@@ -2706,6 +2804,17 @@ export default function SquadPage() {
                         <span className="text-white/30 text-[9px] shrink-0">
                           {new Date(adj.createdAt).toLocaleDateString()}
                         </span>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => handleUndoAdjustment(adj.id)}
+                            disabled={undoingAdjustmentId === adj.id}
+                            className="shrink-0 px-1.5 py-0.5 rounded bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-[9px] font-bold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            title="Undo this adjustment (admin only)"
+                          >
+                            {undoingAdjustmentId === adj.id ? '…' : 'Undo'}
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
