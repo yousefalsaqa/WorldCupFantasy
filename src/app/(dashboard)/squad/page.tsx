@@ -325,9 +325,17 @@ export default function SquadPage() {
     }
   }, []);
 
+  // Fire the chips fetch on mount IN PARALLEL with /api/squad/get
+  // (which is what flips the page into 'view' mode). Previously this
+  // was gated on `mode === 'view'`, which meant chips only started
+  // loading AFTER squad-get resolved — a visible serial waterfall.
+  // /api/chips is independent of squad state, so we can run it
+  // immediately. If the user turns out to be in 'builder' mode the
+  // chips card won't render, but the fetched payload is harmless to
+  // sit in state.
   useEffect(() => {
-    if (mode === 'view') fetchChips();
-  }, [mode, fetchChips]);
+    fetchChips();
+  }, [fetchChips]);
 
   // The `now` value above (via useNow(60_000)) drives both the squad
   // deadline tile and the chip countdowns, so we don't need a second timer

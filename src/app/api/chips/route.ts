@@ -21,6 +21,16 @@ const CHIP_META: Record<ChipType, { name: string; description: string }> = {
   FREE_HIT: { name: 'Free Hit', description: 'Unlimited transfers for one stage \u2013 squad reverts after' },
 };
 
+// Knockout stages unlock Wildcard 2. We hide WC2 from the chip array
+// entirely until the user is at or past R32 so it doesn't show up as a
+// "locked / coming soon" card during the group phase. The POST handler
+// also rejects WC2 activation in non-knockout stages as a server-side
+// safety net.
+const KNOCKOUT_STAGE_IDS = new Set(['R32', 'R16', 'QF', 'SF', '3RD', 'F']);
+function isKnockoutStage(stageId: string | undefined | null): boolean {
+  return !!stageId && KNOCKOUT_STAGE_IDS.has(stageId);
+}
+
 interface FreeHitSnapshotPlayer {
   playerId: string;
   purchasePrice: number;
@@ -149,9 +159,13 @@ export async function GET() {
       };
     };
 
+    // Build the visible chip list. WC2 is hidden entirely until the
+    // active stage is a knockout stage — keeps the chips card to four
+    // cards in the group phase and five once knockouts begin.
+    const showWildcard2 = isKnockoutStage(activeStage?.stageId);
     const chips = [
       buildChip('WILDCARD_1', team.wildcard1Used),
-      buildChip('WILDCARD_2', team.wildcard2Used),
+      ...(showWildcard2 ? [buildChip('WILDCARD_2', team.wildcard2Used)] : []),
       buildChip('FREE_HIT', team.freeHitUsed),
       buildChip('TRIPLE_CAPTAIN', team.tripleCaptainUsed),
       buildChip('BENCH_BOOST', team.benchBoostUsed),
