@@ -10,6 +10,7 @@ import { LiveScoringCalculator } from '@/lib/live-scoring';
 import { API_ID_TO_NATION } from '@/lib/team-mappings';
 import { getSession } from '@/lib/auth';
 import { updateSquadPoints } from '@/lib/squad-points';
+import { maybeAdvanceStage, type AdvanceResult } from '@/lib/stage-advance';
 
 export const dynamic = 'force-dynamic';
 
@@ -103,10 +104,22 @@ async function handleUpdate(request: NextRequest) {
         });
       }
 
+      // Even when no matches are live, the previous run may have just
+      // finalized the last match in the active stage. Try to advance so
+      // the cron eventually rolls forward without needing a "live"
+      // transition to trigger.
+      let stageAdvance: AdvanceResult | null = null;
+      try {
+        stageAdvance = await maybeAdvanceStage();
+      } catch (err) {
+        console.error('[Live Update] maybeAdvanceStage failed:', err);
+      }
+
       return NextResponse.json({
         message: 'No live matches to update',
         matchesStarted: recentlyStarted.length,
         results: [],
+        stageAdvance,
       });
     }
 
@@ -273,12 +286,26 @@ async function handleUpdate(request: NextRequest) {
       }
     }
 
+    // Auto stage advancement: if any match transitioned to FT this run,
+    // check whether that completed its stage and roll forward to the next
+    // one. maybeAdvanceStage is idempotent + cheap when there's nothing
+    // to do, so we just call it unconditionally at the end. We swallow
+    // errors here — failing to advance shouldn't poison the per-match
+    // results the caller is expecting.
+    let stageAdvance: AdvanceResult | null = null;
+    try {
+      stageAdvance = await maybeAdvanceStage();
+    } catch (err) {
+      console.error('[Live Update] maybeAdvanceStage failed:', err);
+    }
+
     return NextResponse.json({
       message: 'Live update completed',
       matchesProcessed: liveMatches.length,
       results,
       rateLimit: apiFootball.getRateLimitRemaining(),
       lastUpdated: new Date().toISOString(),
+      stageAdvance,
     });
   } catch (error) {
     console.error('[Live Update] Error:', error);

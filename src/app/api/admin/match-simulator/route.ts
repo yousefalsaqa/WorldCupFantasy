@@ -26,6 +26,7 @@ import { prisma } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth';
 import { SCORING } from '@/lib/wc-constants';
 import { updateSquadPoints } from '@/lib/squad-points';
+import { maybeAdvanceStage } from '@/lib/stage-advance';
 
 export const dynamic = 'force-dynamic';
 
@@ -353,7 +354,9 @@ export async function POST(request: NextRequest) {
 
     if (action === 'finish') {
       // Flip to FT, mark all perf rows non-live, then run the canonical
-      // updateSquadPoints flow.
+      // updateSquadPoints flow, then attempt stage advancement (same
+      // pipeline as the live cron). Surfacing the advance result helps
+      // the admin UI explain "the stage just rolled forward".
       await prisma.playerPerformance.updateMany({
         where: { matchId },
         data: { isLive: false },
@@ -363,7 +366,14 @@ export async function POST(request: NextRequest) {
         data: { isStarted: true, isFinished: true, lastUpdated: new Date() },
       });
       await updateSquadPoints(matchId);
-      return NextResponse.json({ ok: true, action: 'finish' });
+
+      let stageAdvance = null;
+      try {
+        stageAdvance = await maybeAdvanceStage();
+      } catch (err) {
+        console.error('[Match Simulator] maybeAdvanceStage failed:', err);
+      }
+      return NextResponse.json({ ok: true, action: 'finish', stageAdvance });
     }
 
     if (action === 'reset') {

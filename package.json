@@ -11,7 +11,8 @@
     "postinstall": "prisma generate",
     "test:scoring": "tsx scripts/test-scoring.ts",
     "test:live-scoring": "tsx scripts/test-live-scoring.ts",
-    "test": "npm run test:scoring && npm run test:live-scoring"
+    "test:stage-advance": "tsx scripts/test-stage-advance.ts",
+    "test": "npm run test:scoring && npm run test:live-scoring && npm run test:stage-advance"
   },
   "dependencies": {
     "@dragdroptouch/drag-drop-touch": "^2.0.3",

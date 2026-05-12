@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
+import {
+  parseActiveChips,
+  hasUnlimitedTransferChip,
+  type ChipType,
+} from '@/lib/chips-active';
 
 export const dynamic = 'force-dynamic';
 
@@ -101,13 +106,14 @@ async function computeUnlimitedTransfers(teamId: string): Promise<boolean> {
   if (!activeStage) return true;
   const teamStage = await prisma.teamStage.findUnique({
     where: { teamId_stageId: { teamId, stageId: activeStage.id } },
-    select: { chipUsed: true },
+    select: { chipsUsed: true, chipUsed: true },
   });
-  return (
-    teamStage?.chipUsed === 'WILDCARD_1' ||
-    teamStage?.chipUsed === 'WILDCARD_2' ||
-    teamStage?.chipUsed === 'FREE_HIT'
-  );
+  // Stacking-aware: any unlimited-transfer chip in the active set counts.
+  let activeChips = parseActiveChips(teamStage?.chipsUsed);
+  if (activeChips.length === 0 && teamStage?.chipUsed) {
+    activeChips = [teamStage.chipUsed as ChipType];
+  }
+  return hasUnlimitedTransferChip(activeChips);
 }
 
 export async function GET(request: NextRequest) {

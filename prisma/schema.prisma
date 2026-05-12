@@ -284,7 +284,13 @@ model TeamStage {
   transferHits    Int      @default(0)
   totalPoints     Int      @default(0)
   
-  chipUsed        String?  // WILDCARD_1, WILDCARD_2, TRIPLE_CAPTAIN, BENCH_BOOST
+  // Single-chip pointer (legacy). Kept in sync with the FIRST entry of
+  // chipsUsed so older read paths keep working. New code reads chipsUsed.
+  chipUsed        String?  // WILDCARD_1, WILDCARD_2, TRIPLE_CAPTAIN, BENCH_BOOST, FREE_HIT
+  // JSON-encoded array of activated chip IDs for this team+stage. Allows
+  // stacking (e.g. TRIPLE_CAPTAIN + BENCH_BOOST in the same gameweek).
+  // Example: '["TRIPLE_CAPTAIN","BENCH_BOOST"]'. Null when no chip is active.
+  chipsUsed       String?
   
   // Snapshot of squad at deadline
   squadSnapshot   String?  // JSON

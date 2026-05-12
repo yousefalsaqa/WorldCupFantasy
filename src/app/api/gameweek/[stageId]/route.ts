@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
+import { parseActiveChips, type ChipType } from '@/lib/chips-active';
 
 export const dynamic = 'force-dynamic';
 
@@ -143,6 +144,14 @@ export async function GET(
             transferHits: teamStage.transferHits,
             totalPoints: teamStage.totalPoints,
             chipUsed: teamStage.chipUsed,
+            // Multi-chip array for the history badges. Falls back to the
+            // legacy single chip if the new column hasn't been populated.
+            chipsUsed: (() => {
+              const arr = parseActiveChips(teamStage.chipsUsed);
+              if (arr.length > 0) return arr;
+              if (teamStage.chipUsed) return [teamStage.chipUsed as ChipType];
+              return [];
+            })(),
           }
         : null,
       players: playerBreakdowns,

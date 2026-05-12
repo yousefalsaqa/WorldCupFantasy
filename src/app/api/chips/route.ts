@@ -2,10 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
+import {
+  parseActiveChips,
+  serializeActiveChips,
+  addActiveChip,
+  removeActiveChip,
+  legacyChipUsed,
+  type ChipType,
+} from '@/lib/chips-active';
 
 export const dynamic = 'force-dynamic';
-
-type ChipType = 'WILDCARD_1' | 'WILDCARD_2' | 'TRIPLE_CAPTAIN' | 'BENCH_BOOST' | 'FREE_HIT';
 
 const CHIP_META: Record<ChipType, { name: string; description: string }> = {
   WILDCARD_1: { name: 'Wildcard', description: 'Unlimited transfers for this stage' },
@@ -50,7 +56,7 @@ async function getSession() {
  * Before that, users can still cancel a chip activation. After that, locked in.
  */
 function stageIsLocked(deadline: Date | null | undefined): boolean {
-  if (!deadline) return false; // no deadline configured = treat as not started
+  if (!deadline) return false;
   return new Date() >= new Date(deadline);
 }
 
@@ -82,13 +88,21 @@ export async function GET() {
       select: { id: true, stageId: true, name: true, deadlineTime: true },
     });
 
-    let activeChip: string | null = null;
+    // Parse the multi-chip array. `activeChips` is canonical; `activeChip`
+    // is kept for any legacy single-chip UI surface.
+    let activeChips: ChipType[] = [];
     if (activeStage) {
       const teamStage = await prisma.teamStage.findUnique({
         where: { teamId_stageId: { teamId: team.id, stageId: activeStage.id } },
-        select: { chipUsed: true },
+        select: { chipsUsed: true, chipUsed: true },
       });
-      activeChip = teamStage?.chipUsed ?? null;
+      // Prefer the new array column. Fall back to legacy single-chip if
+      // we somehow loaded a row that predates the migration (e.g. an
+      // older test fixture).
+      activeChips = parseActiveChips(teamStage?.chipsUsed);
+      if (activeChips.length === 0 && teamStage?.chipUsed) {
+        activeChips = [teamStage.chipUsed as ChipType];
+      }
     }
 
     const locked = stageIsLocked(activeStage?.deadlineTime);
@@ -96,7 +110,7 @@ export async function GET() {
     // Wildcard 1 specifically can only be cancelled if no transfers were made
     // under it in this stage (otherwise the user got free transfers for nothing).
     let wildcardHasTransfers = false;
-    if (activeChip === 'WILDCARD_1' && activeStage) {
+    if (activeChips.includes('WILDCARD_1') && activeStage) {
       const wildcardTransferCount = await prisma.transfer.count({
         where: {
           teamId: team.id,
@@ -107,9 +121,10 @@ export async function GET() {
       wildcardHasTransfers = wildcardTransferCount > 0;
     }
 
-    // Determine if a given chip can be cancelled right now
+    // Determine if a given chip can be cancelled right now. Stacking-aware:
+    // each chip cancels independently.
     const computeCancel = (chipId: ChipType): { canCancel: boolean; reason?: string } => {
-      if (activeChip !== chipId) return { canCancel: false };
+      if (!activeChips.includes(chipId)) return { canCancel: false };
       if (locked) return { canCancel: false, reason: 'Stage has already started' };
       if (chipId === 'WILDCARD_1' && wildcardHasTransfers) {
         return { canCancel: false, reason: 'Cannot cancel \u2013 transfers already made under Wildcard' };
@@ -117,17 +132,18 @@ export async function GET() {
       return { canCancel: true };
     };
 
-    // WILDCARD_2 is intentionally hidden for now \u2013 it unlocks in the next round
-    // and shouldn't be picked alongside the first wildcard. Data is preserved
-    // server-side so we can re-enable it later without losing state.
+    // Stacking is allowed: a chip is `available` if it hasn't been used
+    // this tournament-phase (the `used` flag) AND we have an active stage
+    // for FREE_HIT (which needs a stage to revert into). Notably we no
+    // longer require `activeChip === null` — multiple chips can co-exist.
     const buildChip = (id: ChipType, used: boolean) => {
       const cancel = computeCancel(id);
       return {
         id,
         ...CHIP_META[id],
         used,
-        available: !used && activeChip === null && (id !== 'FREE_HIT' || activeStage !== null),
-        active: activeChip === id,
+        available: !used && (id !== 'FREE_HIT' || activeStage !== null),
+        active: activeChips.includes(id),
         canCancel: cancel.canCancel,
         cancelBlockedReason: cancel.reason,
       };
@@ -135,6 +151,7 @@ export async function GET() {
 
     const chips = [
       buildChip('WILDCARD_1', team.wildcard1Used),
+      buildChip('WILDCARD_2', team.wildcard2Used),
       buildChip('FREE_HIT', team.freeHitUsed),
       buildChip('TRIPLE_CAPTAIN', team.tripleCaptainUsed),
       buildChip('BENCH_BOOST', team.benchBoostUsed),
@@ -142,7 +159,11 @@ export async function GET() {
 
     return NextResponse.json({
       chips,
-      activeChip,
+      // Legacy single-chip pointer for UIs that haven't been updated.
+      activeChip: activeChips[0] ?? null,
+      // Canonical multi-chip array. Surfaced as `activeChips` so consumers
+      // can drive UI badges like "TC + BB" without re-parsing.
+      activeChips,
       activeStage,
       stageLocked: locked,
       deadlineTime: activeStage?.deadlineTime ?? null,
@@ -203,15 +224,22 @@ export async function POST(request: NextRequest) {
 
     const existingTeamStage = await prisma.teamStage.findUnique({
       where: { teamId_stageId: { teamId: team.id, stageId: activeStage.id } },
+      select: { chipsUsed: true, chipUsed: true },
     });
 
-    if (existingTeamStage?.chipUsed) {
-      return NextResponse.json({ error: 'A chip is already active for this stage' }, { status: 400 });
+    // Stacking-aware: only block if THIS chip is already active in the
+    // active stage. Other chips remaining active is fine.
+    let currentChips = parseActiveChips(existingTeamStage?.chipsUsed);
+    if (currentChips.length === 0 && existingTeamStage?.chipUsed) {
+      currentChips = [existingTeamStage.chipUsed as ChipType];
+    }
+    if (currentChips.includes(chipId)) {
+      return NextResponse.json({ error: 'That chip is already active for this stage' }, { status: 400 });
     }
 
-    // Free Hit needs a full snapshot of the squad + budget so we can restore
-    // everything at the end of the stage. Captured BEFORE any free-hit transfers
-    // happen, so we know exactly what the user had before they activated it.
+    // Free Hit needs a full snapshot of the squad + budget + transfer counts
+    // so we can restore everything at the end of the stage (auto-revert in
+    // /api/squad/get and in lib/stage-advance.maybeAdvanceStage).
     let freeHitSnapshot: string | undefined;
     if (chipId === 'FREE_HIT') {
       const squadPlayers = await prisma.squadPlayer.findMany({
@@ -243,6 +271,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const nextChips = addActiveChip(currentChips, chipId);
+    const nextChipsUsed = serializeActiveChips(nextChips);
+    const nextLegacyChip = legacyChipUsed(nextChips);
+
     await prisma.$transaction(async (tx) => {
       const updateField: Record<string, boolean | string> = {};
       if (chipId === 'WILDCARD_1') updateField.wildcard1Used = true;
@@ -264,10 +296,12 @@ export async function POST(request: NextRequest) {
         create: {
           teamId: team.id,
           stageId: activeStage.id,
-          chipUsed: chipId,
+          chipUsed: nextLegacyChip,
+          chipsUsed: nextChipsUsed,
         },
         update: {
-          chipUsed: chipId,
+          chipUsed: nextLegacyChip,
+          chipsUsed: nextChipsUsed,
         },
       });
 
@@ -275,7 +309,11 @@ export async function POST(request: NextRequest) {
         data: {
           userId: session.userId,
           action: 'CHIP_ACTIVATED',
-          details: JSON.stringify({ chipId, stageName: activeStage.name }),
+          details: JSON.stringify({
+            chipId,
+            stageName: activeStage.name,
+            stackedWith: currentChips,
+          }),
         },
       });
     });
@@ -284,6 +322,7 @@ export async function POST(request: NextRequest) {
       success: true,
       message: `${CHIP_META[chipId].name} activated!`,
       chipId,
+      activeChips: nextChips,
     });
   } catch (error) {
     console.error('Error activating chip:', error);
@@ -292,12 +331,16 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Cancel the currently active chip. Only allowed before the active stage's
- * deadline (i.e. before the gameweek starts). For Free Hit, the snapshot is
- * fully restored. For Wildcard, cancellation is blocked if any transfers were
- * already made under it.
+ * Cancel a currently-active chip. With stacking, callers must specify
+ * WHICH chip to cancel via `?chipId=XXX` in the URL or `{ chipId }` in the
+ * body. If no chipId is provided AND only one chip is active, we cancel
+ * that one (preserves the old single-chip API contract).
+ *
+ * Only allowed before the active stage's deadline. For Free Hit, the
+ * snapshot is fully restored. For Wildcard, cancellation is blocked if
+ * any transfers were already made under it.
  */
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   try {
     const session = await getSession();
     if (!session) {
@@ -328,9 +371,46 @@ export async function DELETE() {
       where: { teamId_stageId: { teamId: team.id, stageId: activeStage.id } },
     });
 
-    const chipId = teamStage?.chipUsed as ChipType | null | undefined;
-    if (!chipId) {
+    const currentChips = parseActiveChips(teamStage?.chipsUsed);
+    // Fallback for rows still on the legacy single-chip column
+    if (currentChips.length === 0 && teamStage?.chipUsed) {
+      currentChips.push(teamStage.chipUsed as ChipType);
+    }
+
+    if (currentChips.length === 0) {
       return NextResponse.json({ error: 'No active chip to cancel' }, { status: 400 });
+    }
+
+    // Figure out which chip to cancel. Accept it from query string
+    // (?chipId=) or from JSON body. If absent and exactly one chip is
+    // active, default to that one.
+    const url = new URL(request.url);
+    const queryChipId = url.searchParams.get('chipId') as ChipType | null;
+    let bodyChipId: ChipType | null = null;
+    try {
+      // request.body might be empty for a "cancel my only chip" call
+      const body = await request.clone().json().catch(() => null);
+      if (body && typeof body === 'object' && body !== null && 'chipId' in body) {
+        bodyChipId = (body as { chipId?: ChipType }).chipId ?? null;
+      }
+    } catch {
+      // empty body is fine
+    }
+
+    let chipId: ChipType | null = queryChipId ?? bodyChipId;
+    if (!chipId) {
+      if (currentChips.length === 1) {
+        chipId = currentChips[0];
+      } else {
+        return NextResponse.json({
+          error: 'Multiple chips active \u2013 specify which one to cancel via ?chipId=',
+          activeChips: currentChips,
+        }, { status: 400 });
+      }
+    }
+
+    if (!currentChips.includes(chipId)) {
+      return NextResponse.json({ error: `${chipId} is not active for this stage` }, { status: 400 });
     }
 
     // Wildcard cancel safety: refuse if transfers were already made under it
@@ -356,17 +436,19 @@ export async function DELETE() {
       try {
         freeHitSnapshot = JSON.parse(team.freeHitSnapshot);
       } catch {
-        // If the snapshot is corrupt, refuse rather than silently lose data
         return NextResponse.json({
           error: 'Free Hit snapshot is corrupt \u2013 contact support to restore your team.',
         }, { status: 500 });
       }
     }
 
+    const nextChips = removeActiveChip(currentChips, chipId);
+    const nextChipsUsed = serializeActiveChips(nextChips);
+    const nextLegacyChip = legacyChipUsed(nextChips);
+
     // 15s timeout (default is 5s) – Neon's pooler adds latency per query and
     // the Free Hit revert touches 15 squad rows + team + teamStage + audit.
     await prisma.$transaction(async (tx) => {
-      // 1) Unflag the chip on the team so it's available again
       const updateField: Record<string, boolean | string | null | number> = {};
       if (chipId === 'WILDCARD_1') updateField.wildcard1Used = false;
       if (chipId === 'WILDCARD_2') updateField.wildcard2Used = false;
@@ -377,9 +459,6 @@ export async function DELETE() {
         updateField.freeHitSnapshot = null;
       }
 
-      // 2) For Free Hit, restore the snapshot squad + bank + transfer counts.
-      // Using deleteMany + createMany (1 round trip each) instead of a loop of
-      // .create() calls so the whole revert finishes well under the timeout.
       if (chipId === 'FREE_HIT' && freeHitSnapshot) {
         await tx.squadPlayer.deleteMany({ where: { teamId: team.id } });
         await tx.squadPlayer.createMany({
@@ -405,18 +484,23 @@ export async function DELETE() {
         data: updateField as Parameters<typeof tx.team.update>[0]['data'],
       });
 
-      // 3) Clear chipUsed on the TeamStage row
       await tx.teamStage.update({
         where: { teamId_stageId: { teamId: team.id, stageId: activeStage.id } },
-        data: { chipUsed: null },
+        data: {
+          chipUsed: nextLegacyChip,
+          chipsUsed: nextChipsUsed,
+        },
       });
 
-      // 4) Audit
       await tx.auditLog.create({
         data: {
           userId: session.userId,
           action: 'CHIP_CANCELLED',
-          details: JSON.stringify({ chipId, stageName: activeStage.name }),
+          details: JSON.stringify({
+            chipId,
+            stageName: activeStage.name,
+            remainingChips: nextChips,
+          }),
         },
       });
     }, { timeout: 15000 });
@@ -425,6 +509,7 @@ export async function DELETE() {
       success: true,
       message: `${CHIP_META[chipId].name} cancelled. You can use it again later.`,
       chipId,
+      activeChips: nextChips,
     });
   } catch (error) {
     console.error('Error cancelling chip:', error);

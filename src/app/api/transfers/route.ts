@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
+import {
+  parseActiveChips,
+  hasUnlimitedTransferChip,
+  type ChipType,
+} from '@/lib/chips-active';
 
 // This route is dynamic because it reads cookies for authentication
 export const dynamic = 'force-dynamic';
@@ -177,15 +182,16 @@ export async function POST(request: NextRequest) {
     } else {
       const teamStage = await prisma.teamStage.findUnique({
         where: { teamId_stageId: { teamId: team.id, stageId: activeStage.id } },
-        select: { chipUsed: true },
+        select: { chipsUsed: true, chipUsed: true },
       });
-      // Free Hit also grants unlimited transfers for the active stage; the
-      // squad reverts at end of stage via /api/squad/get's snapshot logic.
-      if (
-        teamStage?.chipUsed === 'WILDCARD_1' ||
-        teamStage?.chipUsed === 'WILDCARD_2' ||
-        teamStage?.chipUsed === 'FREE_HIT'
-      ) {
+      // Stacking-aware: any of WILDCARD_1 / WILDCARD_2 / FREE_HIT in the
+      // active chip set grants unlimited transfers for this stage. Free
+      // Hit reverts at end of stage via lib/stage-advance + /api/squad/get.
+      let activeChips = parseActiveChips(teamStage?.chipsUsed);
+      if (activeChips.length === 0 && teamStage?.chipUsed) {
+        activeChips = [teamStage.chipUsed as ChipType];
+      }
+      if (hasUnlimitedTransferChip(activeChips)) {
         unlimitedTransfers = true;
         isWildcardActive = true;
       }

@@ -52,6 +52,8 @@ interface TeamStageData {
   transferHits: number;
   totalPoints: number;
   chipUsed: string | null;
+  // Multi-chip array (chip stacking). Empty array if none active.
+  chipsUsed: string[];
 }
 
 interface GameweekData {
@@ -66,6 +68,7 @@ const CHIP_NAMES: Record<string, string> = {
   WILDCARD_2: 'Wildcard 2',
   TRIPLE_CAPTAIN: 'Triple Captain',
   BENCH_BOOST: 'Bench Boost',
+  FREE_HIT: 'Free Hit',
 };
 
 export default function HistoryPage() {
@@ -235,15 +238,33 @@ export default function HistoryPage() {
             </div>
           )}
 
-          {/* Active Chip */}
-          {data.teamStage?.chipUsed && (
-            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 mb-6 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400" />
-              <span className="text-sm font-medium text-emerald-400">
-                {CHIP_NAMES[data.teamStage.chipUsed] || data.teamStage.chipUsed} used this stage
-              </span>
-            </div>
-          )}
+          {/* Active Chips — stacking-aware, renders one pill per chip. Falls
+              back to the legacy single `chipUsed` if the new array isn't
+              populated yet (older TeamStage rows). */}
+          {(() => {
+            const chips = data.teamStage?.chipsUsed?.length
+              ? data.teamStage.chipsUsed
+              : data.teamStage?.chipUsed
+                ? [data.teamStage.chipUsed]
+                : [];
+            if (chips.length === 0) return null;
+            return (
+              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 mb-6 flex items-center gap-2 flex-wrap">
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span className="text-sm font-medium text-emerald-400">
+                  {chips.length === 1 ? 'Chip:' : 'Chips:'}
+                </span>
+                {chips.map((c) => (
+                  <span
+                    key={c}
+                    className="text-xs font-semibold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-2 py-0.5"
+                  >
+                    {CHIP_NAMES[c] || c}
+                  </span>
+                ))}
+              </div>
+            );
+          })()}
 
           {/* Starting XI */}
           <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden mb-4">
