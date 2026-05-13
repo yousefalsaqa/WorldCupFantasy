@@ -29,7 +29,7 @@
 //     mount; re-fetching here would double the call).
 // ============================================
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import Kit from '@/components/kit';
 import { getFlagUrl } from '@/lib/flags';
@@ -197,6 +197,25 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
   }, [player.id]);
 
   useEffect(() => { reloadPerfs(); }, [reloadPerfs]);
+
+  // Season-aggregate stats are derived from the same PlayerPerformance
+  // rows we already fetch for the Match History table below — no extra
+  // network call needed. While performances are still loading we show
+  // em-dashes so the tiles don't flash 0 → real.
+  const seasonStats = useMemo(() => {
+    const perfs = performances ?? [];
+    const sum = (k: 'goals' | 'assists' | 'defensiveActions' | 'minutesPlayed') =>
+      perfs.reduce((n, p) => n + (p.stats[k] || 0), 0);
+    return {
+      goals: sum('goals'),
+      assists: sum('assists'),
+      apps: perfs.filter((p) => p.stats.minutesPlayed > 0).length,
+      minutes: sum('minutesPlayed'),
+      defensiveActions: sum('defensiveActions'),
+      cleanSheets: perfs.filter((p) => p.stats.cleanSheet).length,
+    };
+  }, [performances]);
+  const statsLoading = loading && performances === null;
 
   const handleUndoAdjustment = async (auditId: string) => {
     if (undoingId) return;
@@ -384,18 +403,20 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
             </>
           )}
 
-          {/* Season-aggregate stats tile (placeholder zeros until /api/squad/get
-              starts populating them; the per-match breakdown below already
-              shows real stats per game). */}
+          {/* Season-aggregate stats — derived from the same per-match
+              PlayerPerformance rows we fetch for the Match History
+              table below. Labels mirror what the scoring engine
+              actually stores; "DC" matches the column header used
+              one row down for consistency. */}
           <div>
             <h3 className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2">Stats</h3>
             <div className="grid grid-cols-3 gap-2">
-              <StatTile label="Goals" value={player.stats?.goals ?? 0} />
-              <StatTile label="Assists" value={player.stats?.assists ?? 0} />
-              <StatTile label="Pass %" value={player.stats?.passAccuracy ? `${player.stats.passAccuracy}%` : '0%'} />
-              <StatTile label="Inter" value={player.stats?.interceptions ?? 0} />
-              <StatTile label="Tackles" value={player.stats?.tackles ?? 0} />
-              <StatTile label="Dribbles" value={player.stats?.dribbles ?? 0} />
+              <StatTile label="Goals" value={statsLoading ? '—' : seasonStats.goals} />
+              <StatTile label="Assists" value={statsLoading ? '—' : seasonStats.assists} />
+              <StatTile label="Apps" value={statsLoading ? '—' : seasonStats.apps} />
+              <StatTile label="Minutes" value={statsLoading ? '—' : seasonStats.minutes} />
+              <StatTile label="DC" value={statsLoading ? '—' : seasonStats.defensiveActions} />
+              <StatTile label="Clean" value={statsLoading ? '—' : seasonStats.cleanSheets} />
             </div>
           </div>
 
