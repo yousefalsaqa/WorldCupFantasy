@@ -33,3 +33,19 @@ export const DIFFICULTY_LABEL: Record<FDR, string> = {
   4: 'Hard',
   5: 'Very Hard',
 };
+
+/**
+ * Tailwind class string for the small FDR badge (1 easiest → 5 hardest).
+ * Shared between the squad page, the league team-view page and the
+ * player detail modal so all three never disagree on colors.
+ */
+export function fdrPill(fdr: number): string {
+  switch (fdr) {
+    case 1: return 'bg-emerald-500 text-white';
+    case 2: return 'bg-emerald-700 text-emerald-100';
+    case 3: return 'bg-slate-500 text-white';
+    case 4: return 'bg-rose-600 text-white';
+    case 5: return 'bg-rose-900 text-rose-100';
+    default: return 'bg-slate-700 text-white';
+  }
+}

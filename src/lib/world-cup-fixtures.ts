@@ -281,6 +281,38 @@ export const ALL_WC_FIXTURES: WorldCupFixture[] = [
 ];
 
 /**
+ * Given a nation's 3-letter code, return the code of its next opponent
+ * (first upcoming unplayed fixture). Falls back to the last opponent
+ * the nation faced if there are no upcoming games (e.g. eliminated),
+ * and to `'-'` when the nation isn't found in the fixture list.
+ *
+ * Lives here (not on the squad page) so the league team-view page can
+ * reuse it for player-card FDR badges without duplicating the logic.
+ *
+ * `now` is injectable so tests can pin the clock; callers in the browser
+ * just leave it out and we use `new Date()`.
+ */
+export function getNextWcOpponent(nationCode: string, now: Date = new Date()): string {
+  // Inline date parsing rather than importing parseFixtureDateTime to
+  // keep this module dependency-free (seed scripts pull NATION_NAMES
+  // from here and we don't want to drag format-time + date-fns into
+  // their bundle).
+  const parse = (date: string, time: string) => new Date(`${date}T${time}:00-04:00`);
+  const fixtures = ALL_WC_FIXTURES
+    .filter((f) => f.home === nationCode || f.away === nationCode)
+    .sort(
+      (a, b) => parse(a.date, a.time).getTime() - parse(b.date, b.time).getTime(),
+    );
+  const next = fixtures.find((f) => parse(f.date, f.time) > now);
+  if (!next) {
+    const last = fixtures[fixtures.length - 1];
+    if (last) return last.home === nationCode ? last.away : last.home;
+    return '-';
+  }
+  return next.home === nationCode ? next.away : next.home;
+}
+
+/**
  * Nation name lookup — keyed by the 3-letter codes used in fixture rows.
  * Single source of truth for both fixture pages and the squad header.
  */

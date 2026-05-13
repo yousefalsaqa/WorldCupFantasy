@@ -1,15 +1,42 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import Kit from '@/components/kit';
+// ============================================
+// LeagueTeamViewPage — read-only mirror of /squad for OTHER managers.
+//
+// The user opens this from /leagues/[id] (clicking a row in the table).
+// It uses the SAME PlayerCard component and the SAME PlayerDetailModal
+// as /squad so we don't drift visually. The differences vs. /squad are:
+//
+//   1. Read-only: the modal opens in `readOnly` mode → no Sub / Captain /
+//      V-Capt buttons; status badges instead.
+//   2. No transfer mode, no chip activation, no formation/captaincy
+//      mutations. The header strips the cogs and shows total points only.
+//   3. Captain ×2 / ×3 visual badge surfaces this team's chip state, so
+//      a friend's Triple Captain shows ×3 even though it's not the
+//      viewer's team. This was the user-reported bug ("calculator was
+//      right but team view showed ×1").
+//   4. Live polling: every 60s while `anyMatchLive`, re-pull the squad
+//      endpoint so pills tick up in real time.
+// ============================================
 
-interface Player {
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
+import { PlayerCard } from '@/components/kit';
+import PlayerDetailModal, { type ModalPlayer } from '@/components/player-detail-modal';
+import { getFixtureDifficulty, type FDR } from '@/lib/fdr';
+import { getNextWcOpponent } from '@/lib/world-cup-fixtures';
+
+interface ApiPlayer {
   id: string;
   displayName: string;
   position: string;
   shirtNumber: number | null;
+  /** Finalized points (written at FT). */
   points: number;
+  /** Finalized + in-progress points; used as the pill value while a
+   * match is live. Falls back to `points` if absent. */
+  livePoints?: number;
   isStarting: boolean;
   isCaptain: boolean;
   isViceCaptain: boolean;
@@ -28,190 +55,332 @@ interface TeamData {
   teamName: string;
   managerName: string;
   totalPoints: number;
-  starting: Player[];
-  bench: Player[];
+  starting: ApiPlayer[];
+  bench: ApiPlayer[];
+  activeChips?: string[];
+  tripleCaptainActive?: boolean;
+  benchBoostActive?: boolean;
+  anyMatchLive?: boolean;
 }
 
-// Player Card Component
-function PlayerCard({ player }: { player: Player }) {
-  return (
-    <div className="flex flex-col items-center" style={{ overflow: 'visible' }}>
-      <div style={{ overflow: 'visible' }}>
-        <Kit
-          primaryColor={player.nation.kitColor1}
-          secondaryColor={player.nation.kitColor2}
-          number={player.shirtNumber}
-          nationCode={player.nation.code}
-          size="xs"
-          isCaptain={player.isCaptain}
-          isViceCaptain={player.isViceCaptain}
-        />
-      </div>
-      
-      {/* Name plate */}
-      <div className="mt-1 bg-gray-900/90 rounded px-2 py-0.5 min-w-[60px] sm:min-w-[90px] text-center backdrop-blur-sm">
-        <div className="text-[9px] sm:text-xs font-bold text-white truncate">
-          {player.displayName}
-        </div>
-      </div>
-      
-      {/* Points */}
-      <div className="mt-0.5 bg-emerald-500 rounded px-2 py-0.5 min-w-[60px] sm:min-w-[90px] text-center">
-        <span className="text-white text-[10px] sm:text-sm font-bold">{player.points}</span>
-      </div>
-    </div>
-  );
+// Convert the API row → the shape PlayerCard expects. Centralized so
+// the pitch + bench + modal all see exactly the same data.
+function toCardPlayer(p: ApiPlayer) {
+  return {
+    id: p.id,
+    displayName: p.displayName,
+    position: p.position,
+    shirtNumber: p.shirtNumber,
+    nation: {
+      code: p.nation.code,
+      name: p.nation.name,
+      kitColor1: p.nation.kitColor1,
+      kitColor2: p.nation.kitColor2,
+    },
+  };
 }
 
-// Bench Player Card
-function BenchCard({ player, index }: { player: Player; index: number }) {
-  return (
-    <div className="flex items-center gap-3 p-3 bg-white/5 rounded-xl">
-      <div className="text-white/40 font-bold">{index + 1}</div>
-      <Kit
-        primaryColor={player.nation.kitColor1}
-        secondaryColor={player.nation.kitColor2}
-        number={player.shirtNumber}
-        nationCode={player.nation.code}
-        size="xs"
-      />
-      <div className="flex-1 min-w-0">
-        <p className="text-white text-sm font-medium truncate">{player.displayName}</p>
-        <p className="text-white/40 text-xs">{player.position}</p>
-      </div>
-      <div className="bg-gray-600 rounded px-2 py-0.5">
-        <span className="text-white text-xs font-bold">{player.points}</span>
-      </div>
-    </div>
-  );
+function toModalPlayer(p: ApiPlayer): ModalPlayer {
+  return {
+    id: p.id,
+    displayName: p.displayName,
+    position: p.position,
+    shirtNumber: p.shirtNumber,
+    // Use the live-overlay value so the modal's points tile shows what
+    // the pill on the pitch is showing. The Match History panel inside
+    // the modal pulls real per-match perfs separately.
+    points: p.livePoints ?? p.points,
+    nation: {
+      code: p.nation.code,
+      name: p.nation.name,
+      kitColor1: p.nation.kitColor1,
+      kitColor2: p.nation.kitColor2,
+    },
+  };
 }
 
-export default function TeamViewPage({ params }: { params: { teamId: string } }) {
+export default function LeagueTeamViewPage({
+  params,
+}: {
+  params: { teamId: string };
+}) {
+  // Next 14 passes params synchronously. (Next 15 wraps it in a Promise
+  // and needs `use(params)`; revisit this when we upgrade.)
   const { teamId } = params;
+
   const [team, setTeam] = useState<TeamData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<ApiPlayer | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
-  useEffect(() => {
-    async function fetchTeam() {
-      try {
-        const res = await fetch(`/api/team/${teamId}/squad`);
-        if (res.ok) {
-          const data = await res.json();
-          setTeam(data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch team:', error);
-      } finally {
-        setLoading(false);
+  // Poll state — we want a stable ref to the latest "is anything live"
+  // signal so the interval callback doesn't re-bind on every fetch.
+  const anyMatchLiveRef = useRef(false);
+
+  // Fetch once on mount + retain a single shared fetcher for the poll.
+  const fetchTeam = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/team/${teamId}/squad`, { credentials: 'include' });
+      if (!res.ok) {
+        setError(res.status === 404 ? 'Team not found' : 'Failed to load team');
+        return;
       }
+      const data: TeamData = await res.json();
+      setTeam(data);
+      anyMatchLiveRef.current = data.anyMatchLive === true;
+      setError(null);
+    } catch (err) {
+      console.error('Failed to fetch team:', err);
+      setError('Failed to load team');
+    } finally {
+      setLoading(false);
     }
-    fetchTeam();
   }, [teamId]);
+
+  useEffect(() => { fetchTeam(); }, [fetchTeam]);
+
+  // One-shot admin check — surfaces the per-adjustment Undo button
+  // inside the shared modal. Failure is silent (defaults to non-admin).
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        setIsAdmin(Boolean(data?.user?.isAdmin));
+      } catch { /* non-fatal */ }
+    })();
+  }, []);
+
+  // 60s live poll — gated by `anyMatchLive`. Mirrors the cadence on
+  // /squad so the two pages stay in sync without hammering the DB.
+  // We keep the poll lightweight (no abort controller because the
+  // endpoint is idempotent and we don't care about over-fetch races —
+  // newest response wins via setState).
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled) return;
+      if (!anyMatchLiveRef.current) return;
+      try {
+        const res = await fetch(`/api/team/${teamId}/squad`, { credentials: 'include' });
+        if (!res.ok || cancelled) return;
+        const data: TeamData = await res.json();
+        setTeam(data);
+        anyMatchLiveRef.current = data.anyMatchLive === true;
+      } catch { /* non-fatal */ }
+    };
+    const id = setInterval(tick, 60_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [teamId]);
+
+  // Captain multiplier — ×3 if this team's TC chip is active, else ×2.
+  // The /squad page applies the SAME logic to the same PlayerCard so
+  // the pill values match across both views (this was the user's
+  // friend's bug: TC was active but the team view defaulted to ×1).
+  const captainMultiplier = team?.tripleCaptainActive ? 3 : 2;
+  const tripleCaptainActive = team?.tripleCaptainActive === true;
+
+  // Pre-compute the four position rows so the JSX below stays clean.
+  const rows = useMemo(() => {
+    if (!team) return { gks: [], defs: [], mids: [], fwds: [] };
+    return {
+      gks: team.starting.filter((p) => p.position === 'GK'),
+      defs: team.starting.filter((p) => p.position === 'DEF'),
+      mids: team.starting.filter((p) => p.position === 'MID'),
+      fwds: team.starting.filter((p) => p.position === 'FWD'),
+    };
+  }, [team]);
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-white/60">Loading team...</p>
+        <p className="text-white/60">Loading team…</p>
       </div>
     );
   }
-
-  if (!team) {
+  if (error || !team) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-white/60">Team not found</p>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3">
+        <p className="text-white/60">{error ?? 'Team not found'}</p>
+        <Link href="/leagues" className="text-emerald-400 underline text-sm">Back to leagues</Link>
       </div>
     );
   }
 
-  // Group starting players by position
-  const forwards = team.starting.filter(p => p.position === 'FWD');
-  const midfielders = team.starting.filter(p => p.position === 'MID');
-  const defenders = team.starting.filter(p => p.position === 'DEF');
-  const goalkeeper = team.starting.filter(p => p.position === 'GK');
+  // Render a single player's card on the pitch. Extracted so the four
+  // position rows can call it uniformly and the modal-open click goes
+  // through one path. Mirrors the renderPitchPlayer helper on /squad.
+  const renderPitchPlayer = (p: ApiPlayer) => {
+    const opponent = getNextWcOpponent(p.nation.code);
+    const fdr = getFixtureDifficulty(p.nation.code, opponent) as FDR;
+    const rawPoints = p.livePoints ?? p.points;
+    const displayPoints = p.isCaptain ? rawPoints * captainMultiplier : rawPoints;
+    return (
+      <div key={p.id} className="flex-shrink-0 relative">
+        <PlayerCard
+          player={toCardPlayer(p)}
+          showOpponent={opponent}
+          difficulty={fdr}
+          livePoints={displayPoints}
+          isCaptain={p.isCaptain}
+          isViceCaptain={p.isViceCaptain}
+          size="xs"
+          onClick={() => setSelected(p)}
+        />
+        {p.isCaptain && rawPoints > 0 && (
+          <span
+            className={`absolute top-3 -left-1 z-20 px-1 h-[14px] rounded-full text-[8px] font-black tracking-tight flex items-center justify-center shadow ring-1 ${
+              tripleCaptainActive
+                ? 'bg-amber-400 text-amber-950 ring-amber-200'
+                : 'bg-yellow-500 text-yellow-950 ring-yellow-300/70'
+            }`}
+            aria-label={tripleCaptainActive ? 'Triple Captain ×3' : 'Captain ×2'}
+          >
+            ×{captainMultiplier}
+          </span>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="max-w-3xl mx-auto px-0 sm:px-4" style={{ overflowX: 'visible' }}>
       {/* Header */}
       <div className="bg-gradient-to-r from-rose-500 to-pink-500 p-4 flex items-center justify-between rounded-t-2xl">
-        <Link 
+        <Link
           href="/leagues"
-          className="flex items-center gap-2 text-white hover:text-white/80 transition-colors"
+          className="flex items-center gap-1 text-white hover:text-white/80 transition-colors"
         >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          <span className="font-medium">Back</span>
+          <ArrowLeft className="w-4 h-4" />
+          <span className="text-sm font-medium">Back</span>
         </Link>
-        
-        <div className="text-center">
-          <h1 className="text-xl font-bold text-white">{team.teamName}</h1>
-          <p className="text-white/80 text-sm">{team.managerName}</p>
+
+        <div className="text-center min-w-0 px-2">
+          <h1 className="text-base sm:text-xl font-bold text-white truncate">{team.teamName}</h1>
+          <p className="text-white/80 text-xs sm:text-sm truncate">@{team.managerName}</p>
         </div>
-        
-        <div className="bg-white/20 rounded-lg px-3 py-1">
-          <span className="text-white font-bold">{team.totalPoints} pts</span>
+
+        <div className="bg-white/20 rounded-lg px-3 py-1 shrink-0">
+          <span className="text-white font-bold text-sm">{team.totalPoints} pts</span>
         </div>
       </div>
 
-      {/* Pitch */}
-      <div className="bg-gradient-to-b from-green-700 via-green-600 to-green-700 relative overflow-x-auto" style={{ overflowY: 'visible' }}>
-        {/* Pitch markings */}
-        <div className="absolute inset-0 opacity-20">
+      {/* Read-only ribbon — communicates intent + surfaces any active
+          chip badges (e.g. ×3 Triple Captain, Bench Boost) so the
+          viewer understands the multipliers shown on the pitch. */}
+      <div className="bg-slate-900/80 border-x border-white/10 px-3 py-2 flex items-center justify-between gap-2 flex-wrap">
+        <span className="text-[10px] uppercase tracking-wider font-bold text-white/40">
+          Read-only view
+        </span>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {tripleCaptainActive && (
+            <span className="px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-300 text-[10px] font-bold ring-1 ring-amber-400/40">
+              TRIPLE CAPTAIN ×3
+            </span>
+          )}
+          {team.benchBoostActive && (
+            <span className="px-1.5 py-0.5 rounded bg-violet-400/15 text-violet-300 text-[10px] font-bold ring-1 ring-violet-400/40">
+              BENCH BOOST
+            </span>
+          )}
+          {team.anyMatchLive && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 text-[10px] font-bold ring-1 ring-emerald-400/40">
+              <span className="w-1 h-1 bg-emerald-400 rounded-full animate-pulse" />
+              LIVE
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Pitch — single scroll container at the outer wrapper. We
+          intentionally DO NOT put `overflow-x-auto` on each row: when
+          both axes are set the browser clips Y too, which chops the
+          top of the points pill that sits above each kit. Padding of
+          `p-2 sm:p-6` mirrors /squad and gives the pill room to breathe. */}
+      <div className="bg-gradient-to-b from-green-700 via-green-600 to-green-700 relative">
+        <div className="absolute inset-0 opacity-20 pointer-events-none">
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-16 border-2 border-white border-t-0" />
           <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-40 h-16 border-2 border-white border-b-0" />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 border-2 border-white rounded-full" />
           <div className="absolute top-1/2 left-0 right-0 border-t border-white" />
         </div>
 
-        <div className="relative p-1 sm:p-6 space-y-3 sm:space-y-5 min-w-max sm:min-w-0" style={{ overflow: 'visible' }}>
-          {/* Forwards */}
-          <div className="flex justify-center gap-0.5 sm:gap-8 overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
-            {forwards.map(player => (
-              <div key={player.id} className="flex-shrink-0">
-                <PlayerCard player={player} />
-              </div>
-            ))}
-          </div>
-
-          {/* Midfielders */}
-          <div className="flex justify-center gap-0.5 sm:gap-6 overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
-            {midfielders.map(player => (
-              <div key={player.id} className="flex-shrink-0">
-                <PlayerCard player={player} />
-              </div>
-            ))}
-          </div>
-
-          {/* Defenders */}
-          <div className="flex justify-center gap-0.5 sm:gap-6 overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
-            {defenders.map(player => (
-              <div key={player.id} className="flex-shrink-0">
-                <PlayerCard player={player} />
-              </div>
-            ))}
-          </div>
-
-          {/* Goalkeeper */}
-          <div className="flex justify-center overflow-x-auto scrollbar-hide" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 'max-content' }}>
-            {goalkeeper.map(player => (
-              <div key={player.id} className="flex-shrink-0">
-                <PlayerCard player={player} />
-              </div>
-            ))}
-          </div>
+        <div
+          className="relative z-10 p-2 sm:p-6 space-y-4 sm:space-y-6 overflow-x-auto scrollbar-hide"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
+          <PitchRow players={rows.fwds} renderPlayer={renderPitchPlayer} />
+          <PitchRow players={rows.mids} renderPlayer={renderPitchPlayer} />
+          <PitchRow players={rows.defs} renderPlayer={renderPitchPlayer} />
+          <PitchRow players={rows.gks} renderPlayer={renderPitchPlayer} />
         </div>
       </div>
 
-      {/* Bench */}
-      <div className="bg-slate-900/50 border border-white/10 p-4 rounded-b-2xl">
-        <h3 className="text-white font-semibold mb-3">Substitutes</h3>
-        <div className="grid grid-cols-2 gap-3">
-          {team.bench.map((player, i) => (
-            <BenchCard key={player.id} player={player} index={i} />
-          ))}
+      {/* Bench — uses the shared PlayerCard at xs size for visual parity
+          with the pitch but laid out in a 2-col grid like the legacy
+          BenchCard. Tapping a bench card opens the same read-only modal. */}
+      <div className="bg-slate-900/50 border border-white/10 p-3 sm:p-4 rounded-b-2xl">
+        <h3 className="text-white/80 text-sm font-semibold mb-3">Substitutes</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+          {team.bench.map((p, i) => {
+            const rawPoints = p.livePoints ?? p.points;
+            return (
+              <div key={p.id} className="flex flex-col items-center gap-1 p-2 bg-white/5 rounded-xl">
+                <span className="text-[9px] font-bold text-white/40 uppercase tracking-wider">
+                  Sub {i + 1}
+                </span>
+                <PlayerCard
+                  player={toCardPlayer(p)}
+                  livePoints={rawPoints}
+                  isCaptain={p.isCaptain}
+                  isViceCaptain={p.isViceCaptain}
+                  size="xs"
+                  onClick={() => setSelected(p)}
+                />
+              </div>
+            );
+          })}
         </div>
       </div>
+
+      {/* Shared read-only player detail modal. Same code path as /squad
+          so any future changes to the modal (e.g. xG breakdowns) light
+          up on this page automatically. */}
+      {selected && (
+        <PlayerDetailModal
+          readOnly
+          player={toModalPlayer(selected)}
+          isCaptain={selected.isCaptain}
+          isViceCaptain={selected.isViceCaptain}
+          isStarting={selected.isStarting}
+          isAdmin={isAdmin}
+          onClose={() => setSelected(null)}
+          onAdjustmentReverted={fetchTeam}
+        />
+      )}
+    </div>
+  );
+}
+
+// Small wrapper around a pitch row. Kept inline because it's only used
+// here and inlining made the JSX above hard to read. The `flex-shrink-0`
+// + horizontal scroll behavior matches the /squad page exactly.
+function PitchRow({
+  players,
+  renderPlayer,
+}: {
+  players: ApiPlayer[];
+  renderPlayer: (p: ApiPlayer) => React.ReactNode;
+}) {
+  return (
+    // NO overflow on the row itself — the outer pitch wrapper owns the
+    // horizontal scroll. `min-w-max` lets the row grow wider than the
+    // viewport on small screens (so the outer wrapper actually has
+    // something to scroll) while staying centered on desktop.
+    <div className="flex justify-center gap-1.5 sm:gap-6 min-w-max sm:min-w-0">
+      {players.map(renderPlayer)}
     </div>
   );
 }

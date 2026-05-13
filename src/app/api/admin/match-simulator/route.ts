@@ -16,12 +16,19 @@
 // Endpoints:
 //   GET    ?action=context              → list matches + admin's squad
 //   POST   { action: 'start',  matchId, seeds: [...] }   → mark live, seed perf rows
-//   POST   { action: 'tick',   matchId, deltas: [...] }  → bump stats
+//   POST   { action: 'tick',   matchId, deltas: [...] }  → bump stats (additive deltas)
+//   POST   { action: 'set-stats', matchId, stats: [...] } → REPLACE stats for given players (used by the in-page stat editor)
+//   POST   { action: 'set-clock', matchId, currentMinute, homeScore?, awayScore?, syncMinutesToOnPitch? }
+//                                                        → set match clock + scores;
+//                                                          optionally bump every existing perf row's
+//                                                          minutesPlayed to currentMinute (used for the
+//                                                          "Jump to FT" button so everyone is at 90).
 //   POST   { action: 'finish', matchId }                 → trigger updateSquadPoints
 //   POST   { action: 'reset',  matchId }                 → wipe perf rows + revert match flags
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth';
 import { SCORING } from '@/lib/wc-constants';
@@ -153,6 +160,10 @@ export async function GET(request: NextRequest) {
           kickoffTime: m.kickoffTime,
           homeScore: m.homeScore,
           awayScore: m.awayScore,
+          // Surfaced so the simulator UI can seed its minute slider
+          // from the current DB value when admin re-loads the page
+          // mid-match.
+          currentMinute: m.currentMinute,
           isStarted: m.isStarted,
           isFinished: m.isFinished,
           performanceCount: m.performances.length,
@@ -405,6 +416,12 @@ export async function POST(request: NextRequest) {
     if (action === 'tick') {
       // Apply deltas to existing perf rows (additive). Useful for
       // simulating "a goal happened" without re-typing everything.
+      //
+      // PERF NOTE: this used to be a 20-iteration for-loop with two
+      // awaits each (read + update), which on Neon's pooled connection
+      // ran ~2 seconds per tick. That made auto-play feel sluggish.
+      // We now do a single batch read, then a single transactional
+      // batch write — turning 40 round-trips into 2.
       const deltas = (body.deltas as PerfStatsInput[]) ?? [];
       const homeScore = body.homeScore as number | undefined;
       const awayScore = body.awayScore as number | undefined;
@@ -422,31 +439,181 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      if (deltas.length === 0) {
+        return NextResponse.json({ ok: true, action: 'tick', updated: 0 });
+      }
+
+      // Batch-load every perf row + every player in one shot. Players
+      // are needed for two reasons:
+      //   1. existing rows: to read .position for the points formula
+      //   2. missing rows: to know .position when we auto-create one
+      // Auto-create means: if a delta arrives for a player who isn't
+      // in the perf table yet (e.g. admin added them to the lineup
+      // mid-match), we CREATE a row instead of silently skipping it.
+      // Previously the skip caused "player stuck at 13' while everyone
+      // else is at 50'" drift bugs.
+      const deltaIds = deltas.map((d) => d.playerId);
+      const [existingPerfs, players] = await Promise.all([
+        prisma.playerPerformance.findMany({
+          where: { matchId, playerId: { in: deltaIds } },
+        }),
+        prisma.player.findMany({
+          where: { id: { in: deltaIds } },
+          select: { id: true, position: true },
+        }),
+      ]);
+      const perfById = new Map(existingPerfs.map((p) => [p.playerId, p]));
+      const playerById = new Map(players.map((p) => [p.id, p]));
+
+      const ops: Prisma.PrismaPromise<unknown>[] = [];
       let updated = 0;
+      let created = 0;
       for (const delta of deltas) {
+        const player = playerById.get(delta.playerId);
+        if (!player) continue; // unknown player id — skip
+        const existing = perfById.get(delta.playerId);
+        if (existing) {
+          // Additive merge against the current row.
+          const merged: Required<PerfStatsInput> = {
+            playerId: delta.playerId,
+            minutesPlayed: existing.minutesPlayed + (delta.minutesPlayed ?? 0),
+            goals: existing.goals + (delta.goals ?? 0),
+            assists: existing.assists + (delta.assists ?? 0),
+            cleanSheet: delta.cleanSheet ?? existing.cleanSheet,
+            goalsConceeded: existing.goalsConceeded + (delta.goalsConceeded ?? 0),
+            saves: existing.saves + (delta.saves ?? 0),
+            penaltiesSaved: existing.penaltiesSaved + (delta.penaltiesSaved ?? 0),
+            penaltiesMissed: existing.penaltiesMissed + (delta.penaltiesMissed ?? 0),
+            yellowCards: existing.yellowCards + (delta.yellowCards ?? 0),
+            redCards: existing.redCards + (delta.redCards ?? 0),
+            ownGoals: existing.ownGoals + (delta.ownGoals ?? 0),
+            defensiveActions: existing.defensiveActions + (delta.defensiveActions ?? 0),
+            bonusPoints: existing.bonusPoints + (delta.bonusPoints ?? 0),
+          };
+          const totalPoints = computeTotal(merged, player.position as Position, match.stage.stageId);
+          ops.push(
+            prisma.playerPerformance.update({
+              where: { id: existing.id },
+              data: {
+                minutesPlayed: merged.minutesPlayed,
+                goals: merged.goals,
+                assists: merged.assists,
+                cleanSheet: merged.cleanSheet,
+                goalsConceeded: merged.goalsConceeded,
+                saves: merged.saves,
+                penaltiesSaved: merged.penaltiesSaved,
+                penaltiesMissed: merged.penaltiesMissed,
+                yellowCards: merged.yellowCards,
+                redCards: merged.redCards,
+                ownGoals: merged.ownGoals,
+                defensiveActions: merged.defensiveActions,
+                bonusPoints: merged.bonusPoints,
+                totalPoints,
+                lastUpdated: new Date(),
+              },
+            }),
+          );
+          updated += 1;
+        } else {
+          // No row yet — create one starting from zeros + the delta.
+          // We also seed minutesPlayed up to the match's current
+          // minute (if known) so the new player isn't sitting at 0'
+          // while everyone else is at 50'. The delta's minutesPlayed
+          // is added on top, which matches the additive semantics
+          // of `tick` for existing rows.
+          const baseMinutes = currentMinute ?? 0;
+          const stats: Required<PerfStatsInput> = {
+            playerId: delta.playerId,
+            minutesPlayed: baseMinutes + (delta.minutesPlayed ?? 0),
+            goals: delta.goals ?? 0,
+            assists: delta.assists ?? 0,
+            cleanSheet: delta.cleanSheet ?? false,
+            goalsConceeded: delta.goalsConceeded ?? 0,
+            saves: delta.saves ?? 0,
+            penaltiesSaved: delta.penaltiesSaved ?? 0,
+            penaltiesMissed: delta.penaltiesMissed ?? 0,
+            yellowCards: delta.yellowCards ?? 0,
+            redCards: delta.redCards ?? 0,
+            ownGoals: delta.ownGoals ?? 0,
+            defensiveActions: delta.defensiveActions ?? 0,
+            bonusPoints: delta.bonusPoints ?? 0,
+          };
+          const totalPoints = computeTotal(stats, player.position as Position, match.stage.stageId);
+          ops.push(
+            prisma.playerPerformance.create({
+              data: {
+                playerId: delta.playerId,
+                matchId,
+                minutesPlayed: stats.minutesPlayed,
+                goals: stats.goals,
+                assists: stats.assists,
+                cleanSheet: stats.cleanSheet,
+                goalsConceeded: stats.goalsConceeded,
+                saves: stats.saves,
+                penaltiesSaved: stats.penaltiesSaved,
+                penaltiesMissed: stats.penaltiesMissed,
+                yellowCards: stats.yellowCards,
+                redCards: stats.redCards,
+                ownGoals: stats.ownGoals,
+                defensiveActions: stats.defensiveActions,
+                bonusPoints: stats.bonusPoints,
+                totalPoints,
+                isLive: true,
+                lastUpdated: new Date(),
+              },
+            }),
+          );
+          created += 1;
+        }
+      }
+
+      // One transaction — Prisma runs these in parallel internally.
+      // No `timeout` option here because the array form of
+      // `$transaction` doesn't accept it (only the function form
+      // does). 20 parallel updates land in <500ms on Neon's pooler
+      // so the default 5s window is plenty.
+      if (ops.length > 0) {
+        await prisma.$transaction(ops);
+      }
+      return NextResponse.json({ ok: true, action: 'tick', updated, created });
+    }
+
+    if (action === 'set-stats') {
+      // Wholesale replace stats for given players. Unlike `tick` (which is
+      // additive), this is destination-mode: every field in the payload
+      // replaces the existing perf-row value verbatim. Used by the in-page
+      // "Edit stats" UI so admins can correct typos / overshoot without
+      // having to compute deltas in their head.
+      const stats = (body.stats as PerfStatsInput[]) ?? [];
+      let updated = 0;
+      for (const s of stats) {
         const existing = await prisma.playerPerformance.findUnique({
-          where: { playerId_matchId: { playerId: delta.playerId, matchId } },
+          where: { playerId_matchId: { playerId: s.playerId, matchId } },
           include: { player: true },
         });
         if (!existing) continue;
 
         const merged: Required<PerfStatsInput> = {
-          playerId: delta.playerId,
-          minutesPlayed: existing.minutesPlayed + (delta.minutesPlayed ?? 0),
-          goals: existing.goals + (delta.goals ?? 0),
-          assists: existing.assists + (delta.assists ?? 0),
-          cleanSheet: delta.cleanSheet ?? existing.cleanSheet,
-          goalsConceeded: existing.goalsConceeded + (delta.goalsConceeded ?? 0),
-          saves: existing.saves + (delta.saves ?? 0),
-          penaltiesSaved: existing.penaltiesSaved + (delta.penaltiesSaved ?? 0),
-          penaltiesMissed: existing.penaltiesMissed + (delta.penaltiesMissed ?? 0),
-          yellowCards: existing.yellowCards + (delta.yellowCards ?? 0),
-          redCards: existing.redCards + (delta.redCards ?? 0),
-          ownGoals: existing.ownGoals + (delta.ownGoals ?? 0),
-          defensiveActions: existing.defensiveActions + (delta.defensiveActions ?? 0),
-          bonusPoints: existing.bonusPoints + (delta.bonusPoints ?? 0),
+          playerId: s.playerId,
+          minutesPlayed: s.minutesPlayed ?? existing.minutesPlayed,
+          goals: s.goals ?? existing.goals,
+          assists: s.assists ?? existing.assists,
+          cleanSheet: s.cleanSheet ?? existing.cleanSheet,
+          goalsConceeded: s.goalsConceeded ?? existing.goalsConceeded,
+          saves: s.saves ?? existing.saves,
+          penaltiesSaved: s.penaltiesSaved ?? existing.penaltiesSaved,
+          penaltiesMissed: s.penaltiesMissed ?? existing.penaltiesMissed,
+          yellowCards: s.yellowCards ?? existing.yellowCards,
+          redCards: s.redCards ?? existing.redCards,
+          ownGoals: s.ownGoals ?? existing.ownGoals,
+          defensiveActions: s.defensiveActions ?? existing.defensiveActions,
+          bonusPoints: s.bonusPoints ?? existing.bonusPoints,
         };
-        const totalPoints = computeTotal(merged, existing.player.position as Position, match.stage.stageId);
+        const totalPoints = computeTotal(
+          merged,
+          existing.player.position as Position,
+          match.stage.stageId,
+        );
         await prisma.playerPerformance.update({
           where: { id: existing.id },
           data: {
@@ -469,7 +636,89 @@ export async function POST(request: NextRequest) {
         });
         updated += 1;
       }
-      return NextResponse.json({ ok: true, action: 'tick', updated });
+      return NextResponse.json({ ok: true, action: 'set-stats', updated });
+    }
+
+    if (action === 'set-clock') {
+      // Set match clock + (optionally) auto-bump every existing perf row's
+      // `minutesPlayed` to match. The auto-bump only RAISES — players who
+      // already have a higher value (e.g. were subbed off earlier so are
+      // capped at minute X) stay where they are. This makes "Jump to FT"
+      // a one-click action that sets everyone to 90 without trampling
+      // realistic substitutions.
+      const currentMinute = body.currentMinute as number | undefined;
+      const homeScore = body.homeScore as number | undefined;
+      const awayScore = body.awayScore as number | undefined;
+      const syncMinutes = body.syncMinutesToOnPitch as boolean | undefined;
+
+      if (currentMinute === undefined && homeScore === undefined && awayScore === undefined) {
+        return NextResponse.json(
+          { error: 'set-clock requires at least one of currentMinute / homeScore / awayScore' },
+          { status: 400 },
+        );
+      }
+
+      await prisma.match.update({
+        where: { id: matchId },
+        data: {
+          ...(currentMinute !== undefined ? { currentMinute } : {}),
+          ...(homeScore !== undefined ? { homeScore } : {}),
+          ...(awayScore !== undefined ? { awayScore } : {}),
+          lastUpdated: new Date(),
+        },
+      });
+
+      let bumped = 0;
+      if (syncMinutes && currentMinute !== undefined) {
+        // Bump on-pitch players' minutesPlayed UP to currentMinute. We
+        // can't just `updateMany` with the raw value because perf rows
+        // may already be higher (e.g. simulating a 95-minute player).
+        // So we read, compare, batch-write in a single transaction.
+        const perfs = await prisma.playerPerformance.findMany({
+          where: { matchId },
+          include: { player: { select: { position: true } } },
+        });
+        const ops: Prisma.PrismaPromise<unknown>[] = [];
+        for (const perf of perfs) {
+          if (perf.minutesPlayed >= currentMinute) continue;
+          const merged: Required<PerfStatsInput> = {
+            playerId: perf.playerId,
+            minutesPlayed: currentMinute,
+            goals: perf.goals,
+            assists: perf.assists,
+            cleanSheet: perf.cleanSheet,
+            goalsConceeded: perf.goalsConceeded,
+            saves: perf.saves,
+            penaltiesSaved: perf.penaltiesSaved,
+            penaltiesMissed: perf.penaltiesMissed,
+            yellowCards: perf.yellowCards,
+            redCards: perf.redCards,
+            ownGoals: perf.ownGoals,
+            defensiveActions: perf.defensiveActions,
+            bonusPoints: perf.bonusPoints,
+          };
+          const totalPoints = computeTotal(
+            merged,
+            perf.player.position as Position,
+            match.stage.stageId,
+          );
+          ops.push(
+            prisma.playerPerformance.update({
+              where: { id: perf.id },
+              data: {
+                minutesPlayed: currentMinute,
+                totalPoints,
+                lastUpdated: new Date(),
+              },
+            }),
+          );
+          bumped += 1;
+        }
+        if (ops.length > 0) {
+          await prisma.$transaction(ops);
+        }
+      }
+      return NextResponse.json({ ok: true, action: 'set-clock', bumped });
     }
 
     if (action === 'finish') {

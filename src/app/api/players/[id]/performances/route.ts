@@ -220,38 +220,63 @@ export async function GET(
 
     const playerId = params.id;
 
-    const player = await prisma.player.findUnique({
-      where: { id: playerId },
-      include: { nation: true },
-    });
+    // Fan out the four independent reads in parallel. The previous
+    // implementation did them sequentially (player → squadRow →
+    // performances → auditLog) which produced a ~600-1200ms waterfall
+    // on Neon's pooler — felt sluggish when opening the modal. With
+    // Promise.all the slowest single query (usually performances
+    // because of the nested join) sets the floor instead.
+    //
+    // We treat a missing player as a 404 after the join resolves to
+    // keep the happy path on a single round-trip.
+    const [player, squadRow, performances, rawAdjustments] = await Promise.all([
+      prisma.player.findUnique({
+        where: { id: playerId },
+        include: { nation: true },
+      }),
+      // Squad-row points for THIS user's team only (so the modal can show
+      // "your card on this player" vs lifetime stats).
+      prisma.squadPlayer.findFirst({
+        where: { playerId, team: { userId: decoded.userId } },
+        select: { points: true, isStarting: true, isCaptain: true, isViceCaptain: true },
+      }),
+      // All performances for this player, newest first (matches sorted by
+      // kickoffTime desc rather than by id, since matches can be created
+      // out of chronological order).
+      prisma.playerPerformance.findMany({
+        where: { playerId },
+        include: {
+          match: {
+            include: {
+              homeNation: { select: { code: true, name: true } },
+              awayNation: { select: { code: true, name: true } },
+              stage: { select: { stageId: true, name: true } },
+            },
+          },
+        },
+        orderBy: { match: { kickoffTime: 'desc' } },
+      }),
+      // Recent manual-override audit entries that mention this player.
+      // We can't index AuditLog by playerId (it's just a JSON blob), so we
+      // do a coarse filter on action + LIKE on details. We exclude
+      // reverted entries (revertedAt != null) AND we never return the
+      // paired MANUAL_OVERRIDE_REVERTED bookkeeping rows. The result is
+      // a clean "what's actually in effect on this player right now"
+      // list — no +X/-X audit ladder.
+      prisma.auditLog.findMany({
+        where: {
+          action: { in: ['MANUAL_OVERRIDE_MATCH', 'MANUAL_OVERRIDE_TOTAL'] },
+          details: { contains: playerId },
+          revertedAt: null,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+    ]);
 
     if (!player) {
       return NextResponse.json({ error: 'Player not found' }, { status: 404 });
     }
-
-    // Squad-row points for THIS user's team only (so the modal can show
-    // "your card on this player" vs lifetime stats).
-    const squadRow = await prisma.squadPlayer.findFirst({
-      where: { playerId, team: { userId: decoded.userId } },
-      select: { points: true, isStarting: true, isCaptain: true, isViceCaptain: true },
-    });
-
-    // All performances for this player, newest first (matches sorted by
-    // kickoffTime desc rather than by id, since matches can be created
-    // out of chronological order).
-    const performances = await prisma.playerPerformance.findMany({
-      where: { playerId },
-      include: {
-        match: {
-          include: {
-            homeNation: { select: { code: true, name: true } },
-            awayNation: { select: { code: true, name: true } },
-            stage: { select: { stageId: true, name: true } },
-          },
-        },
-      },
-      orderBy: { match: { kickoffTime: 'desc' } },
-    });
 
     const performancesPayload = performances.map((perf) => {
       const stats = {
@@ -296,23 +321,6 @@ export async function GET(
         breakdown,
         totalPoints: perf.totalPoints,
       };
-    });
-
-    // Recent manual-override audit entries that mention this player.
-    // We can't index AuditLog by playerId (it's just a JSON blob), so we
-    // do a coarse filter on action + LIKE on details. We exclude
-    // reverted entries (revertedAt != null) AND we never return the
-    // paired MANUAL_OVERRIDE_REVERTED bookkeeping rows. The result is
-    // a clean "what's actually in effect on this player right now"
-    // list — no +X/-X audit ladder.
-    const rawAdjustments = await prisma.auditLog.findMany({
-      where: {
-        action: { in: ['MANUAL_OVERRIDE_MATCH', 'MANUAL_OVERRIDE_TOTAL'] },
-        details: { contains: playerId },
-        revertedAt: null,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
     });
 
     const adjustments = rawAdjustments.map((entry) => {

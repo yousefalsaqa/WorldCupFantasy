@@ -1,10 +1,70 @@
 # Live Points Feature — Handoff
 
-Last updated: 2026-05-12 (evening — match-simulator polish + leagues
-polling + override Team.totalPoints fix + clean undo)
+Last updated: 2026-05-13 (evening — shared player-detail modal,
+read-only league team-view, parallelized performances endpoint,
+team-squad API extended with chips + livePoints, captain ×3 fix)
 
 This doc captures the state of the **live scoring + testing** work so the
 next session can pick up without re-reading the whole transcript.
+
+---
+
+## Session 2026-05-13 — what changed
+
+If you're picking this up cold, these are the deltas since the previous
+handoff entry:
+
+- **`<PlayerDetailModal />` is now a shared component**
+  (`src/components/player-detail-modal.tsx`). The squad page and the
+  league team-view page mount the same modal — same Match History
+  panel, same click-to-expand breakdown, same admin Undo. The modal
+  owns its own body-scroll lock and the `/api/players/[id]/performances`
+  fetch; parents only pass props (player, captaincy, callbacks). A
+  `readOnly` prop swaps the Sub / Captain / V-Captain buttons for
+  status badges so it works on someone else's team without exposing
+  mutating actions.
+- **League team-view is fully repurposed**
+  (`src/app/(dashboard)/leagues/team/[teamId]/page.tsx`). It now uses
+  `@/components/kit#PlayerCard` (same kit + name + points pill as
+  /squad) on the pitch and bench, opens the shared modal on tap, and
+  paints the captain ×2 / ×3 badge using that team's actual chip
+  state — fixes the previous "friend's TC showed ×1" visual bug.
+  Polls every 60s while `anyMatchLive`.
+- **`/api/team/[teamId]/squad` extended** to return `livePoints` per
+  player (PlayerPerformance overlay, mirrors `/api/squad/get`),
+  `activeChips`, `tripleCaptainActive`, `benchBoostActive`, and
+  `anyMatchLive`. The team-view page is the sole consumer for now;
+  no other endpoint depends on the new fields.
+- **`/api/players/[id]/performances` parallelized**. Four independent
+  reads (player, squadRow, performances, auditLog) are now in a single
+  `Promise.all` instead of a serial chain. On Neon's pooler this drops
+  cold-modal-open time from ~600-1200ms to ~250-400ms — the modal feels
+  ~instant now.
+- **Shared helpers**: `fdrPill()` moved into `@/lib/fdr` and
+  `getNextWcOpponent()` added to `@/lib/world-cup-fixtures`. Both pages
+  now share a single source of truth for FDR colors + next-opponent
+  resolution; the squad page still has local equivalents (`fdrPill`
+  inside `FdrLegend`, `getNextOpponent`) because deleting them is
+  invasive — fine to leave as duplicates that delegate later.
+- **League pitch pill-clipping fix**. Previously the green points
+  pill sitting above each kit was being chopped off because the
+  league page stacked `overflow-x-auto` on BOTH the outer wrapper
+  AND each row, and the browser couldn't keep Y visible when X was
+  auto on the same element. Fixed by mirroring the squad page exactly:
+  single `overflow-x-auto` at the OUTER pitch wrapper with `p-2 sm:p-6`
+  padding to absorb the pill, no row-level overflow.
+
+### Gotcha for next session
+
+**Never run `Set-Content -Encoding utf8` against an existing UTF-8
+file on Windows PowerShell 5.1.** Get-Content's default codepage on US
+locales is Windows-1252, so it mangles every multi-byte UTF-8 sequence
+(em-dash, ellipsis, £, etc.) into mojibake (`â€¦`, `Â£`) before the
+write back. Earlier this session that corrupted the entire squad page
+and we had to `git checkout` the clean version and replay the edits.
+Use Node's `fs.readFileSync(p, 'utf8')` + `fs.writeFileSync(p, ..., 'utf8')`
+for bulk slicing instead — that respects the file's actual encoding
+and round-trips cleanly.
 
 ---
 
@@ -58,16 +118,37 @@ the 2026 World Cup kicks off (Jun 11, 2026). That means:
     (`anyMatchLive: true`).
   - Captain multipliers intentionally NOT applied to the per-card pill
     (would create visual inconsistency mid-match).
-- **Player detail modal — Match History + breakdown**
-  (`src/app/(dashboard)/squad/page.tsx` + new endpoint
-  `src/app/api/players/[id]/performances/route.ts`):
+- **Player detail modal — extracted into a shared component**
+  (`src/components/player-detail-modal.tsx`) consumed by BOTH
+  `/squad` and `/leagues/team/[teamId]`:
   - Replaces the old static fixtures table that always showed dashes.
-  - Real `PlayerPerformance` rows, sorted newest-first by kickoff.
+  - Real `PlayerPerformance` rows, sorted newest-first by kickoff,
+    fetched via `GET /api/players/[id]/performances` (now parallelized
+    server-side — see Session 2026-05-13 notes).
   - Each row clickable → expands inline with the full points breakdown
     (per scoring category) computed server-side from stored stats.
   - Pulsing green LIVE badge on in-progress matches.
   - **Adjustments section** below the table showing recent
     `MANUAL_OVERRIDE_*` audit entries for that player.
+  - `readOnly` prop mode for the league team-view: hides Sub/Capt/V-Capt
+    buttons, replaces them with status badges, but admin Undo is still
+    surfaced (per-row, gated by `isAdmin`).
+  - Parent-supplied `onAdjustmentReverted` callback fires after a
+    successful undo so the page can re-pull its own squad/team data
+    and refresh the per-card pills.
+- **League team-view repurposed** (`src/app/(dashboard)/leagues/team/[teamId]/page.tsx`):
+  - Uses `@/components/kit#PlayerCard` on the pitch + bench so the
+    visual language matches /squad exactly.
+  - Mounts the shared `<PlayerDetailModal readOnly />` on tap.
+  - Captain badge surfaces `tripleCaptainActive` from this team's chip
+    state, so a friend's TC correctly shows ×3 (not ×1, the prior bug).
+  - 60s live polling gated by `anyMatchLive`, identical cadence to
+    /squad.
+- **`/api/team/[teamId]/squad` extended** to return `livePoints` per
+  player (`SquadPlayer.points + sum(isLive PlayerPerformance.totalPoints)`),
+  `activeChips`, `tripleCaptainActive`, `benchBoostActive`, and
+  `anyMatchLive`. Mirrors `/api/squad/get`'s logic exactly so the two
+  pages can't drift.
 - **`PlayerPerformance.defensiveActions`** field added via
   `prisma db push`. Persisted by the live update route, surfaced in
   the breakdown endpoint, and shown as a `DC` column in the modal's
@@ -376,6 +457,67 @@ npx tsc --noEmit            # strict typecheck (should be clean)
    in Vercel env. Once this runs, stage advancement becomes fully
    hands-off.
 
+### Tier 2.5 — Finish the Dream Team page
+
+The `/dream-team` page is wired up end-to-end but feels like a stub.
+The pitch renders, the stage dropdown works, the API
+(`src/app/api/dream-team/route.ts`) does the greedy formation search.
+What's missing to make it land:
+
+1. **Top scorers leaderboard** — "players with the most points". The
+   page currently shows only the 11 dream-team starters; users want
+   to see "who's putting up numbers" beyond the XI. Easiest path:
+   the existing API already sorts the top 50 by `_sum.totalPoints`
+   in the same query — surface the FULL list (not just the 11
+   picked) as a separate "Top Scorers" tab or accordion below the
+   pitch. Per-position filter (All / GK / DEF / MID / FWD) would
+   pair nicely with the existing stage dropdown.
+2. **Dream-team bench (4 subs)** — Fantasy convention is to also
+   pick the next-best GK + 3 highest-scoring outfield not in the XI
+   so the dream-team mirrors a real squad. Trivially adds 4 more
+   `byPos` slice calls inside `selectBestXI`. Render them in the
+   existing two-col bench grid (copy the look from the league
+   team-view page).
+3. **Captain armband + ×2 points multiplier** — pick the
+   highest-scoring outfielder, render the gold "C" on their kit
+   (the shared `Kit` component already accepts `isCaptain`), bump
+   their displayed points to `totalPoints × 2`, and add a "+X
+   captain bonus" line to the totals tile. Mirrors how the rest of
+   the app communicates captaincy and makes the dream-team total
+   apples-to-apples with a player's actual team score.
+4. **Clickable player cards → shared modal** — the new
+   `<PlayerDetailModal readOnly />` (`src/components/player-detail-modal.tsx`)
+   is ready to drop in. Each kit + bench card becomes an `onClick`
+   target; modal opens with `readOnly`, isStarting + isCaptain
+   wired from the dream-team payload. Re-uses the per-match
+   breakdown + admin Undo machinery for free.
+5. **Aggregate stats tile** — strip above the pitch showing
+   "Top scorer · Most assists · Most clean sheets · Most DCs" for
+   the selected stage. The data is already in `PlayerPerformance`
+   (groupBy `playerId` with `_sum` on `goals` / `assists` /
+   `cleanSheet` / `defensiveActions`). Cheap to add to the existing
+   API in a single extra `groupBy` round-trip OR fold into the
+   current `groupBy` by changing it to `_sum: { totalPoints: true,
+   goals: true, assists: true, cleanSheet: true, defensiveActions: true }`.
+6. **Your XI vs Dream XI comparison** — small tile at the bottom
+   showing the user's actual stage points vs the dream XI's total
+   (`dream - you = X points missed`). Requires also fetching the
+   user's own `Team.totalPoints` (or per-stage `TeamStage` row once
+   that snapshot is populated — see Tier 1 item 2 above).
+7. **Live polling** — when `anyMatchLive`, repoll every 60s. The
+   API already aggregates from `PlayerPerformance` so live perfs
+   are included automatically; the page just needs the same
+   `anyMatchLive` signal that `/squad` and `/leagues` already use.
+   Easiest path: extend the dream-team endpoint response with
+   `anyMatchLive: boolean` (a cheap `match.count({ where:
+   isStarted: true, isFinished: false })`), then mirror the
+   `setInterval(tick, 60_000)` loop from the league team-view.
+8. **Encoding note** — when editing `src/app/(dashboard)/dream-team/page.tsx`
+   on Windows, follow the same rule as everywhere else: use Node
+   or the IDE for non-ASCII edits (the pitch may want a ⭐ in the
+   header — that's a 3-byte UTF-8 sequence that PowerShell 5.1
+   will mangle if you go near it with `Set-Content`).
+
 ### Tier 3 — Nice-to-have
 6. **Show captain multiplier in the modal breakdown** (a final
    "Captain bonus +X" line when applicable, so users understand the
@@ -416,9 +558,19 @@ npx tsc --noEmit            # strict typecheck (should be clean)
 - `src/app/api/admin/override/route.ts` — Emergency Override
 
 ### Squad page + per-player view
-- `src/app/(dashboard)/squad/page.tsx` — squad page + modal
-- `src/app/api/squad/get/route.ts` — squad fetch w/ livePoints
-- `src/app/api/players/[id]/performances/route.ts` — per-match breakdown
+- `src/app/(dashboard)/squad/page.tsx` — squad page (modal lives in
+  shared component now)
+- `src/app/(dashboard)/leagues/team/[teamId]/page.tsx` — read-only
+  league team-view that mounts the same modal in `readOnly` mode
+- `src/components/player-detail-modal.tsx` — shared modal w/ Match
+  History, breakdown, admin Undo. Owns its own performances fetch.
+- `src/app/api/squad/get/route.ts` — own-team fetch w/ livePoints
+- `src/app/api/team/[teamId]/squad/route.ts` — other-team fetch w/
+  livePoints + chips + anyMatchLive (mirrors squad/get)
+- `src/app/api/players/[id]/performances/route.ts` — per-match
+  breakdown, parallelized (Promise.all of four reads)
+- `src/lib/fdr.ts` — `fdrPill()` + `getFixtureDifficulty()` (shared)
+- `src/lib/world-cup-fixtures.ts` — `getNextWcOpponent()` + fixtures
 
 ### Tests
 - `scripts/test-scoring.ts` — base scoring + captain + BPS + team totals
