@@ -289,6 +289,16 @@ the 2026 World Cup kicks off (Jun 11, 2026). That means:
   enable: add a `crons` array to `vercel.json` with
   `{ path: "/api/live/update", schedule: "*/2 * * * *" }` and set
   `CRON_SECRET` in Vercel env.
+- **Cron attempt 2026-05-13 — BLOCKED on Hobby plan.** We tried turning
+  the cron on (commit `ef15e4e`) but the deploy failed because Vercel
+  Hobby caps cron at **once per day**; `*/2 * * * *` was rejected at
+  build time. Reverted in commit `81fe23b`. `CRON_SECRET` is still set
+  in Vercel env (Production + Preview) and the auth path in
+  `/api/live/update` is verified to accept it, so re-enabling is a
+  one-line edit once we pick a path (see "Cron re-enable plan" below).
+  In the meantime live updates are driven by the manual
+  "Update Live Scores" button on `/admin`, which hits the same route
+  via an authenticated admin session.
 
 ### Architectural decisions worth knowing
 
@@ -451,10 +461,11 @@ npx tsc --noEmit            # strict typecheck (should be clean)
    API-Football usage but nothing else does. Worth a small banner on
    `/admin` showing "X / 7,500 daily calls remaining" once we have a
    Pro plan.
-5. **Activate the Vercel cron.** Add a `crons` array to `vercel.json`
-   with `{ path: "/api/live/update", schedule: "*/2 * * * *" }`
-   (instructions in `docs/vercel-cron-setup.md`). Set `CRON_SECRET`
-   in Vercel env. Once this runs, stage advancement becomes fully
+5. **Activate the live-scoring cron** — *blocked on Hobby plan, see
+   "Cron re-enable plan" below*. Three options ranked by effort/cost.
+   Until one is picked, the only thing driving `/api/live/update` is
+   the manual button on `/admin`, so someone has to babysit during
+   live matches. Re-enabling cron makes stage advancement fully
    hands-off.
 
 ### Tier 2.5 — Finish the Dream Team page
@@ -619,7 +630,132 @@ Remaining open work (carryover):
   adding in the next pass.
 - **Flip `UNLIMITED_TRANSFERS = false`** the day before WC kickoff
   (see Tier-1 step 1 above).
+- **Re-enable the live-scoring cron** (see plan below).
 - **Optional**: backfill legacy MANUAL_OVERRIDE_* rows into
   `Team.totalPoints` so even pre-fix overrides show up in
   /admin/users + league standings. Only relevant if there are
   historical overrides we want to preserve rather than undo.
+
+---
+
+## Cron re-enable plan (pre-WC final push)
+
+`/api/live/update` is wired and verified, `CRON_SECRET` is already set
+in Vercel env, but Vercel **Hobby cron is capped at once per day** so
+`*/2 * * * *` fails at deploy time. Pick ONE of these before WC kickoff
+on Jun 11, 2026.
+
+### Option A — Vercel Pro upgrade (recommended for the WC)
+
+**Cost**: $20/mo per member.
+**Effort**: 2 minutes.
+**Why this is the right answer for the WC**: it's the closest setup to
+production-grade and stays inside the same dashboard for logs,
+function timings, and rate-limit observability. Per Vercel's
+[Cron Jobs Usage & Pricing](https://vercel.com/docs/cron-jobs/usage-and-pricing)
+docs, Pro gets per-minute scheduling precision.
+
+Steps:
+1. vercel.com → project → Settings → Plan → upgrade to Pro.
+2. Re-add the cron block to `vercel.json`:
+   ```json
+   "crons": [
+     { "path": "/api/live/update", "schedule": "*/2 * * * *" }
+   ]
+   ```
+3. `git push origin main`. Within 2 minutes you'll see invocations in
+   Logs (filter Function = `/api/live/update`).
+
+That's it. `CRON_SECRET` is already set, the auth path was already
+proven by the manual curl smoke test during the 2026-05-13 session.
+
+### Option B — External cron service (free, decent reliability)
+
+**Cost**: $0.
+**Effort**: ~5 minutes.
+**Service**: [cron-job.org](https://cron-job.org) (free tier supports
+1-minute intervals, 50 jobs per account). Alternatives:
+[EasyCron](https://www.easycron.com) (5-min free tier),
+[Upstash QStash](https://upstash.com/docs/qstash) (free 500 msgs/day).
+
+Steps (cron-job.org):
+1. Sign up at cron-job.org (free).
+2. **Create cronjob**:
+   - Title: `Fantasy LaLiGa live update`
+   - URL: `https://YOUR_VERCEL_URL/api/live/update`
+   - Schedule: Every 2 minutes (their UI has a preset; or cron `*/2 * * * *`)
+   - Request method: GET
+3. **Advanced → Headers** → add:
+   - Header name: `Authorization`
+   - Header value: `Bearer YOUR_CRON_SECRET` (paste the exact value
+     stored in Vercel's `CRON_SECRET` env var)
+4. **Notifications**: enable failure notifications to your email so
+   you find out fast if API-Football is down or the route 500s.
+5. Save → toggle to "Enabled".
+
+Verification: wait 2 minutes, check the job's "History" tab on
+cron-job.org for 200 responses, and cross-check Vercel Function logs.
+
+### Option C — GitHub Actions scheduled workflow (free, lower precision)
+
+**Cost**: $0 (within free GH Actions minutes on public repo; this repo
+is public per the git remote).
+**Effort**: ~3 minutes.
+**Caveat**: GH Actions docs explicitly warn that scheduled workflows
+may be delayed during high load, and the minimum effective interval is
+~5 minutes. Acceptable for live points (a 60s pill poll on the
+frontend smooths over a 5-min cron) but worse than Option A or B.
+
+Steps:
+1. In GitHub repo → Settings → Secrets and variables → Actions → New
+   repository secret. Name: `CRON_SECRET`. Value: same as the Vercel
+   env var.
+2. Add a second secret `VERCEL_URL` = `https://YOUR_VERCEL_URL` (no
+   trailing slash).
+3. Create `.github/workflows/live-update-cron.yml`:
+   ```yaml
+   name: Live update cron
+   on:
+     schedule:
+       - cron: '*/5 * * * *'  # GH minimum reliable interval
+     workflow_dispatch:        # allow manual trigger from Actions tab
+   jobs:
+     ping:
+       runs-on: ubuntu-latest
+       steps:
+         - name: Hit /api/live/update
+           run: |
+             curl -fsS \
+               -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+               "${{ secrets.VERCEL_URL }}/api/live/update"
+   ```
+4. Commit + push. The workflow runs automatically every ~5 minutes,
+   and you can trigger it manually from the Actions tab as a sanity
+   check.
+
+### Decision deadline
+
+Pick one **at least 24 hours before WC kickoff** so the cron logs at
+least one full overnight cycle of no-op runs (confirming the route
+stays cheap when no match is live). Earlier is better — Option A is a
+2-minute change so even day-of works in a pinch, but B and C want
+half-a-day of bake time to catch any auth/header bugs.
+
+### Validation checklist (any option)
+
+Before declaring cron production-ready:
+
+- [ ] First cron invocation visible in Vercel Function logs.
+- [ ] `curl -H "Authorization: Bearer $CRON_SECRET" $URL/api/live/update`
+      from your laptop returns 200. (Tests the same auth path the cron
+      service uses; if your curl works, theirs will too.)
+- [ ] With no live match in the DB, invocations return quickly
+      (~< 1s) and `playersUpdated` is 0 for every match. This confirms
+      the no-op-when-idle behavior is healthy and quota cost ≈ 0.
+- [ ] Trigger a live match via `/admin/match-simulator` (Go LIVE +
+      Tick). Within 2 min (Pro) / 2 min (cron-job.org) / 5 min (GH
+      Actions), the cron should be writing `PlayerPerformance` rows
+      and the `/squad` pill should reflect them.
+- [ ] Run `/admin/live-test` once to capture API-Football rate-limit
+      headroom; with cron at 2-min intervals you'll burn ~720 calls/day
+      when matches are live (Pro plan API-Football is 7,500/day).
