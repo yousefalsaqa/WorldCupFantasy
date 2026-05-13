@@ -1,8 +1,8 @@
 # Live Points Feature — Handoff
 
-Last updated: 2026-05-13 (evening — shared player-detail modal,
-read-only league team-view, parallelized performances endpoint,
-team-squad API extended with chips + livePoints, captain ×3 fix)
+Last updated: 2026-05-13 (night — production key rotation, modal Stats
+tile from real perfs, real-match live-test validation PL+Ligue1 FT,
+Vercel Hobby cron blocked + documented re-enable plan)
 
 This doc captures the state of the **live scoring + testing** work so the
 next session can pick up without re-reading the whole transcript.
@@ -13,6 +13,39 @@ next session can pick up without re-reading the whole transcript.
 
 If you're picking this up cold, these are the deltas since the previous
 handoff entry:
+
+### Late session (night) — ops + validation + UI polish
+
+Shipped in `main` (see git log around `ac740a4` / `cf67c4a`):
+
+- **Production credential rotation** — `JWT_SECRET` and Neon
+  `DATABASE_URL` were rotated in Vercel (delete + recreate sensitive
+  vars where Edit was unavailable) and mirrored in local `.env`.
+  Deploy picked up new values on the next push; all sessions
+  invalidated once (expected). `CRON_SECRET` left in place for a
+  future cron path.
+- **Player modal Stats tile is no longer placeholder zeros**
+  (`src/components/player-detail-modal.tsx`, commit `ac740a4`). The
+  six tiles (**Goals, Assists, Apps, Minutes, DC, Clean**) are
+  **derived client-side** from the same `PlayerPerformance` rows
+  already fetched for Match History — no `/api/squad/get` change,
+  no extra network call. Pre-WC zeros mean "no perfs yet", not
+  hardcoded stubs. `/api/squad/get` still returns legacy
+  `passAccuracy` / `tackles` / etc. as zeros for squad payload
+  consumers; a cleanup pass can delete those fields later.
+- **Real-match engine validation** via `/admin/live-test` (read-only,
+  3 API calls per Run Once). Same evening: **Manchester City vs
+  Crystal Palace** (API fixture `1379275`, PL) and **Lens vs PSG**
+  (`1387952`, Ligue 1), including **FT** snapshots saved locally as
+  `live-test-*.json` in the project root — those files are in
+  `.gitignore` so they never get committed on accident. Validated
+  live: goals/assists, 60+ appearance flip, saves floor-bonus, yellow
+  cards, DC cliff at threshold, position-specific CS, on-pitch
+  conceded counts, **subs off before 60' + subs on under 60' correctly
+  denied CS** (e.g. Nunes/Gvardiol 58', Aké/Doku short minutes).
+- **Vercel `crons` block** — attempted and **reverted** on Hobby (see
+  below); handoff doc now includes full **Cron re-enable plan**
+  (Pro vs external cron vs GH Actions).
 
 - **`<PlayerDetailModal />` is now a shared component**
   (`src/components/player-detail-modal.tsx`). The squad page and the
@@ -335,10 +368,12 @@ the 2026 World Cup kicks off (Jun 11, 2026). That means:
   and `Team.totalPoints` cumulatively. The `/history` page therefore
   shows zeros for `rawPoints`/`captainPoints`/`transferHits`. Worth
   filling in next.
-- **Player modal "Stats" tile** (Goals/Assists/Pass%/Inter/Tackles/
-  Dribbles) is hardcoded to 0 — the `/api/squad/get` endpoint doesn't
-  yet aggregate these across the season. Low priority; the per-match
-  breakdown in Match History already shows real per-match stats.
+- **Legacy squad payload fields** (`passAccuracy`, `interceptions`,
+  `tackles`, `dribbles` on each row from `/api/squad/get`) are still
+  all zeros — the modal **no longer reads them** (Stats tile uses
+  Match History data inside the modal). Removing the dead fields
+  from the API + squad page types is a small cleanup task, not
+  blocking.
 - **Free Hit revert** is now triggered from TWO places:
   1. `/api/squad/get` (`maybeRevertFreeHit`) — fires when the user
      loads the squad page after the FH stage ends.
