@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
+import { getStageLock, LOCKED_ERROR } from '@/lib/deadline';
 import { logAudit } from '@/lib/audit';
 // import { validateSquad, validateStartingXI } from '@/lib/validation';
 import { SQUAD_SIZE } from '@/lib/constants';
@@ -109,6 +110,17 @@ export async function POST(request: NextRequest) {
         { error: 'Squad is already full' },
         { status: 400 }
       );
+    }
+
+    // This add/remove API exists for the initial build only. Once you've
+    // got a saved 15, all changes must flow through /api/transfers (which
+    // counts free transfers, charges -4 hits, and respects the deadline).
+    // Without this gate, remove-then-add here was a free transfer that
+    // bypassed every rule. Also freeze partial builds during a live round
+    // for anyone who already had players before the deadline.
+    const { locked } = await getStageLock();
+    if (locked && team.squadPlayers.length > 0) {
+      return NextResponse.json({ error: LOCKED_ERROR }, { status: 403 });
     }
 
     // Get player to add
@@ -262,6 +274,20 @@ export async function DELETE(request: NextRequest) {
         { error: 'Player not in squad' },
         { status: 400 }
       );
+    }
+
+    // Completed squads can only change via /api/transfers — see the
+    // matching guard in POST. Deleting from a full 15 here would dodge
+    // transfer counting, point hits, and the deadline.
+    if (team.squadPlayers.length >= SQUAD_SIZE) {
+      return NextResponse.json(
+        { error: 'Your squad is complete — use transfers to swap players' },
+        { status: 403 }
+      );
+    }
+    const { locked } = await getStageLock();
+    if (locked) {
+      return NextResponse.json({ error: LOCKED_ERROR }, { status: 403 });
     }
 
     // Remove player

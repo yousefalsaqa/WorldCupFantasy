@@ -193,10 +193,12 @@ export function formatRelativePast(date: Date, nowMs: number = Date.now(), tz?: 
 // ---------------------------------------------------------------------------
 
 /**
- * Squad/transfer deadline = 1 hour before kickoff. Centralised so we can
- * change the rule in one place if the league ever revises it.
+ * Squad/transfer deadline = kickoff of the round's first match. Was 1 hour
+ * before; moved to kickoff (user call, Jun 10 2026) so managers can react
+ * to official lineups, which drop roughly an hour out. Per-player
+ * late-swap locks handle in-round integrity.
  */
-export const DEADLINE_OFFSET_MS = 60 * 60 * 1000;
+export const DEADLINE_OFFSET_MS = 0;
 
 /** Compute the deadline Date for a given kickoff. */
 export function deadlineFor(kickoff: Date): Date {
