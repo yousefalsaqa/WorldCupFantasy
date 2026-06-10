@@ -101,13 +101,34 @@ function FixturesContent() {
         <FilterButton active={filter === 'knockout'} onClick={() => setFilter('knockout')}>Knockouts</FilterButton>
       </div>
 
-      {/* Fixtures List */}
+      {/* Fixtures List — grouped under date headers so the schedule scans
+          like a TV guide. Grouping key = calendar day in the USER's zone. */}
       <div className="space-y-3">
-        {filteredFixtures.map(fixture => {
+        {filteredFixtures.map((fixture, i) => {
           const stadium = STADIUMS[fixture.stadium];
+          const dayLabel = formatDate(fixture.date, fixture.time);
+          const prevLabel = i > 0
+            ? formatDate(filteredFixtures[i - 1].date, filteredFixtures[i - 1].time)
+            : null;
+          const showHeader = dayLabel !== prevLabel;
+          const isToday = dayLabel === formatDateWithWeekday(new Date(), timezone);
 
           return (
-            <div key={fixture.id} className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/[0.07] transition-all">
+            <div key={fixture.id}>
+              {showHeader && (
+                <div className={`flex items-center gap-2 pt-3 pb-1 ${i === 0 ? '!pt-0' : ''}`}>
+                  <span className={`text-xs font-black uppercase tracking-widest ${isToday ? 'text-emerald-400' : 'text-white/50'}`}>
+                    {dayLabel}
+                  </span>
+                  {isToday && (
+                    <span className="px-1.5 py-[1px] rounded-md bg-emerald-500/15 ring-1 ring-emerald-400/40 text-emerald-300 text-[9px] font-black tracking-wider">
+                      TODAY
+                    </span>
+                  )}
+                  <div className="flex-1 h-px bg-white/10" />
+                </div>
+              )}
+            <div className={`bg-white/5 border rounded-xl p-4 hover:bg-white/[0.07] transition-all ${isToday ? 'border-emerald-500/25' : 'border-white/10'}`}>
               {/* Stage & Date Row */}
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold text-white/40 uppercase tracking-wider">{fixture.stage}</span>
@@ -140,6 +161,7 @@ function FixturesContent() {
                 </svg>
                 <span className="truncate">{stadium.city}</span>
               </div>
+            </div>
             </div>
           );
         })}

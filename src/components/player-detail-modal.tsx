@@ -95,6 +95,7 @@ export interface ModalPlayer {
   displayName: string;
   position: string;
   shirtNumber: number | null;
+  photoUrl?: string | null;
   /** Raw per-player points (live perf added in by the caller). */
   points?: number;
   /** True when this player's nation is currently playing — drives the LIVE pill. */
@@ -285,15 +286,40 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
           </button>
 
           <div className="relative flex items-center gap-3 pr-10">
-            <Kit
-              primaryColor={player.nation?.kitColor1 || '#FFF'}
-              secondaryColor={player.nation?.kitColor2 || '#000'}
-              number={player.shirtNumber}
-              nationCode={player.nation?.code || ''}
-              size="xs"
-              isCaptain={isCaptain}
-              isViceCaptain={isViceCaptain}
-            />
+            {player.photoUrl ? (
+              <div
+                className="relative w-14 h-14 rounded-xl p-[2px] shrink-0 shadow-[0_4px_14px_rgba(0,0,0,0.4)]"
+                style={{
+                  background: `linear-gradient(160deg, ${player.nation?.kitColor1 || '#334155'} 0%, ${player.nation?.kitColor2 || '#0f172a'} 110%)`,
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={player.photoUrl}
+                  alt=""
+                  className="w-full h-full rounded-[10px] object-cover object-top bg-slate-800"
+                />
+                {(isCaptain || isViceCaptain) && (
+                  <div className={`absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full flex items-center justify-center ring-2 shadow-lg ${
+                    isCaptain
+                      ? 'bg-gradient-to-br from-yellow-300 to-amber-500 ring-yellow-200/80'
+                      : 'bg-gradient-to-br from-gray-200 to-gray-400 ring-white/70'
+                  }`}>
+                    <span className="text-[10px] font-black text-black">{isCaptain ? 'C' : 'V'}</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Kit
+                primaryColor={player.nation?.kitColor1 || '#FFF'}
+                secondaryColor={player.nation?.kitColor2 || '#000'}
+                number={player.shirtNumber}
+                nationCode={player.nation?.code || ''}
+                size="xs"
+                isCaptain={isCaptain}
+                isViceCaptain={isViceCaptain}
+              />
+            )}
             <div className="text-white flex-1 min-w-0">
               <h2 className="text-lg font-black leading-tight truncate">{player.displayName}</h2>
               <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">

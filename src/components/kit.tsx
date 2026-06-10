@@ -1,6 +1,6 @@
 'use client';
 
-import { useId } from 'react';
+import { useId, useState } from 'react';
 
 interface KitProps {
   primaryColor: string;
@@ -261,6 +261,105 @@ export default function Kit({
   );
 }
 
+// ============================================
+// PLAYER FACE
+// FIFA-sticker style portrait: official API-Football headshot framed in a
+// kit-color gradient. Falls back to the SVG <Kit> when there's no photo or
+// the CDN image fails to load. Drop-in anywhere a Kit was used.
+// ============================================
+
+export interface PlayerFaceProps {
+  photoUrl?: string | null;
+  primaryColor: string;
+  secondaryColor: string;
+  number?: number | null;
+  nationCode?: string;
+  size?: 'xs' | 'sm' | 'md' | 'lg';
+  isCaptain?: boolean;
+  isViceCaptain?: boolean;
+}
+
+const PHOTO_SIZES = {
+  xs: { box: 'w-9 h-11', radius: 'rounded-lg', inner: 'rounded-[6px]', num: 'text-[7px] min-w-[12px] h-[12px]' },
+  sm: { box: 'w-12 h-14', radius: 'rounded-lg', inner: 'rounded-[6px]', num: 'text-[8px] min-w-[14px] h-[14px]' },
+  md: { box: 'w-16 h-20', radius: 'rounded-xl', inner: 'rounded-[10px]', num: 'text-[10px] min-w-[17px] h-[17px]' },
+  lg: { box: 'w-20 h-24', radius: 'rounded-xl', inner: 'rounded-[10px]', num: 'text-[11px] min-w-[19px] h-[19px]' },
+} as const;
+
+export function PlayerFace({
+  photoUrl,
+  primaryColor,
+  secondaryColor,
+  number,
+  nationCode = '',
+  size = 'md',
+  isCaptain = false,
+  isViceCaptain = false,
+}: PlayerFaceProps) {
+  const [failed, setFailed] = useState(false);
+
+  if (!photoUrl || failed) {
+    return (
+      <Kit
+        primaryColor={primaryColor}
+        secondaryColor={secondaryColor}
+        number={number}
+        nationCode={nationCode}
+        size={size}
+        isCaptain={isCaptain}
+        isViceCaptain={isViceCaptain}
+      />
+    );
+  }
+
+  const s = PHOTO_SIZES[size];
+  return (
+    <div
+      className={`relative ${s.box} ${s.radius} p-[2px] shadow-[0_4px_12px_rgba(0,0,0,0.45)]`}
+      style={{ background: `linear-gradient(160deg, ${primaryColor} 0%, ${secondaryColor} 110%)` }}
+    >
+      <div className={`relative w-full h-full ${s.inner} overflow-hidden bg-slate-800`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={photoUrl}
+          alt=""
+          loading="lazy"
+          draggable={false}
+          onError={() => setFailed(true)}
+          className="w-full h-full object-cover object-top"
+        />
+        {/* bottom glaze so the name plate below reads as connected */}
+        <div
+          className="absolute inset-x-0 bottom-0 h-1/3 pointer-events-none"
+          style={{ background: `linear-gradient(to top, ${primaryColor}E6, transparent)` }}
+        />
+        {/* subtle top sheen */}
+        <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(165deg,rgba(255,255,255,0.18)_0%,transparent_38%)]" />
+      </div>
+      {/* shirt number chip */}
+      {number != null && (
+        <div
+          className={`absolute bottom-[3px] right-[3px] ${s.num} px-[3px] rounded-md flex items-center justify-center font-black leading-none shadow`}
+          style={{ background: secondaryColor, color: getContrastColor(secondaryColor) }}
+        >
+          {number}
+        </div>
+      )}
+      {/* Captain / vice badge (the SVG kit fallback renders its own) */}
+      {isCaptain && (
+        <div className="absolute -top-1 -left-1 w-4 h-4 sm:w-5 sm:h-5 bg-gradient-to-br from-yellow-300 to-amber-500 rounded-full flex items-center justify-center shadow-[0_0_10px_rgba(251,191,36,0.6)] ring-1 sm:ring-2 ring-yellow-200/80 z-10">
+          <span className="text-[8px] sm:text-[10px] font-black text-black">C</span>
+        </div>
+      )}
+      {isViceCaptain && !isCaptain && (
+        <div className="absolute -top-1 -left-1 w-4 h-4 sm:w-5 sm:h-5 bg-gradient-to-br from-gray-200 to-gray-400 rounded-full flex items-center justify-center shadow-lg ring-1 sm:ring-2 ring-white/70 z-10">
+          <span className="text-[8px] sm:text-[10px] font-black text-black">V</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Player card with kit, name, and info
 export type PlayerStatus = 'available' | 'doubt' | 'injured' | 'suspended';
 
@@ -270,6 +369,7 @@ interface PlayerCardProps {
     displayName: string;
     position: string;
     shirtNumber?: number | null;
+    photoUrl?: string | null;
     nation?: {
       code: string;
       name: string;
@@ -393,9 +493,10 @@ export function PlayerCard({
       )}
 
       <div className="relative" style={{ overflow: 'visible' }}>
-        <Kit
-          primaryColor={player.nation?.kitColor1 || '#FFFFFF'}
-          secondaryColor={player.nation?.kitColor2 || '#000000'}
+        <PlayerFace
+          photoUrl={player.photoUrl}
+          primaryColor={player.nation?.kitColor1 || '#334155'}
+          secondaryColor={player.nation?.kitColor2 || '#0f172a'}
           number={player.shirtNumber}
           nationCode={player.nation?.code || ''}
           size={kitSize}
@@ -479,8 +580,16 @@ export function EmptySlot({ position, onClick }: EmptySlotProps) {
       className={`flex flex-col items-center cursor-pointer group transition-all hover:scale-110 active:scale-95 touch-manipulation`}
       onClick={onClick}
     >
-      <div className={`w-9 h-11 sm:w-12 sm:h-14 rounded-xl bg-gradient-to-b ${posColors[position]} border-2 border-dashed flex items-center justify-center shadow-inner backdrop-blur-sm group-hover:shadow-lg`}>
-        <span className="text-2xl sm:text-3xl group-hover:text-white transition-colors font-light leading-none">+</span>
+      <div className={`relative w-9 h-11 sm:w-12 sm:h-14 rounded-xl bg-gradient-to-b ${posColors[position]} border-2 border-dashed flex items-end justify-center overflow-hidden shadow-inner backdrop-blur-sm group-hover:shadow-lg`}>
+        {/* Dark head-and-shoulders silhouette — matches the headshot cards */}
+        <svg viewBox="0 0 40 44" className="w-[80%] h-auto opacity-70" aria-hidden>
+          <circle cx="20" cy="13" r="8" fill="rgba(2,6,23,0.85)" />
+          <path d="M4 44 Q4 28 20 28 Q36 28 36 44 Z" fill="rgba(2,6,23,0.85)" />
+        </svg>
+        {/* small + badge */}
+        <div className="absolute top-1 right-1 w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-white/15 ring-1 ring-white/25 flex items-center justify-center">
+          <span className="text-[10px] sm:text-xs font-bold leading-none text-white/90">+</span>
+        </div>
       </div>
       <div className="mt-1 px-2 py-0.5 bg-slate-950/80 rounded-md ring-1 ring-white/10">
         <span className="text-white/70 text-[9px] sm:text-xs font-bold tracking-wide">{position}</span>

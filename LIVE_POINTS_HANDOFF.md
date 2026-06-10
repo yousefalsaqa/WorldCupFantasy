@@ -1,8 +1,85 @@
 # Live Points Feature — Handoff
 
-Last updated: 2026-05-13 (night — production key rotation, modal Stats
-tile from real perfs, real-match live-test validation PL+Ligue1 FT,
-Vercel Hobby cron blocked + documented re-enable plan)
+Last updated: 2026-06-10 (launch day -1 — full production launch ops
+complete + visual polish pass IN PROGRESS, see Session 2026-06-10)
+
+---
+
+## Session 2026-06-10 — LAUNCH OPS (all shipped to prod) + UI pass (local)
+
+### Part 1 — Launch ops: DONE and LIVE in production (commit `4a313e7`)
+
+- **Fresh machine setup**: this box had no Node/.env/node_modules (fresh
+  clone). Node 24 installed via winget; `.env` rebuilt — NOTE: Vercel
+  prod secrets are write-only (pull returns empty), local `.env` is the
+  only readable copy. DO NOT LOSE IT.
+- **API-Football upgraded to Pro** (7,500/day) on a NEW account
+  (21ymsa@queensu.ca). Old free key dead. **Subscription period ends
+  Jul 10 — must stay active through the final Jul 19.**
+- **Full data sync** (`scripts/sync-from-api-football.ts`, dry-run by
+  default, `--apply` to write, caches in `.sync-cache.json`):
+  48/48 nations mapped+validated (the old static NATION_TO_API_ID table
+  had badly wrong ids), **1,248 players = every official 26-man squad
+  with apiFootballId + photoUrl**, 72 group fixtures stamped with API
+  fixture ids. KNOCKOUT FIXTURES NOT IN DB YET — sync them after GR3
+  (~Jun 27).
+- **Launch reset** (`scripts/reset-for-launch.ts`): all users/teams/
+  leagues wiped EXCEPT `admin@worldcupfantasy.com` (ops account; owner
+  plays on a separate personal account — not yet created). Stale
+  unmapped players deleted. GR1 active. Friends re-register fresh.
+- **UNLIMITED_TRANSFERS = false** in all 3 routes (transfers, squad/get,
+  team).
+- **Cron LIVE**: cron-job.org (user's account) hits
+  `GET /api/live/update` every 1 min with `Bearer CRON_SECRET`.
+  Verified 200s in Vercel logs. Gotcha: setting Vercel env via
+  PowerShell stdin pipe appends \r and breaks exact-match auth — use
+  `vercel env add NAME production --value $v --yes`. CLI hangs after
+  success (telemetry); kill is safe once "Added" prints.
+- Prod URL: https://world-cup-fantasy-coral.vercel.app
+- Smoke test: `scripts/smoke-test-flow.ts` (register→team→squad→transfer
+  against localhost). `scripts/delete-smoke-user.ts` cleans it up.
+
+### Part 2 — Visual polish pass: WORKING TREE / LOCAL ONLY, NOT PUSHED
+
+User was mid-review when session paused. Status:
+
+- **Real player headshots everywhere** — `PlayerFace` component in
+  `src/components/kit.tsx`: official API-Football photo framed in
+  kit-color gradient + shirt-number chip, falls back to SVG `<Kit>` on
+  missing/failed photo. Used by PlayerCard (pitch/bench), squad-builder
+  picker rows, sub-priority list, player modal header. `photoUrl` was
+  added to `/api/squad/get`, `/api/players` (now supports `?limit=N`),
+  `/api/team/[teamId]/squad`, and the relevant page types.
+- **EmptySlot** now shows a dark head-and-shoulders silhouette + small
+  "+" badge (user-requested, approved direction).
+- **PitchBg v3** (`src/components/pitch-bg.tsx`): clean grass, NO
+  mowing stripes (user explicitly disliked them), gradient base +
+  low-frequency mottling patches + fine grain via SVG feTurbulence.
+  AWAITING USER VERDICT on realism. If still not right: try a
+  photographic tiled texture. If laggy on iPhone: bake the SVG noise
+  into a small tiled PNG (feTurbulence can be GPU-heavy on mobile
+  Safari).
+- **Landing page**: marquee row of top-6 priciest players with real
+  faces (fetches `/api/players?limit=6`), "Kicks Off June 11 · Estadio
+  Azteca" line, countdown flips to pulsing "Tournament Live" badge
+  after kickoff (2026-06-11T18:00Z).
+- **Fixtures page**: grouped under per-day date headers with green
+  TODAY badge/ring.
+- Login/register/dashboard/history reviewed and intentionally left
+  unchanged.
+- Typecheck clean; all pages compile in dev.
+
+**Next steps when resuming:**
+1. User reviews visuals on desktop + phone
+   (dev server: `npm run dev`, phone via http://192.168.2.25:3000 on
+   same Wi-Fi; if unreachable, add a Windows Firewall inbound rule for
+   TCP 3000).
+2. Iterate on grass if needed (see options above).
+3. When approved: `git push origin main` (the visual commit is local).
+4. User creates personal account + invites friends.
+5. WATCH: first real cron-driven live match Jun 11 3pm ET (MEX-RSA).
+
+---
 
 This doc captures the state of the **live scoring + testing** work so the
 next session can pick up without re-reading the whole transcript.

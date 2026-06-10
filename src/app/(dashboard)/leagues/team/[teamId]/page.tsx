@@ -32,6 +32,7 @@ interface ApiPlayer {
   displayName: string;
   position: string;
   shirtNumber: number | null;
+  photoUrl?: string | null;
   /** Finalized points (written at FT). */
   points: number;
   /** Finalized + in-progress points; used as the pill value while a
@@ -71,6 +72,7 @@ function toCardPlayer(p: ApiPlayer) {
     displayName: p.displayName,
     position: p.position,
     shirtNumber: p.shirtNumber,
+    photoUrl: p.photoUrl,
     nation: {
       code: p.nation.code,
       name: p.nation.name,
@@ -86,6 +88,7 @@ function toModalPlayer(p: ApiPlayer): ModalPlayer {
     displayName: p.displayName,
     position: p.position,
     shirtNumber: p.shirtNumber,
+    photoUrl: p.photoUrl,
     // Use the live-overlay value so the modal's points tile shows what
     // the pill on the pitch is showing. The Match History panel inside
     // the modal pulls real per-match perfs separately.

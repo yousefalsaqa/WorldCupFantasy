@@ -218,6 +218,7 @@ export async function GET(request: NextRequest) {
           position: sp.player.position,
           currentPrice: sp.player.currentPrice,
           shirtNumber: sp.player.shirtNumber,
+          photoUrl: sp.player.photoUrl,
           nation: {
             id: sp.player.nation.id,
             name: sp.player.nation.name,

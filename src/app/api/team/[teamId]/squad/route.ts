@@ -101,6 +101,7 @@ export async function GET(
         displayName: sp.player.displayName,
         position: sp.player.position,
         shirtNumber: sp.player.shirtNumber,
+        photoUrl: sp.player.photoUrl,
         // `points` is the finalized total written at FT; `livePoints`
         // adds in-progress PlayerPerformance.totalPoints on top. Both
         // are surfaced so different views can choose their preference.

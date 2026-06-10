@@ -17,12 +17,30 @@ const NATIONS = [
 
 const HOSTS = ['USA', 'CAN', 'MEX'];
 
+interface MarqueePlayer {
+  id: string;
+  displayName: string;
+  currentPrice: number;
+  photoUrl?: string | null;
+  nation?: { code: string; kitColor1: string; kitColor2: string };
+}
+
 export default function Home() {
   // Mounted-on-client guard so the static SSR HTML paints first on iOS Safari.
   // Heavy work (countdown timer, scrolling flag parade) is gated behind this –
   // they were the main reason the landing page felt sluggish on first load.
   const [mounted, setMounted] = useState(false);
   const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+  const [kickedOff, setKickedOff] = useState(false);
+  const [stars, setStars] = useState<MarqueePlayer[]>([]);
+
+  // Marquee names for the hero — top 6 by price, real headshots.
+  useEffect(() => {
+    fetch('/api/players?limit=6')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => Array.isArray(d) && setStars(d.filter((p: MarqueePlayer) => p.photoUrl)))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -33,6 +51,8 @@ export default function Home() {
       if (diff > 0) {
         const { days, hours, minutes, seconds } = decomposeDuration(diff);
         setCountdown({ days, hours, minutes, seconds });
+      } else {
+        setKickedOff(true);
       }
     };
 
@@ -137,15 +157,55 @@ export default function Home() {
 
         {/* Countdown – ticks once a minute, not every second. Saves a full
             page re-render 59 times a minute on iOS Safari for a date that's
-            still weeks away. */}
+            still weeks away. Flips to a LIVE badge once the first ball is kicked. */}
         <div className="text-center mb-10">
-          <p className="text-white/30 text-xs uppercase tracking-widest mb-3">Tournament Begins</p>
-          <div className="flex justify-center gap-3">
-            <CountdownUnit value={countdown.days} label="Days" />
-            <CountdownUnit value={countdown.hours} label="Hrs" />
-            <CountdownUnit value={countdown.minutes} label="Min" />
-          </div>
+          {kickedOff ? (
+            <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-red-600/15 ring-1 ring-red-500/40">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+              </span>
+              <span className="text-red-300 font-black text-sm tracking-widest uppercase">Tournament Live</span>
+            </div>
+          ) : (
+            <>
+              <p className="text-white/30 text-xs uppercase tracking-widest mb-3">Kicks Off June 11 · Estadio Azteca</p>
+              <div className="flex justify-center gap-3">
+                <CountdownUnit value={countdown.days} label="Days" />
+                <CountdownUnit value={countdown.hours} label="Hrs" />
+                <CountdownUnit value={countdown.minutes} label="Min" />
+              </div>
+            </>
+          )}
         </div>
+
+        {/* Marquee players — real headshots, top 6 by price */}
+        {stars.length > 0 && (
+          <div className="flex justify-center mb-10">
+            <div className="flex items-end gap-3 sm:gap-5">
+              {stars.map((p, i) => (
+                <div key={p.id} className={`flex flex-col items-center ${i === 0 || i === stars.length - 1 ? 'hidden sm:flex' : ''}`}>
+                  <div
+                    className="w-12 h-12 sm:w-16 sm:h-16 rounded-full p-[2px] shadow-xl"
+                    style={{
+                      background: `linear-gradient(160deg, ${p.nation?.kitColor1 || '#334155'}, ${p.nation?.kitColor2 || '#0f172a'})`,
+                    }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={p.photoUrl!}
+                      alt={p.displayName}
+                      loading="lazy"
+                      className="w-full h-full rounded-full object-cover object-top bg-slate-800"
+                    />
+                  </div>
+                  <span className="mt-1.5 text-white/70 text-[10px] sm:text-xs font-bold truncate max-w-[64px] sm:max-w-[80px]">{p.displayName}</span>
+                  <span className="text-white/30 text-[9px] sm:text-[10px] font-semibold">£{p.currentPrice.toFixed(1)}m</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* CTA Buttons */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10">

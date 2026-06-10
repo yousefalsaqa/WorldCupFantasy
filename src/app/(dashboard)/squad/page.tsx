@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import Kit, { PlayerCard, EmptySlot } from '@/components/kit';
+import { PlayerCard, EmptySlot, PlayerFace } from '@/components/kit';
 import PlayerDetailModal from '@/components/player-detail-modal';
 import PitchBg from '@/components/pitch-bg';
 import FormationPicker from '@/components/formation-picker';
@@ -52,6 +52,7 @@ interface Player {
   position: string;
   currentPrice: number;
   shirtNumber: number | null;
+  photoUrl?: string | null;
   nation: Nation;
   isStarting?: boolean;
   isCaptain?: boolean;
@@ -418,6 +419,7 @@ export default function SquadPage() {
               position: sp.player.position,
               currentPrice: sp.purchasePrice || sp.player.currentPrice,
               shirtNumber: sp.player.shirtNumber,
+              photoUrl: sp.player.photoUrl,
               nation: sp.player.nation,
               isStarting: sp.isStarting,
               isCaptain: sp.isCaptain,
@@ -462,6 +464,7 @@ export default function SquadPage() {
               position: sp.player.position,
               currentPrice: sp.purchasePrice || sp.player.currentPrice,
               shirtNumber: sp.player.shirtNumber,
+              photoUrl: sp.player.photoUrl,
               nation: sp.player.nation,
             }));
             setSquad(players);
@@ -1374,7 +1377,8 @@ export default function SquadPage() {
                       onClick={() => addPlayer(player)}
                       className="w-full p-3 sm:p-4 flex items-center gap-3 sm:gap-4 hover:bg-white/5 border-b border-white/5 text-left group transition-colors"
                     >
-                      <Kit
+                      <PlayerFace
+                        photoUrl={player.photoUrl}
                         primaryColor={player.nation?.kitColor1 || '#FFF'}
                         secondaryColor={player.nation?.kitColor2 || '#000'}
                         number={player.shirtNumber}
@@ -1857,7 +1861,8 @@ export default function SquadPage() {
                       onClick={() => addPlayer(player)}
                       className="w-full p-3 sm:p-4 flex items-center gap-3 sm:gap-4 hover:bg-white/5 border-b border-white/5 text-left group transition-colors"
                     >
-                      <Kit
+                      <PlayerFace
+                        photoUrl={player.photoUrl}
                         primaryColor={player.nation?.kitColor1 || '#FFF'}
                         secondaryColor={player.nation?.kitColor2 || '#000'}
                         number={player.shirtNumber}
@@ -2293,7 +2298,8 @@ export default function SquadPage() {
                     <div className="flex flex-col items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-md bg-gradient-to-br from-pink-500 to-rose-600 text-white font-black text-xs shadow-md shrink-0">
                       {i + 1}
                     </div>
-                    <Kit
+                    <PlayerFace
+                      photoUrl={p.photoUrl}
                       primaryColor={p.nation?.kitColor1 || '#FFF'}
                       secondaryColor={p.nation?.kitColor2 || '#000'}
                       number={p.shirtNumber}
