@@ -199,8 +199,47 @@ export default function DashboardPage() {
       {/* Team Dashboard */}
       {team && (
         <>
+          {/* Empty-squad hero — the one thing a new user must do is pick
+              their 15. Until teamValue is non-zero nothing else on this
+              page matters, so this card leads and everything else demotes. */}
+          {team.teamValue === 0 && (
+            <Link
+              href="/squad"
+              className="block relative overflow-hidden rounded-2xl border border-rose-500/30 bg-gradient-to-br from-rose-500/15 via-pink-500/10 to-purple-600/15 p-6 sm:p-8 group hover:border-rose-400/50 transition-all"
+            >
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                  backgroundImage:
+                    'radial-gradient(ellipse 400px 200px at 80% 0%, rgba(244,63,94,0.15), transparent 70%)',
+                }}
+              />
+              <div className="relative flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-rose-300 text-xs font-bold uppercase tracking-widest mb-1.5">Get Started</p>
+                  <h2 className="text-xl sm:text-2xl font-black text-white mb-1">Pick your 15 players</h2>
+                  <p className="text-white/50 text-sm">
+                    £100m budget · 48 nations
+                    {currentStage?.deadlineTime
+                      ? ` · deadline ${formatDateShort(new Date(currentStage.deadlineTime), timezone)}`
+                      : ''}
+                  </p>
+                  <span className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-rose-500 to-pink-600 rounded-xl font-black text-white text-sm shadow-lg shadow-rose-500/30 group-hover:shadow-rose-500/50 transition-shadow">
+                    Build Your Squad
+                    <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </span>
+                </div>
+                <div className="hidden sm:flex w-24 h-24 rounded-2xl bg-white/5 border border-white/10 items-center justify-center text-5xl font-black text-white/20 group-hover:text-white/30 transition-colors">
+                  15
+                </div>
+              </div>
+            </Link>
+          )}
+
           {/* Stats Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             <StatCard
               label="Total Points"
               value={team.totalPoints.toString()}
@@ -249,7 +288,7 @@ export default function DashboardPage() {
           )}
 
           {/* Quick Actions */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 gap-3">
             <QuickAction href="/squad" icon={<SquadIcon />} label="My Squad" />
             <QuickAction href="/fixtures" icon={<CalendarIcon />} label="Fixtures" />
             <QuickAction href="/standings" icon={<StandingsIcon />} label="Standings" />
@@ -389,16 +428,16 @@ function StatCard({
   highlight?: boolean;
 }) {
   return (
-    <div className={`rounded-2xl p-5 border transition-all
-      ${highlight 
-        ? 'bg-gradient-to-br from-red-500/10 to-blue-500/10 border-white/20' 
+    <div className={`rounded-xl p-4 border transition-all
+      ${highlight
+        ? 'bg-gradient-to-br from-red-500/10 to-blue-500/10 border-white/20'
         : 'bg-white/5 border-white/10 hover:border-white/20'
       }`}>
-      <div className="flex items-center gap-3 mb-3">
+      <div className="flex items-center gap-2 mb-2">
         {icon}
-        <span className="text-xs font-bold text-white/40 uppercase tracking-wider">{label}</span>
+        <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">{label}</span>
       </div>
-      <div className={`text-3xl font-black ${highlight ? 'text-white' : 'text-white/80'}`}>
+      <div className={`text-xl sm:text-2xl font-black ${highlight ? 'text-white' : 'text-white/80'}`}>
         {value}
       </div>
     </div>
@@ -417,10 +456,10 @@ function QuickAction({
   return (
     <Link
       href={href}
-      className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-2xl p-5 text-center transition-all group"
+      className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-xl p-3.5 text-center transition-all group"
     >
-      <div className="mb-2 flex justify-center group-hover:scale-110 transition-transform">{icon}</div>
-      <div className="font-semibold text-white/70 group-hover:text-white text-sm">{label}</div>
+      <div className="mb-1.5 flex justify-center group-hover:scale-110 transition-transform">{icon}</div>
+      <div className="font-semibold text-white/70 group-hover:text-white text-xs sm:text-sm">{label}</div>
     </Link>
   );
 }

@@ -14,11 +14,11 @@ import {
 export const dynamic = 'force-dynamic';
 
 const CHIP_META: Record<ChipType, { name: string; description: string }> = {
-  WILDCARD_1: { name: 'Wildcard', description: 'Unlimited transfers for this stage' },
-  WILDCARD_2: { name: 'Wildcard 2', description: 'Second wildcard, available after Round of 32' },
+  WILDCARD_1: { name: 'Wildcard', description: 'Unlimited free transfers for this stage' },
+  WILDCARD_2: { name: 'Wildcard 2', description: 'Second wildcard, unlocks in the knockout rounds' },
   TRIPLE_CAPTAIN: { name: 'Triple Captain', description: 'Captain scores 3x points this stage' },
   BENCH_BOOST: { name: 'Bench Boost', description: 'All bench players score points this stage' },
-  FREE_HIT: { name: 'Free Hit', description: 'Unlimited transfers for one stage \u2013 squad reverts after' },
+  FREE_HIT: { name: 'Free Hit', description: 'Unlimited transfers for one stage, squad reverts after' },
 };
 
 // Knockout stages unlock Wildcard 2. We hide WC2 from the chip array

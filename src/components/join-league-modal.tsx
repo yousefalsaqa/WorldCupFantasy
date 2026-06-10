@@ -5,10 +5,11 @@ import { useRouter } from 'next/navigation';
 import { UserPlus, X, Loader2, AlertCircle, Check } from 'lucide-react';
 
 interface JoinLeagueModalProps {
-  teamId: string;
+  /** Called after successfully joining (e.g. refetch the league list). */
+  onSuccess?: () => void;
 }
 
-export function JoinLeagueModal({ teamId }: JoinLeagueModalProps) {
+export function JoinLeagueModal({ onSuccess }: JoinLeagueModalProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [code, setCode] = useState('');
@@ -37,6 +38,7 @@ export function JoinLeagueModal({ teamId }: JoinLeagueModalProps) {
 
       setSuccess(true);
       router.refresh();
+      onSuccess?.();
       
       setTimeout(() => {
         closeModal();
@@ -59,84 +61,85 @@ export function JoinLeagueModal({ teamId }: JoinLeagueModalProps) {
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="btn-secondary flex items-center gap-2"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white/80 bg-white/5 ring-1 ring-white/15 hover:bg-white/10 hover:text-white transition-all"
       >
-        <UserPlus className="w-4 h-4" />
+        <UserPlus className="w-3.5 h-3.5" />
         Join League
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={closeModal} />
-          
-          <div className="relative w-full max-w-md card p-6 animate-scale-in">
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={closeModal}
+        >
+          <div
+            className="relative w-full max-w-sm bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               onClick={closeModal}
-              className="absolute top-4 right-4 p-2 rounded-lg hover:bg-surface-800"
+              className="absolute top-3 right-3 p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 transition-colors"
             >
-              <X className="w-5 h-5 text-surface-400" />
+              <X className="w-5 h-5" />
             </button>
 
             {success ? (
               // Success state
-              <div className="text-center py-4">
-                <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
-                  <Check className="w-8 h-8 text-emerald-400" />
+              <div className="p-6 text-center">
+                <div className="w-14 h-14 rounded-full bg-emerald-500/15 ring-1 ring-emerald-500/40 flex items-center justify-center mx-auto mb-4">
+                  <Check className="w-7 h-7 text-emerald-400" />
                 </div>
-                <h2 className="font-display text-2xl text-laliga-cream mb-2">
-                  JOINED!
-                </h2>
-                <p className="text-surface-400">
-                  You&apos;ve successfully joined the league
-                </p>
+                <h2 className="text-xl font-black text-white mb-1">You&apos;re in!</h2>
+                <p className="text-white/50 text-sm">Welcome to the league</p>
               </div>
             ) : (
               // Form state
               <>
-                <h2 className="font-display text-2xl text-laliga-cream mb-2">
-                  JOIN LEAGUE
-                </h2>
-                <p className="text-surface-400 mb-6">
-                  Enter the league code to join your friends
-                </p>
-
-                {error && (
-                  <div className="flex items-center gap-3 p-4 mb-6 rounded-lg bg-laliga-red/10 border border-laliga-red/20">
-                    <AlertCircle className="w-5 h-5 text-laliga-red flex-shrink-0" />
-                    <p className="text-sm text-laliga-red">{error}</p>
+                <div className="px-6 pt-6 pb-4 bg-gradient-to-r from-sky-500/15 via-purple-500/10 to-transparent flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center">
+                    <UserPlus className="w-5 h-5 text-sky-300" />
                   </div>
-                )}
-
-                <form onSubmit={handleSubmit}>
-                  <div className="mb-6">
-                    <label htmlFor="code" className="block text-sm font-medium text-surface-300 mb-2">
-                      League Code
-                    </label>
-                    <input
-                      id="code"
-                      type="text"
-                      value={code}
-                      onChange={(e) => setCode(e.target.value.toUpperCase())}
-                      className="input-field text-center font-mono text-lg tracking-wider"
-                      placeholder="ABCD1234"
-                      required
-                      maxLength={8}
-                      autoFocus
-                    />
+                  <div>
+                    <h2 className="text-lg font-black text-white leading-tight">Join a league</h2>
+                    <p className="text-white/50 text-xs">Got a code from a friend? Enter it here</p>
                   </div>
+                </div>
+
+                <form onSubmit={handleSubmit} className="p-6 pt-4">
+                  {error && (
+                    <div className="flex items-center gap-2.5 px-3 py-2.5 mb-4 rounded-lg bg-rose-500/10 border border-rose-500/30">
+                      <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+                      <p className="text-xs text-rose-300">{error}</p>
+                    </div>
+                  )}
+
+                  <label htmlFor="code" className="block text-xs font-bold text-white/50 uppercase tracking-wider mb-2">
+                    League code
+                  </label>
+                  <input
+                    id="code"
+                    type="text"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.toUpperCase())}
+                    className="w-full px-4 py-2.5 mb-5 bg-white/5 border border-white/10 rounded-xl text-white text-center font-mono text-lg tracking-widest placeholder-white/20 focus:outline-none focus:border-white/30 focus:bg-white/10 transition-colors"
+                    placeholder="ABCD1234"
+                    required
+                    maxLength={8}
+                    autoFocus
+                  />
 
                   <div className="flex gap-3">
                     <button
                       type="button"
                       onClick={closeModal}
-                      className="btn-secondary flex-1"
+                      className="flex-1 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white/70 font-medium hover:bg-white/10 transition-colors"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
                       disabled={isLoading || code.length !== 8}
-                      className="btn-primary flex-1 flex items-center justify-center gap-2"
+                      className="flex-1 px-4 py-2.5 bg-gradient-to-r from-sky-500 to-blue-600 rounded-xl text-white font-bold hover:from-sky-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
                     >
                       {isLoading ? (
                         <>
@@ -144,7 +147,7 @@ export function JoinLeagueModal({ teamId }: JoinLeagueModalProps) {
                           Joining...
                         </>
                       ) : (
-                        'Join League'
+                        'Join'
                       )}
                     </button>
                   </div>

@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import { Copy, Check, Trash2, Globe, Users } from 'lucide-react';
+import { CreateLeagueModal } from '@/components/create-league-modal';
+import { JoinLeagueModal } from '@/components/join-league-modal';
 
 interface Standing {
   rank: number;
@@ -11,6 +14,15 @@ interface Standing {
   totalPoints: number;
   teamValue: number;
   isCurrentUser?: boolean;
+}
+
+interface MyLeague {
+  id: string;
+  name: string;
+  code: string;
+  isGlobal: boolean;
+  memberCount: number;
+  isOwner: boolean;
 }
 
 export default function LeaguesPage() {
@@ -27,14 +39,48 @@ export default function LeaguesPage() {
   // "end of gameday" moment).
   const wasLiveRef = useRef(false);
 
-  const refreshStandings = useCallback(async () => {
+  // League switcher: the global league plus any private leagues the
+  // user's team belongs to. Selecting one swaps the standings table.
+  const [myLeagues, setMyLeagues] = useState<MyLeague[]>([]);
+  const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(null);
+  const [selectedMeta, setSelectedMeta] = useState<{ isGlobal: boolean; isOwner: boolean; code: string | null }>({
+    isGlobal: true, isOwner: false, code: null,
+  });
+  const [copied, setCopied] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const fetchMyLeagues = useCallback(async () => {
     try {
-      const res = await fetch('/api/leagues/standings');
+      const res = await fetch('/api/leagues', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        const leagues: MyLeague[] = data.leagues ?? [];
+        // Global first, then private leagues by name
+        leagues.sort((a, b) => Number(b.isGlobal) - Number(a.isGlobal) || a.name.localeCompare(b.name));
+        setMyLeagues(leagues);
+      }
+    } catch (error) {
+      console.error('Failed to fetch leagues:', error);
+    }
+  }, []);
+
+  const refreshStandings = useCallback(async (leagueId?: string | null) => {
+    try {
+      const url = leagueId
+        ? `/api/leagues/standings?leagueId=${encodeURIComponent(leagueId)}`
+        : '/api/leagues/standings';
+      const res = await fetch(url, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setStandings(data.standings ?? []);
         setLeagueName(data.leagueName || 'Global League');
         setAnyMatchLive(!!data.anyMatchLive);
+        setSelectedMeta({
+          isGlobal: data.isGlobal ?? true,
+          isOwner: !!data.isOwner,
+          code: data.code ?? null,
+        });
         setLastUpdated(new Date());
       }
     } catch (error) {
@@ -50,13 +96,19 @@ export default function LeaguesPage() {
           const teamData = await teamRes.json();
           if (teamData.team) setCurrentUserTeamId(teamData.team.id);
         }
-        await refreshStandings();
+        await Promise.all([fetchMyLeagues(), refreshStandings()]);
       } finally {
         setLoading(false);
       }
     }
     fetchInitial();
-  }, [refreshStandings]);
+  }, [fetchMyLeagues, refreshStandings]);
+
+  const selectLeague = (id: string | null) => {
+    setSelectedLeagueId(id);
+    setDeleteConfirm(false);
+    refreshStandings(id);
+  };
 
   // Polling loop. Per user-requested behavior: only poll while at least
   // one match is in progress (so we catch the moment a goal banks in
@@ -69,7 +121,7 @@ export default function LeaguesPage() {
         // Live → all FT transition. Do one last refresh so the table
         // reflects whatever just got banked in the closing minute.
         wasLiveRef.current = false;
-        refreshStandings();
+        refreshStandings(selectedLeagueId);
       }
       return;
     }
@@ -77,9 +129,40 @@ export default function LeaguesPage() {
     // 60s cadence mirrors /squad's live pill — fast enough to feel
     // responsive, slow enough not to hammer Neon during a full slate
     // of WC matches.
-    const interval = setInterval(refreshStandings, 60_000);
+    const interval = setInterval(() => refreshStandings(selectedLeagueId), 60_000);
     return () => clearInterval(interval);
-  }, [anyMatchLive, refreshStandings]);
+  }, [anyMatchLive, refreshStandings, selectedLeagueId]);
+
+  const copyCode = () => {
+    if (selectedMeta.code) {
+      navigator.clipboard.writeText(selectedMeta.code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const deleteLeague = async () => {
+    if (!selectedLeagueId) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/leagues/${selectedLeagueId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (res.ok) {
+        setDeleteConfirm(false);
+        await fetchMyLeagues();
+        selectLeague(null); // back to global
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to delete league');
+      }
+    } catch {
+      alert('Failed to delete league — check your connection.');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -90,12 +173,38 @@ export default function LeaguesPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div className="max-w-4xl mx-auto p-4 sm:p-6">
+      {/* League switcher + actions */}
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        {myLeagues.map((l) => {
+          const active = l.isGlobal ? selectedLeagueId === null || selectedLeagueId === l.id : selectedLeagueId === l.id;
+          return (
+            <button
+              key={l.id}
+              onClick={() => selectLeague(l.isGlobal ? null : l.id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                active
+                  ? 'bg-rose-500/20 ring-1 ring-rose-400 text-white'
+                  : 'bg-white/5 ring-1 ring-white/10 text-white/60 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              {l.isGlobal ? <Globe className="w-3 h-3" /> : <Users className="w-3 h-3" />}
+              {l.isGlobal ? 'Global' : l.name}
+              <span className="text-white/30">{l.memberCount}</span>
+            </button>
+          );
+        })}
+        <div className="ml-auto flex items-center gap-2">
+          <CreateLeagueModal onSuccess={fetchMyLeagues} />
+          <JoinLeagueModal onSuccess={fetchMyLeagues} />
+        </div>
+      </div>
+
       {/* Header */}
-      <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-2">{leagueName}</h1>
-          <p className="text-white/60">Click on any team to view their squad</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1">{leagueName}</h1>
+          <p className="text-white/50 text-sm">Click on any team to view their squad</p>
         </div>
         {/* Live indicator + last-refresh stamp. We only show "Live" while
             matches are actually in progress; otherwise it sits at "Idle" so
@@ -118,13 +227,39 @@ export default function LeaguesPage() {
           )}
           <button
             type="button"
-            onClick={refreshStandings}
+            onClick={() => refreshStandings(selectedLeagueId)}
             className="ml-2 px-2 py-0.5 rounded border border-white/10 text-white/60 hover:text-white hover:border-white/20"
           >
             Refresh
           </button>
         </div>
       </div>
+
+      {/* Private-league toolbar: invite code + owner controls */}
+      {!selectedMeta.isGlobal && selectedMeta.code && (
+        <div className="mb-5 flex flex-wrap items-center gap-3 rounded-xl bg-white/5 border border-white/10 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="text-white/40 text-xs uppercase tracking-wider font-bold">Invite code</span>
+            <span className="font-mono text-base font-bold text-amber-300 tracking-widest">{selectedMeta.code}</span>
+            <button
+              onClick={copyCode}
+              className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+              aria-label="Copy invite code"
+            >
+              {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-white/50" />}
+            </button>
+          </div>
+          {selectedMeta.isOwner && (
+            <button
+              onClick={() => setDeleteConfirm(true)}
+              className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-rose-300 hover:text-rose-200 bg-rose-500/10 hover:bg-rose-500/20 ring-1 ring-rose-500/30 transition-all"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete league
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Standings Table */}
       <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl overflow-hidden border border-white/10">
@@ -215,6 +350,40 @@ export default function LeaguesPage() {
           <div className="text-xs text-white/40 uppercase">Average</div>
         </div>
       </div>
+
+      {/* Delete-league confirmation */}
+      {deleteConfirm && (
+        <div
+          className="fixed inset-0 bg-black/80 z-50 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setDeleteConfirm(false)}
+        >
+          <div
+            className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-black text-white mb-2">Delete {leagueName}?</h3>
+            <p className="text-white/60 text-sm mb-6">
+              The league and its table are gone for good. Members keep their teams
+              and stay in the Global league — only this private league disappears.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirm(false)}
+                className="flex-1 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white/70 font-medium hover:bg-white/10 transition-colors"
+              >
+                Keep it
+              </button>
+              <button
+                onClick={deleteLeague}
+                disabled={deleting}
+                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-rose-500 to-rose-600 rounded-xl text-white font-bold hover:from-rose-600 hover:to-rose-700 disabled:opacity-50 transition-all"
+              >
+                {deleting ? 'Deleting...' : 'Delete league'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

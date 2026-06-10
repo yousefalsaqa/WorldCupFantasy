@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import Crest from '@/components/crest';
 import { getFlagUrl } from '@/lib/flags';
 import { decomposeDuration } from '@/lib/format-time';
 
@@ -72,29 +73,46 @@ export default function Home() {
           stall (compositor spends ~hundreds of ms per frame). A radial
           gradient gives the same look for free. */}
       <div className="fixed inset-0 pointer-events-none">
+        {/* color washes */}
         <div
           className="absolute inset-0"
           style={{
             backgroundImage:
-              'radial-gradient(ellipse 600px 600px at 25% 0%, rgba(244,63,94,0.12), transparent 60%), radial-gradient(ellipse 600px 600px at 75% 100%, rgba(59,130,246,0.10), transparent 60%)',
+              'radial-gradient(ellipse 600px 600px at 25% 0%, rgba(244,63,94,0.16), transparent 60%), radial-gradient(ellipse 700px 500px at 50% 38%, rgba(168,85,247,0.08), transparent 65%), radial-gradient(ellipse 600px 600px at 75% 100%, rgba(59,130,246,0.12), transparent 60%)',
+          }}
+        />
+        {/* fine grid, faded out radially so it only reads near the hero */}
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage:
+              'linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)',
+            backgroundSize: '52px 52px',
+            maskImage: 'radial-gradient(ellipse 80% 55% at 50% 32%, black 30%, transparent 100%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 80% 55% at 50% 32%, black 30%, transparent 100%)',
+          }}
+        />
+        {/* vignette to pull focus inward */}
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: 'radial-gradient(ellipse 120% 90% at 50% 40%, transparent 55%, rgba(0,0,0,0.45) 100%)',
           }}
         />
       </div>
 
       {/* Navigation */}
       <nav className="relative z-10 flex items-center justify-between px-6 py-4 max-w-7xl mx-auto">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-rose-500 via-pink-500 to-purple-600 flex items-center justify-center shadow-lg shadow-pink-500/20">
-            <span className="text-white font-black text-lg">26</span>
-          </div>
+        <div className="flex items-center gap-2.5">
+          <Crest size={34} />
           <div>
-            <div className="text-white font-black tracking-tight">FANTASY</div>
-            <div className="text-white/40 text-xs tracking-widest">WORLD CUP</div>
+            <div className="text-white font-black text-sm leading-tight tracking-tight">FANTASY</div>
+            <div className="text-white/40 text-[10px] tracking-widest leading-tight">WORLD CUP</div>
           </div>
         </div>
-        <Link 
+        <Link
           href="/login"
-          className="px-5 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-white font-medium text-sm transition-all"
+          className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white font-medium text-sm transition-all"
         >
           Sign In
         </Link>
@@ -105,21 +123,21 @@ export default function Home() {
           the very first paint, which on iPhone Safari was the main reason the
           page felt "stuck". Static fallback (the host flags below) is enough
           to make the page feel populated until the parade fades in. */}
-      <div className="relative overflow-hidden py-4 mb-4 min-h-[68px]">
-        <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-[#0a0e17] to-transparent z-10"></div>
-        <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-[#0a0e17] to-transparent z-10"></div>
+      <div className="relative overflow-hidden py-3 mb-2 min-h-[52px]">
+        <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-[#0a0e17] to-transparent z-10"></div>
+        <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-[#0a0e17] to-transparent z-10"></div>
         {mounted && (
-          <div className="flex animate-scroll gap-6">
+          <div className="flex animate-scroll gap-4">
             {[...NATIONS, ...NATIONS].map((code, i) => (
               <img
                 key={`${code}-${i}`}
                 src={getFlagUrl(code, 'md')}
                 alt={code}
-                width={64}
-                height={40}
+                width={44}
+                height={28}
                 loading="lazy"
                 decoding="async"
-                className="w-16 h-10 rounded-lg shadow-xl object-cover flex-shrink-0 hover:scale-110 transition-transform"
+                className="w-11 h-7 rounded-md shadow-lg object-cover flex-shrink-0 opacity-80 hover:opacity-100 hover:scale-110 transition-all"
               />
             ))}
           </div>
@@ -127,38 +145,37 @@ export default function Home() {
       </div>
 
       {/* Hero Section */}
-      <div className="relative z-10 max-w-7xl mx-auto px-6 pt-4 pb-16">
+      <div className="relative z-10 max-w-7xl mx-auto px-6 pt-2 pb-12">
         {/* Host Nations */}
-        <div className="flex items-center justify-center gap-3 mb-6">
-          <div className="flex -space-x-2">
+        <div className="flex items-center justify-center gap-2.5 mb-5">
+          <div className="flex -space-x-1.5">
             {HOSTS.map(code => (
               <img
                 key={code}
                 src={getFlagUrl(code, 'md')}
                 alt={code}
-                className="w-10 h-7 rounded-md shadow-lg border-2 border-[#0a0e17] object-cover"
+                className="w-8 h-[22px] rounded shadow-lg border-2 border-[#0a0e17] object-cover"
               />
             ))}
           </div>
-          <span className="text-white/30 text-sm font-medium tracking-wider uppercase">2026 Hosts</span>
+          <span className="text-white/30 text-xs font-medium tracking-wider uppercase">2026 Hosts</span>
         </div>
 
         {/* Main Title */}
-        <div className="text-center mb-8">
-          <h1 className="text-6xl md:text-8xl font-black text-white tracking-tighter leading-none mb-2">
-            <span className="bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent">WORLD</span>
-            <span className="relative ml-3 bg-gradient-to-br from-rose-400 via-pink-500 to-purple-500 bg-clip-text text-transparent">'26</span>
+        <div className="text-center mb-7">
+          <h1 className="text-[3.4rem] sm:text-7xl md:text-8xl font-black tracking-tighter leading-[0.88]">
+            <span className="block bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent">WORLD</span>
+            <span className="block bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent">
+              CUP <span className="bg-gradient-to-br from-rose-400 via-pink-500 to-purple-500 bg-clip-text text-transparent">'26</span>
+            </span>
           </h1>
-          <h1 className="text-5xl md:text-7xl font-black text-white tracking-tighter leading-none">
-            <span className="bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent">CUP</span>
-          </h1>
-          <p className="mt-4 text-white/40 text-base tracking-[0.3em] uppercase font-medium">Fantasy Football</p>
+          <p className="mt-3 text-white/40 text-xs md:text-sm tracking-[0.35em] uppercase font-medium">Fantasy Football</p>
         </div>
 
         {/* Countdown – ticks once a minute, not every second. Saves a full
             page re-render 59 times a minute on iOS Safari for a date that's
             still weeks away. Flips to a LIVE badge once the first ball is kicked. */}
-        <div className="text-center mb-10">
+        <div className="text-center mb-8">
           {kickedOff ? (
             <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-red-600/15 ring-1 ring-red-500/40">
               <span className="relative flex h-2.5 w-2.5">
@@ -184,7 +201,7 @@ export default function Home() {
           <div className="flex justify-center mb-10">
             <div className="flex items-end gap-3 sm:gap-5">
               {stars.map((p, i) => (
-                <div key={p.id} className={`flex flex-col items-center ${i === 0 || i === stars.length - 1 ? 'hidden sm:flex' : ''}`}>
+                <div key={p.id} className={`flex flex-col items-center ${i >= 4 ? 'hidden sm:flex' : ''}`}>
                   <div
                     className="w-12 h-12 sm:w-16 sm:h-16 rounded-full p-[2px] shadow-xl"
                     style={{
@@ -207,36 +224,30 @@ export default function Home() {
           </div>
         )}
 
-        {/* CTA Buttons */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10">
-          <Link 
+        {/* CTA — one action, no decoys. Sign In already lives in the nav. */}
+        <div className="flex justify-center mb-9">
+          <Link
             href="/register"
-            className="group relative px-8 py-4 bg-gradient-to-r from-rose-500 to-pink-600 rounded-xl font-bold text-white shadow-lg shadow-rose-500/25 hover:shadow-rose-500/40 transition-all"
+            className="group relative w-full max-w-xs sm:w-auto sm:max-w-none px-10 py-3.5 bg-gradient-to-r from-rose-500 via-pink-500 to-rose-500 bg-[length:200%_100%] hover:bg-[position:100%_0] rounded-2xl font-black text-white text-base shadow-[0_8px_30px_rgba(244,63,94,0.35)] hover:shadow-[0_8px_40px_rgba(244,63,94,0.5)] ring-1 ring-white/20 transition-all duration-300 text-center"
           >
-            <span className="relative z-10 flex items-center gap-2">
+            <span className="relative z-10 flex items-center justify-center gap-2">
               Build Your Squad
-              <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
               </svg>
             </span>
           </Link>
-          <Link 
-            href="/login"
-            className="px-8 py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-medium text-white/70 hover:text-white transition-all"
-          >
-            View Leagues
-          </Link>
         </div>
 
         {/* Stats */}
-        <div className="flex justify-center gap-10 mb-12">
+        <div className="flex justify-center gap-8 mb-8">
           <StatBadge value="48" label="Nations" />
           <StatBadge value="104" label="Matches" />
           <StatBadge value="£100M" label="Budget" />
         </div>
 
         {/* Features */}
-        <div className="grid md:grid-cols-3 gap-4 max-w-3xl mx-auto">
+        <div className="grid grid-cols-3 gap-2 md:gap-4 max-w-3xl mx-auto">
           <FeatureCard 
             icon={<BoltIcon />}
             title="Live Scoring"
@@ -293,12 +304,12 @@ function StatBadge({ value, label }: { value: string; label: string }) {
 
 function FeatureCard({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
   return (
-    <div className="bg-white/[0.02] border border-white/5 rounded-xl p-4 text-center hover:bg-white/[0.04] transition-all">
-      <div className="w-8 h-8 rounded-lg bg-rose-500/10 flex items-center justify-center mx-auto mb-2 text-rose-400">
+    <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3 md:p-4 text-center hover:bg-white/[0.04] transition-all">
+      <div className="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-rose-500/10 flex items-center justify-center mx-auto mb-1.5 md:mb-2 text-rose-400">
         {icon}
       </div>
-      <h3 className="text-white font-bold text-sm mb-0.5">{title}</h3>
-      <p className="text-white/40 text-xs">{description}</p>
+      <h3 className="text-white font-bold text-xs md:text-sm mb-0.5">{title}</h3>
+      <p className="text-white/40 text-[10px] md:text-xs">{description}</p>
     </div>
   );
 }

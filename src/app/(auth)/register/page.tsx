@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Crest from '@/components/crest';
 
 export default function RegisterPage() {
   const [email, setEmail] = useState('');
@@ -66,11 +67,7 @@ export default function RegisterPage() {
       <div className="relative z-10 w-full max-w-md">
         {/* Logo */}
         <Link href="/" className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-500 via-white to-blue-500 p-[2px]">
-            <div className="w-full h-full rounded-[10px] bg-[#0a0e17] flex items-center justify-center">
-              <span className="text-lg font-black text-white">26</span>
-            </div>
-          </div>
+          <Crest size={44} />
           <div className="flex flex-col">
             <span className="font-black text-white text-lg tracking-tight leading-none">FANTASY</span>
             <span className="font-medium text-white/50 text-xs tracking-wider">WORLD CUP</span>

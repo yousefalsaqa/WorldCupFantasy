@@ -16,6 +16,7 @@ export type AuditAction =
   | 'CHIP_DEACTIVATED'
   | 'LEAGUE_CREATED'
   | 'LEAGUE_JOINED'
+  | 'LEAGUE_DELETED'
   | 'ADMIN_ACTION'
   | 'SECURITY_ALERT';
 

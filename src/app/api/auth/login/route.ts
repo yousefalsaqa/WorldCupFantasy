@@ -1,9 +1,21 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifyPassword, createToken, setAuthCookie } from '@/lib/auth';
+import { verifyPassword, createToken, setAuthCookie, checkRateLimit } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
+    // Brute-force throttle: 10 attempts per IP per 15 minutes. In-memory,
+    // so each serverless instance counts separately — not bulletproof, but
+    // it turns a fast credential-stuffing loop into a crawl at zero cost.
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const limit = checkRateLimit(`login:${ip}`, 10);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many login attempts. Try again in a few minutes.' },
+        { status: 429 }
+      );
+    }
+
     // Accept either `identifier` (new clients) or `email` (legacy clients
     // still sending the original payload). Either field may carry a
     // username OR an email — we disambiguate by checking for an `@`.

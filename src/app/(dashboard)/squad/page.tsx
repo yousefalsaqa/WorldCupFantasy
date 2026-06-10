@@ -1055,6 +1055,55 @@ export default function SquadPage() {
     } catch { /* non-fatal */ }
   }, []);
 
+  // Touch devices get a dedicated long-press gesture instead of HTML5
+  // drag-and-drop. iOS Safari hijacks long-press on `draggable` elements
+  // into a janky native drag (ghost image, no drop targets highlighted),
+  // which is why holding-to-sub felt rough. So: on touch we disable
+  // `draggable` entirely and arm sub mode ourselves after a 300ms hold.
+  const [isTouch, setIsTouch] = useState(false);
+  useEffect(() => {
+    setIsTouch(typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches);
+  }, []);
+
+  const longPress = useRef<{ timer: ReturnType<typeof setTimeout> | null; fired: boolean; x: number; y: number }>({
+    timer: null, fired: false, x: 0, y: 0,
+  });
+  const longPressHandlers = (player: Player) => ({
+    onTouchStart: (e: React.TouchEvent) => {
+      const t = e.touches[0];
+      longPress.current.x = t.clientX;
+      longPress.current.y = t.clientY;
+      longPress.current.fired = false;
+      longPress.current.timer = setTimeout(() => {
+        longPress.current.fired = true;
+        setPlayerToSub(player);
+        // Light haptic tick where supported (Android Chrome; no-op on iOS)
+        try { navigator.vibrate?.(15); } catch { /* unsupported */ }
+      }, 300);
+    },
+    onTouchMove: (e: React.TouchEvent) => {
+      // Finger drifted — user is scrolling, not holding. Abort the press.
+      const t = e.touches[0];
+      if (Math.abs(t.clientX - longPress.current.x) > 12 || Math.abs(t.clientY - longPress.current.y) > 12) {
+        if (longPress.current.timer) clearTimeout(longPress.current.timer);
+        longPress.current.timer = null;
+      }
+    },
+    onTouchEnd: () => {
+      if (longPress.current.timer) clearTimeout(longPress.current.timer);
+      longPress.current.timer = null;
+    },
+  });
+  // The click that follows a completed long-press must not run the normal
+  // tap action (it would instantly toggle sub mode back off).
+  const consumeLongPress = () => {
+    if (longPress.current.fired) {
+      longPress.current.fired = false;
+      return true;
+    }
+    return false;
+  };
+
   // Drag handlers
   const handleDragStart = (player: Player) => (e: React.DragEvent) => {
     draggingRef.current = player;
@@ -1317,9 +1366,9 @@ export default function SquadPage() {
         {showModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
             <div className="bg-slate-900 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden border border-white/10 shadow-2xl">
-              <div className="p-4 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-800">
+              <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-800">
                 <div className="flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-black text-sm ${
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${
                     selectingPosition === 'GK' ? 'bg-amber-500/20 text-amber-300' :
                     selectingPosition === 'DEF' ? 'bg-sky-500/20 text-sky-300' :
                     selectingPosition === 'MID' ? 'bg-emerald-500/20 text-emerald-300' :
@@ -1328,7 +1377,7 @@ export default function SquadPage() {
                     {selectingPosition}
                   </div>
                   <div>
-                    <h2 className="text-lg sm:text-xl font-bold text-white">Select {selectingPosition}</h2>
+                    <h2 className="text-base sm:text-lg font-bold text-white">Select {selectingPosition}</h2>
                     <p className="text-xs text-white/40">Budget remaining: £{remainingBudget.toFixed(1)}m</p>
                   </div>
                 </div>
@@ -1375,7 +1424,7 @@ export default function SquadPage() {
                     <button
                       key={player.id}
                       onClick={() => addPlayer(player)}
-                      className="w-full p-3 sm:p-4 flex items-center gap-3 sm:gap-4 hover:bg-white/5 border-b border-white/5 text-left group transition-colors"
+                      className="w-full px-3 py-2 sm:px-4 sm:py-2.5 flex items-center gap-3 hover:bg-white/5 border-b border-white/5 text-left group transition-colors"
                     >
                       <PlayerFace
                         photoUrl={player.photoUrl}
@@ -1383,14 +1432,16 @@ export default function SquadPage() {
                         secondaryColor={player.nation?.kitColor2 || '#000'}
                         number={player.shirtNumber}
                         nationCode={player.nation?.code || ''}
-                        size="sm"
+                        size="xs"
                       />
-                      <img src={getFlagUrl(player.nation?.code || '')} alt="" className="w-6 h-4 rounded-sm object-cover" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-white font-semibold truncate">{player.displayName}</p>
-                        <p className="text-white/40 text-xs">{player.nation?.name}</p>
+                        <p className="text-white text-sm font-semibold truncate">{player.displayName}</p>
+                        <p className="text-white/40 text-xs flex items-center gap-1.5">
+                          <img src={getFlagUrl(player.nation?.code || '')} alt="" className="w-4 h-3 rounded-[2px] object-cover" />
+                          {player.nation?.name}
+                        </p>
                       </div>
-                      <p className="text-emerald-400 font-bold whitespace-nowrap">£{player.currentPrice.toFixed(1)}m</p>
+                      <p className="text-emerald-400 text-sm font-bold whitespace-nowrap">£{player.currentPrice.toFixed(1)}m</p>
                     </button>
                   ))
                 )}
@@ -1476,10 +1527,15 @@ export default function SquadPage() {
     const isValid = !!playerToSub && !isSelected && validSwapTargets.has(p.id);
     const isDimmed = !!playerToSub && !isSelected && !validSwapTargets.has(p.id);
     return (
-      <div key={p.id} className="flex-shrink-0">
+      <div
+        key={p.id}
+        className="flex-shrink-0 select-none [-webkit-touch-callout:none]"
+        {...longPressHandlers(p)}
+      >
         <PlayerCard
           player={p}
           onClick={() => {
+            if (consumeLongPress()) return;
             if (playerToSub) {
               if (isValid || isSelected) {
                 swapPlayer(p);
@@ -1499,7 +1555,7 @@ export default function SquadPage() {
           selectedForSub={isSelected}
           validTarget={isValid}
           dimmed={isDimmed}
-          draggable
+          draggable={!isTouch}
           onDragStart={handleDragStart(p)}
           onDragEnd={handleDragEnd}
           onDragOver={handleDragOver(p)}
@@ -1859,7 +1915,7 @@ export default function SquadPage() {
                     <button
                       key={player.id}
                       onClick={() => addPlayer(player)}
-                      className="w-full p-3 sm:p-4 flex items-center gap-3 sm:gap-4 hover:bg-white/5 border-b border-white/5 text-left group transition-colors"
+                      className="w-full px-3 py-2 sm:px-4 sm:py-2.5 flex items-center gap-3 hover:bg-white/5 border-b border-white/5 text-left group transition-colors"
                     >
                       <PlayerFace
                         photoUrl={player.photoUrl}
@@ -1867,18 +1923,20 @@ export default function SquadPage() {
                         secondaryColor={player.nation?.kitColor2 || '#000'}
                         number={player.shirtNumber}
                         nationCode={player.nation?.code || ''}
-                        size="sm"
-                      />
-                      <img
-                        src={getFlagUrl(player.nation?.code || '')}
-                        alt=""
-                        className="w-6 h-4 rounded-sm object-cover"
+                        size="xs"
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-white font-semibold truncate">{player.displayName}</p>
-                        <p className="text-white/40 text-xs">{player.nation?.name}</p>
+                        <p className="text-white text-sm font-semibold truncate">{player.displayName}</p>
+                        <p className="text-white/40 text-xs flex items-center gap-1.5">
+                          <img
+                            src={getFlagUrl(player.nation?.code || '')}
+                            alt=""
+                            className="w-4 h-3 rounded-[2px] object-cover"
+                          />
+                          {player.nation?.name}
+                        </p>
                       </div>
-                      <p className="text-emerald-400 font-bold whitespace-nowrap">
+                      <p className="text-emerald-400 text-sm font-bold whitespace-nowrap">
                         £{player.currentPrice.toFixed(1)}m
                       </p>
                     </button>
@@ -2004,160 +2062,143 @@ export default function SquadPage() {
         </div>
       )}
 
-      {/* Chips Bar */}
+      {/* Chips Bar — compact letter badges. Tapping ANY chip (even a used
+          or locked one) opens the detail popup, which carries the full
+          plain-English explanation and the activate/cancel actions. */}
       {chips.length > 0 && (
-        <div className="px-3 sm:px-0 mb-5">
-          <div className="bg-gradient-to-br from-slate-900/80 to-slate-950/80 border border-white/10 rounded-2xl p-3 sm:p-4 backdrop-blur-sm">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-black text-white/50 uppercase tracking-widest flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" />
-                Power-Up Chips
-              </h3>
-              {chips.some(c => c.active) && (
-                <span className="text-[10px] font-black text-emerald-300 bg-emerald-500/15 ring-1 ring-emerald-500/40 px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Active
-                </span>
-              )}
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {chips.map(chip => {
-                const Icon = chipIcon(chip.name);
-                const clickable = chip.available && !chipLoading;
-                const handleCardClick = () => {
-                  if (clickable) setChipConfirm(chip);
-                };
-                return (
-                  <div
-                    key={chip.id}
-                    role={clickable ? 'button' : undefined}
-                    tabIndex={clickable ? 0 : undefined}
-                    onClick={handleCardClick}
-                    onKeyDown={clickable ? (e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        handleCardClick();
-                      }
-                    } : undefined}
-                    aria-disabled={!clickable && !chip.active}
-                    className={`relative p-3 rounded-xl border text-left transition-all overflow-hidden group ${
-                      chip.active
-                        ? 'bg-gradient-to-br from-emerald-500/20 to-emerald-700/10 border-emerald-500/60 shadow-[0_0_20px_rgba(16,185,129,0.25)]'
-                        : chip.used
-                        ? 'bg-white/[0.02] border-white/5 opacity-50'
-                        : clickable
-                        ? 'bg-white/5 border-white/10 hover:border-white/30 hover:bg-white/10 hover:-translate-y-0.5 cursor-pointer'
-                        : 'bg-white/[0.02] border-white/5 opacity-60'
-                    }`}
-                  >
-                    {/* Active glow */}
-                    {chip.active && (
-                      <div className="absolute -inset-px rounded-xl opacity-30 pointer-events-none animate-pulse-slow"
-                        style={{ boxShadow: 'inset 0 0 30px rgba(16,185,129,0.4)' }} />
-                    )}
-
-                    <div className="flex items-center justify-between mb-1.5 relative">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                          chip.active
-                            ? 'bg-emerald-500/30 text-emerald-200'
-                            : chip.used
-                            ? 'bg-white/5 text-white/30'
-                            : 'bg-white/10 text-white/80 group-hover:bg-white/15'
-                        }`}>
-                          <Icon className="w-4 h-4" />
-                        </div>
-                        <span className={`text-[11px] sm:text-xs font-black tracking-tight truncate ${
-                          chip.active ? 'text-emerald-200' : chip.used ? 'text-white/30 line-through' : 'text-white/90'
-                        }`}>
-                          {chip.name}
-                        </span>
-                      </div>
-                      {chip.used && !chip.active && (
-                        <span className="text-[8px] font-black text-white/30 bg-white/5 px-1.5 py-0.5 rounded">USED</span>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-white/40 leading-tight relative">{chip.description}</p>
-
-                    {/* Cancel control on the active chip (only before deadline) */}
-                    {chip.active && (
-                      <div className="mt-2 pt-2 border-t border-emerald-500/20 relative">
-                        {chip.canCancel ? (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); setChipCancelConfirm(chip); }}
-                            disabled={chipLoading}
-                            className="w-full text-[10px] sm:text-[11px] font-bold text-rose-300 hover:text-rose-200 hover:bg-rose-500/10 active:scale-[0.98] disabled:opacity-50 transition px-2 py-1 rounded"
-                          >
-                            Cancel chip
-                          </button>
-                        ) : stageLocked ? (
-                          <p className="text-[9px] sm:text-[10px] text-white/40 text-center font-medium">
-                            Locked &mdash; stage has started
-                          </p>
-                        ) : chip.cancelBlockedReason ? (
-                          <p className="text-[9px] sm:text-[10px] text-amber-300/70 text-center font-medium leading-tight">
-                            {chip.cancelBlockedReason}
-                          </p>
-                        ) : null}
-                        {chipDeadline && !stageLocked && (
-                          <p className="text-[9px] sm:text-[10px] text-emerald-300/70 text-center mt-1">
-                            Locks in {formatCountdown(chipDeadline, now)}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+        <div className="px-3 sm:px-0 mb-4">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-black text-white/40 uppercase tracking-widest flex items-center gap-1 mr-1">
+              <Sparkles className="w-3 h-3" />
+              Chips
+            </span>
+            {chips.map(chip => (
+              <button
+                key={chip.id}
+                type="button"
+                onClick={() => setChipConfirm(chip)}
+                aria-label={`${chip.name}: ${chip.active ? 'active' : chip.used ? 'used' : chip.available ? 'available' : 'unavailable'}`}
+                className={`relative px-2.5 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap transition-all active:scale-95 ${
+                  chip.active
+                    ? 'bg-gradient-to-br from-emerald-500/40 to-emerald-700/30 ring-1 ring-emerald-400 text-emerald-100 shadow-[0_0_14px_rgba(16,185,129,0.45)]'
+                    : chip.used
+                    ? 'bg-white/[0.03] ring-1 ring-white/5 text-white/25 line-through'
+                    : chip.available
+                    ? 'bg-white/5 ring-1 ring-white/15 text-white/80 hover:bg-white/10 hover:ring-white/30 hover:-translate-y-0.5'
+                    : 'bg-white/[0.03] ring-1 ring-white/5 text-white/30'
+                }`}
+              >
+                {chip.name}
+                {chip.active && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-slate-950 animate-pulse" />
+                )}
+              </button>
+            ))}
           </div>
         </div>
       )}
 
-      {/* Chip Confirmation Modal */}
-      {chipConfirm && (
-        <div
-          className="fixed inset-0 bg-black/80 z-[9999] backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setChipConfirm(null)}
-        >
+      {/* Chip detail popup — opens for every chip regardless of state. The
+          full plain-English pitch lives here so the bar can stay tiny. */}
+      {chipConfirm && (() => {
+        const chip = chipConfirm;
+        const Icon = chipIcon(chip.name);
+        const info = chipExplain(chip.id);
+        return (
           <div
-            className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm p-6 shadow-2xl"
-            onClick={e => e.stopPropagation()}
+            className="fixed inset-0 bg-black/80 z-[9999] backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setChipConfirm(null)}
           >
-            <h3 className="text-lg font-bold text-white mb-2">Activate {chipConfirm.name}?</h3>
-            <p className="text-white/60 text-sm mb-1">{chipConfirm.description}</p>
-            {chipConfirm.id === 'FREE_HIT' && (
-              <div className="mt-3 mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
-                <p className="text-amber-300 text-xs font-semibold mb-1">How Free Hit works</p>
-                <ul className="text-amber-200/80 text-xs space-y-1 list-disc list-inside">
-                  <li>Unlimited free transfers for this stage</li>
-                  <li>Your current squad is saved as a snapshot</li>
-                  <li>At the end of the stage, your squad reverts to that snapshot automatically</li>
-                </ul>
+            <div
+              className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-scale-in"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className={`px-5 pt-5 pb-4 flex items-center gap-3 ${
+                chip.active
+                  ? 'bg-gradient-to-r from-emerald-500/20 to-transparent'
+                  : 'bg-gradient-to-r from-rose-500/15 via-purple-500/10 to-transparent'
+              }`}>
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+                  chip.active ? 'bg-emerald-500/25 text-emerald-200' : 'bg-white/10 text-white'
+                }`}>
+                  <Icon className="w-6 h-6" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-lg font-black text-white leading-tight">{chip.name}</h3>
+                  <span className={`inline-block mt-0.5 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                    chip.active
+                      ? 'bg-emerald-500/20 text-emerald-300'
+                      : chip.used
+                      ? 'bg-white/10 text-white/40'
+                      : chip.available
+                      ? 'bg-sky-500/20 text-sky-300'
+                      : 'bg-white/10 text-white/40'
+                  }`}>
+                    {chip.active ? 'Active now' : chip.used ? 'Already used' : chip.available ? 'Ready to use' : 'Not available'}
+                  </span>
+                </div>
               </div>
-            )}
-            <p className="text-white/50 text-xs mb-6">
-              You can still cancel this until the stage deadline starts.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setChipConfirm(null)}
-                className="flex-1 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white/70 font-medium hover:bg-white/10 transition-colors"
-              >
-                Back
-              </button>
-              <button
-                onClick={() => activateChip(chipConfirm.id)}
-                disabled={chipLoading}
-                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl text-white font-bold hover:from-emerald-600 hover:to-emerald-700 disabled:opacity-50 transition-all"
-              >
-                {chipLoading ? 'Activating...' : 'Confirm'}
-              </button>
+
+              <div className="px-5 py-4">
+                <p className="text-white font-bold text-sm mb-3">{info.tagline}</p>
+                <ul className="space-y-2 mb-4">
+                  {info.points.map((pt, i) => (
+                    <li key={i} className="flex gap-2 text-white/70 text-xs leading-relaxed">
+                      <span className="text-emerald-400 font-black shrink-0">✓</span>
+                      {pt}
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-white/35 text-[11px] leading-relaxed mb-1">
+                  Each chip works once in the whole tournament, but you can run more than one
+                  in the same stage. Triple Captain plus Bench Boost together is allowed.
+                  {!chip.active && !chip.used && ' You can change your mind and cancel it any time before the stage deadline.'}
+                </p>
+                {chip.active && chipDeadline && !stageLocked && (
+                  <p className="text-emerald-300/80 text-[11px] font-semibold">
+                    Locks in {formatCountdown(chipDeadline, now)}. After that it&apos;s spent.
+                  </p>
+                )}
+                {chip.active && stageLocked && (
+                  <p className="text-white/40 text-[11px] font-semibold">Locked in. The stage has started.</p>
+                )}
+                {chip.active && !chip.canCancel && chip.cancelBlockedReason && (
+                  <p className="text-amber-300/80 text-[11px] mt-1">{chip.cancelBlockedReason}</p>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="px-5 pb-5 flex gap-3">
+                <button
+                  onClick={() => setChipConfirm(null)}
+                  className="flex-1 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white/70 font-medium hover:bg-white/10 transition-colors"
+                >
+                  {chip.available ? 'Not now' : 'Close'}
+                </button>
+                {chip.available && (
+                  <button
+                    onClick={() => activateChip(chip.id)}
+                    disabled={chipLoading}
+                    className="flex-1 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl text-white font-bold hover:from-emerald-600 hover:to-emerald-700 disabled:opacity-50 transition-all"
+                  >
+                    {chipLoading ? 'Activating...' : `Use ${chip.name}`}
+                  </button>
+                )}
+                {chip.active && chip.canCancel && (
+                  <button
+                    onClick={() => { setChipConfirm(null); setChipCancelConfirm(chip); }}
+                    disabled={chipLoading}
+                    className="flex-1 px-4 py-2.5 bg-gradient-to-r from-rose-500 to-rose-600 rounded-xl text-white font-bold hover:from-rose-600 hover:to-rose-700 disabled:opacity-50 transition-all"
+                  >
+                    Cancel chip
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Chip Cancellation Modal */}
       {chipCancelConfirm && (
@@ -2205,6 +2246,11 @@ export default function SquadPage() {
           </div>
         </div>
       )}
+
+      {/* Mobile gesture hint — desktop gets the equivalent line under the pitch */}
+      <p className="sm:hidden px-3 mb-2 text-center text-[10px] text-white/30 font-medium">
+        Tap a player for details · hold to substitute
+      </p>
 
       {/* Pitch */}
       <div className="relative rounded-2xl mb-5 sm:mb-6 overflow-hidden shadow-[0_20px_60px_-20px_rgba(0,0,0,0.65)] ring-1 ring-white/10">
@@ -2269,6 +2315,7 @@ export default function SquadPage() {
                   <div
                     key={p.id}
                     onClick={() => {
+                      if (consumeLongPress()) return;
                       if (playerToSub) {
                         if (isValid || isSelected) {
                           swapPlayer(p);
@@ -2279,12 +2326,13 @@ export default function SquadPage() {
                         setSelectedPlayer(p);
                       }
                     }}
-                    draggable
+                    {...longPressHandlers(p)}
+                    draggable={!isTouch}
                     onDragStart={handleDragStart(p)}
                     onDragEnd={handleDragEnd}
                     onDragOver={handleDragOver(p)}
                     onDrop={handleDrop(p)}
-                    className={`relative flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-xl cursor-pointer transition-all group overflow-hidden ${
+                    className={`relative flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-xl cursor-pointer transition-all group overflow-hidden select-none [-webkit-touch-callout:none] ${
                       isSelected
                         ? 'bg-amber-500/15 ring-2 ring-amber-400 animate-pulse'
                         : isValid
@@ -2435,6 +2483,60 @@ function chipIcon(name: string): any {
   if (n.includes('bench')) return Users;
   if (n.includes('boost')) return Zap;
   return Sparkles;
+}
+
+// Plain-English pitch for each chip, shown in the detail popup. Written for
+// someone who has never played fantasy football before. Every claim here is
+// backed by the scoring code: captain x2/x3 and bench rules live in
+// lib/squad-points.ts, the 4 point transfer hit in api/transfers, the Free
+// Hit snapshot/revert in api/chips. No dashes in the copy (user preference).
+function chipExplain(id: string): { tagline: string; points: string[] } {
+  switch (id) {
+    case 'WILDCARD_1':
+      return {
+        tagline: 'Rebuild your whole squad for free.',
+        points: [
+          'Normally every transfer past your free ones costs you 4 points. Wildcard makes them all free for this stage.',
+          'Buy and sell as many players as you want before the deadline.',
+          'The changes are permanent. Your new squad stays with you for the rest of the tournament.',
+        ],
+      };
+    case 'WILDCARD_2':
+      return {
+        tagline: 'Your second Wildcard, saved for the knockouts.',
+        points: [
+          'Works exactly like the first one. Unlimited free transfers for this stage and the changes are permanent.',
+          'It only unlocks once the knockout rounds start, so you can rebuild after seeing who made it through.',
+        ],
+      };
+    case 'TRIPLE_CAPTAIN':
+      return {
+        tagline: 'Your captain scores triple instead of double.',
+        points: [
+          'Your captain normally earns double points. With this chip everything they do is worth 3x for this stage.',
+          'If your captain does not play, nobody gets the boost. So save it for a star with an easy game.',
+        ],
+      };
+    case 'BENCH_BOOST':
+      return {
+        tagline: 'All 15 of your players score this stage.',
+        points: [
+          'Normally your 4 bench players earn you nothing. With Bench Boost their points count toward your total too.',
+          'Best used when your whole squad, bench included, has good fixtures.',
+        ],
+      };
+    case 'FREE_HIT':
+      return {
+        tagline: 'Unlimited transfers for one stage, then your old squad comes back.',
+        points: [
+          'Unlimited free transfers, this stage only.',
+          'When the stage ends your squad automatically goes back to exactly what it was before you used the chip.',
+          'Great for loading up on one big matchday without wrecking your long term squad.',
+        ],
+      };
+    default:
+      return { tagline: '', points: [] };
+  }
 }
 
 // FDR cell pill color

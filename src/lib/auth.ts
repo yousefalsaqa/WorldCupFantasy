@@ -7,6 +7,12 @@ import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
 
+// In production a missing JWT_SECRET must be a hard failure: silently
+// falling back to a string that lives in the public repo would let anyone
+// forge a signed admin token.
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('JWT_SECRET environment variable is required in production');
+}
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || 'fallback-secret-for-dev-only'
 );

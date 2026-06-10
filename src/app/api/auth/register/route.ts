@@ -1,9 +1,21 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { hashPassword, createToken, setAuthCookie } from '@/lib/auth';
+import { hashPassword, createToken, setAuthCookie, checkRateLimit } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
+    // Throttle account creation: 5 signups per IP per 15 minutes. Stops
+    // bot loops from flooding the user table; a household of friends
+    // registering together stays comfortably under it.
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const limit = checkRateLimit(`register:${ip}`, 5);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many signups from this connection. Try again in a few minutes.' },
+        { status: 429 }
+      );
+    }
+
     const { email, username, password } = await request.json();
 
     // Validation

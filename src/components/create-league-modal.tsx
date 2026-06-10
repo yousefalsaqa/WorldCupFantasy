@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, X, Loader2, AlertCircle, Copy, Check } from 'lucide-react';
+import { Plus, X, Loader2, AlertCircle, Copy, Check, Trophy } from 'lucide-react';
 
 interface CreateLeagueModalProps {
-  userId: string;
+  /** Called after a league is successfully created (e.g. refetch the league list). */
+  onSuccess?: () => void;
 }
 
-export function CreateLeagueModal({ userId }: CreateLeagueModalProps) {
+export function CreateLeagueModal({ onSuccess }: CreateLeagueModalProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [leagueName, setLeagueName] = useState('');
@@ -38,6 +39,7 @@ export function CreateLeagueModal({ userId }: CreateLeagueModalProps) {
 
       setCreatedCode(data.league.code);
       router.refresh();
+      onSuccess?.();
     } catch {
       setError('Something went wrong');
     } finally {
@@ -65,105 +67,112 @@ export function CreateLeagueModal({ userId }: CreateLeagueModalProps) {
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="btn-primary flex items-center gap-2"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 shadow-lg shadow-rose-500/20 transition-all"
       >
-        <Plus className="w-4 h-4" />
+        <Plus className="w-3.5 h-3.5" />
         Create League
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={closeModal} />
-          
-          <div className="relative w-full max-w-md card p-6 animate-scale-in">
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={closeModal}
+        >
+          <div
+            className="relative w-full max-w-sm bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               onClick={closeModal}
-              className="absolute top-4 right-4 p-2 rounded-lg hover:bg-surface-800"
+              className="absolute top-3 right-3 p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 transition-colors"
             >
-              <X className="w-5 h-5 text-surface-400" />
+              <X className="w-5 h-5" />
             </button>
 
             {createdCode ? (
               // Success state
-              <div className="text-center">
-                <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
-                  <Check className="w-8 h-8 text-emerald-400" />
+              <div className="p-6 text-center">
+                <div className="w-14 h-14 rounded-full bg-emerald-500/15 ring-1 ring-emerald-500/40 flex items-center justify-center mx-auto mb-4">
+                  <Check className="w-7 h-7 text-emerald-400" />
                 </div>
-                <h2 className="font-display text-2xl text-laliga-cream mb-2">
-                  LEAGUE CREATED!
-                </h2>
-                <p className="text-surface-400 mb-6">
-                  Share this code with friends to join your league
+                <h2 className="text-xl font-black text-white mb-1">League created!</h2>
+                <p className="text-white/50 text-sm mb-5">
+                  Share this code with friends so they can join
                 </p>
-                
-                <div className="flex items-center justify-center gap-3 p-4 rounded-lg bg-surface-800 mb-6">
-                  <span className="font-mono text-2xl font-bold text-laliga-gold tracking-wider">
+
+                <div className="flex items-center justify-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-white/10 mb-5">
+                  <span className="font-mono text-2xl font-bold text-amber-300 tracking-widest">
                     {createdCode}
                   </span>
                   <button
                     onClick={copyCode}
-                    className="p-2 rounded-lg hover:bg-surface-700 transition-colors"
+                    className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                    aria-label="Copy code"
                   >
                     {copied ? (
                       <Check className="w-5 h-5 text-emerald-400" />
                     ) : (
-                      <Copy className="w-5 h-5 text-surface-400" />
+                      <Copy className="w-5 h-5 text-white/50" />
                     )}
                   </button>
                 </div>
 
-                <button onClick={closeModal} className="btn-secondary w-full">
+                <button
+                  onClick={closeModal}
+                  className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white/80 font-medium hover:bg-white/10 transition-colors"
+                >
                   Done
                 </button>
               </div>
             ) : (
               // Form state
               <>
-                <h2 className="font-display text-2xl text-laliga-cream mb-2">
-                  CREATE LEAGUE
-                </h2>
-                <p className="text-surface-400 mb-6">
-                  Start a private league and invite your friends
-                </p>
-
-                {error && (
-                  <div className="flex items-center gap-3 p-4 mb-6 rounded-lg bg-laliga-red/10 border border-laliga-red/20">
-                    <AlertCircle className="w-5 h-5 text-laliga-red flex-shrink-0" />
-                    <p className="text-sm text-laliga-red">{error}</p>
+                <div className="px-6 pt-6 pb-4 bg-gradient-to-r from-rose-500/15 via-purple-500/10 to-transparent flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center">
+                    <Trophy className="w-5 h-5 text-rose-300" />
                   </div>
-                )}
-
-                <form onSubmit={handleSubmit}>
-                  <div className="mb-6">
-                    <label htmlFor="leagueName" className="block text-sm font-medium text-surface-300 mb-2">
-                      League Name
-                    </label>
-                    <input
-                      id="leagueName"
-                      type="text"
-                      value={leagueName}
-                      onChange={(e) => setLeagueName(e.target.value)}
-                      className="input-field"
-                      placeholder="e.g., Office Champions"
-                      required
-                      minLength={3}
-                      maxLength={40}
-                      autoFocus
-                    />
+                  <div>
+                    <h2 className="text-lg font-black text-white leading-tight">Create a league</h2>
+                    <p className="text-white/50 text-xs">Private league for you and your friends</p>
                   </div>
+                </div>
+
+                <form onSubmit={handleSubmit} className="p-6 pt-4">
+                  {error && (
+                    <div className="flex items-center gap-2.5 px-3 py-2.5 mb-4 rounded-lg bg-rose-500/10 border border-rose-500/30">
+                      <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+                      <p className="text-xs text-rose-300">{error}</p>
+                    </div>
+                  )}
+
+                  <label htmlFor="leagueName" className="block text-xs font-bold text-white/50 uppercase tracking-wider mb-2">
+                    League name
+                  </label>
+                  <input
+                    id="leagueName"
+                    type="text"
+                    value={leagueName}
+                    onChange={(e) => setLeagueName(e.target.value)}
+                    className="w-full px-4 py-2.5 mb-5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-white/30 focus:bg-white/10 transition-colors"
+                    placeholder="e.g. Office Champions"
+                    required
+                    minLength={3}
+                    maxLength={40}
+                    autoFocus
+                  />
 
                   <div className="flex gap-3">
                     <button
                       type="button"
                       onClick={closeModal}
-                      className="btn-secondary flex-1"
+                      className="flex-1 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white/70 font-medium hover:bg-white/10 transition-colors"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
                       disabled={isLoading || leagueName.length < 3}
-                      className="btn-primary flex-1 flex items-center justify-center gap-2"
+                      className="flex-1 px-4 py-2.5 bg-gradient-to-r from-rose-500 to-pink-600 rounded-xl text-white font-bold hover:from-rose-600 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
                     >
                       {isLoading ? (
                         <>
@@ -171,7 +180,7 @@ export function CreateLeagueModal({ userId }: CreateLeagueModalProps) {
                           Creating...
                         </>
                       ) : (
-                        'Create League'
+                        'Create'
                       )}
                     </button>
                   </div>
@@ -184,5 +193,3 @@ export function CreateLeagueModal({ userId }: CreateLeagueModalProps) {
     </>
   );
 }
-
-

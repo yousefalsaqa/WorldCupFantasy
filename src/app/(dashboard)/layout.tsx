@@ -53,11 +53,27 @@ export default async function DashboardLayout({
     <UnsavedChangesProvider>
       <AuthInterceptor>
         <div className="min-h-screen bg-[#0a0e17] relative">
-          {/* Subtle background */}
+          {/* Background — same depth treatment as the landing page so the
+              app doesn't go flat after login. CSS gradients only (cheap on
+              iOS Safari). */}
           <div className="fixed inset-0 pointer-events-none">
-            <div className="absolute inset-0 bg-[linear-gradient(125deg,#0a0e17_0%,#0a0e17_40%,#10141f_50%,#0a0e17_60%,#0a0e17_100%)]"></div>
-            <div className="absolute top-0 right-0 w-1/3 h-1/2 bg-[radial-gradient(ellipse_at_top_right,rgba(220,38,38,0.03),transparent)]"></div>
-            <div className="absolute bottom-0 left-0 w-1/3 h-1/2 bg-[radial-gradient(ellipse_at_bottom_left,rgba(37,99,235,0.03),transparent)]"></div>
+            <div
+              className="absolute inset-0"
+              style={{
+                backgroundImage:
+                  'radial-gradient(ellipse 700px 500px at 20% -10%, rgba(244,63,94,0.10), transparent 60%), radial-gradient(ellipse 700px 500px at 85% 110%, rgba(59,130,246,0.08), transparent 60%), radial-gradient(ellipse 500px 400px at 70% 20%, rgba(168,85,247,0.05), transparent 65%)',
+              }}
+            />
+            <div
+              className="absolute inset-0"
+              style={{
+                backgroundImage:
+                  'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)',
+                backgroundSize: '52px 52px',
+                maskImage: 'radial-gradient(ellipse 90% 60% at 50% 0%, black 20%, transparent 100%)',
+                WebkitMaskImage: 'radial-gradient(ellipse 90% 60% at 50% 0%, black 20%, transparent 100%)',
+              }}
+            />
           </div>
           <DashboardNav />
           <main className="relative z-10 px-4 md:px-6 py-6">

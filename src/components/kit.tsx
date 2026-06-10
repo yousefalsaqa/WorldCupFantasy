@@ -467,7 +467,11 @@ export function PlayerCard({
 }: PlayerCardProps) {
   const kitSize = size === 'xs' ? 'xs' : size === 'sm' ? 'sm' : size === 'lg' ? 'lg' : 'md';
   const nameSize = size === 'xs' ? 'text-[9px]' : size === 'sm' ? 'text-[10px]' : size === 'lg' ? 'text-sm' : 'text-xs';
-  const plateWidth = size === 'xs' ? 'min-w-[58px]' : size === 'sm' ? 'min-w-[68px]' : size === 'lg' ? 'min-w-[100px]' : 'min-w-[78px]';
+  // FIXED width (not min-width): with min-w a long name like
+  // "Gabriel Magalhães" stretches its plate wider than its neighbours and
+  // breaks the pitch row alignment. Fixed width keeps every card uniform
+  // and lets `truncate` actually ellipsize the name.
+  const plateWidth = size === 'xs' ? 'w-[60px]' : size === 'sm' ? 'w-[70px]' : size === 'lg' ? 'w-[102px]' : 'w-[80px]';
 
   return (
     <div

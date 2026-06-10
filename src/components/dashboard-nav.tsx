@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import Crest from '@/components/crest';
 import { useUnsavedChanges } from '@/contexts/unsaved-changes';
 
 const NAV_ITEMS = [
@@ -55,9 +56,7 @@ export default function DashboardNav() {
             onClick={onLinkClick('/dashboard')}
             className="flex items-center gap-2 group"
           >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 via-pink-500 to-purple-600 flex items-center justify-center shadow-lg shadow-pink-500/20 group-hover:shadow-pink-500/30 transition-shadow">
-              <span className="text-white font-black text-sm">26</span>
-            </div>
+            <Crest size={32} />
             <div className="hidden sm:block">
               <div className="text-white font-black text-sm tracking-tight">FANTASY</div>
               <div className="text-white/50 text-[10px] tracking-widest">WORLD CUP</div>

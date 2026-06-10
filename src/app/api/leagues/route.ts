@@ -28,6 +28,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Cap leagues per owner so a user can't spam-create them. 5 is plenty
+    // for a friends tournament; admins are exempt for ops work.
+    const ownedCount = await prisma.league.count({
+      where: { ownerId: session.userId, isGlobal: false },
+    });
+    if (ownedCount >= 5) {
+      return NextResponse.json(
+        { error: 'You can own at most 5 leagues. Delete one to create another.' },
+        { status: 400 }
+      );
+    }
+
     // Parse and validate
     const body = await request.json();
     const validatedData = createLeagueSchema.parse(body);
