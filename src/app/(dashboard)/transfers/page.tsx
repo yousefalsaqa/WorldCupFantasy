@@ -111,14 +111,14 @@ export default function TransfersHistoryPage() {
     <div className="max-w-3xl mx-auto px-4 py-6 pb-12">
       {/* Header */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center shadow-[0_0_20px_rgba(168,85,247,0.4)]">
-            <HistoryIcon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center shadow-[0_0_20px_rgba(168,85,247,0.4)]">
+            <HistoryIcon className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">Activity</h1>
-            <p className="text-white/40 text-xs sm:text-sm">
-              All your transfers and chip activations, newest first
+            <h1 className="text-lg sm:text-2xl font-black text-white tracking-tight">Activity</h1>
+            <p className="text-white/40 text-[11px] sm:text-xs">
+              Your transfers and chips, newest first. Only you can see this.
             </p>
           </div>
         </div>
@@ -177,7 +177,7 @@ function TransferRow({ entry, timezone }: { entry: TransferEntry; timezone: stri
   // nothing. Otherwise the user took a -4 hit.
   const tookHit = !entry.isFreeTransfer && !entry.isWildcard;
   return (
-    <li className="rounded-xl bg-white/5 border border-white/10 p-3 sm:p-4">
+    <li className="rounded-xl bg-white/5 border border-white/10 p-2.5 sm:p-3">
       <div className="flex items-center justify-between gap-3 mb-2">
         <div className="flex items-center gap-2">
           <ArrowLeftRight className="w-4 h-4 text-white/40" />
