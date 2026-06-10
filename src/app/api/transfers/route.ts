@@ -19,7 +19,7 @@ const TRANSFER_HIT_COST = 4;
 const MAX_PLAYERS_PER_NATION = 3;
 
 // Set to true for testing until first gameweek - allows unlimited free transfers
-const UNLIMITED_TRANSFERS = true;
+const UNLIMITED_TRANSFERS = false;
 
 interface TransferRequest {
   playerOutId: string;

@@ -7,7 +7,7 @@ import { verifyToken } from '@/lib/auth';
 export const dynamic = 'force-dynamic';
 
 // Set to true to allow unlimited free transfers (for testing before first gameweek)
-const UNLIMITED_TRANSFERS = true;
+const UNLIMITED_TRANSFERS = false;
 
 async function getUser() {
   const cookieStore = await cookies();

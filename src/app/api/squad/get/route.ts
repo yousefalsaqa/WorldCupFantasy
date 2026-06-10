@@ -95,7 +95,7 @@ async function maybeRevertFreeHit(teamId: string, snapshotJson: string | null): 
 //
 // Keep this in lockstep with /api/transfers/route.ts → the constant there
 // IS the source of truth; we mirror it here.
-const UNLIMITED_TRANSFERS = true;
+const UNLIMITED_TRANSFERS = false;
 
 async function computeUnlimitedTransfers(teamId: string): Promise<boolean> {
   if (UNLIMITED_TRANSFERS) return true;

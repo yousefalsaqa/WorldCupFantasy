@@ -4,7 +4,7 @@
 // ============================================
 
 const API_BASE_URL = 'https://v3.football.api-sports.io';
-const API_KEY = process.env.API_FOOTBALL_KEY || '1c07d3496f14ec9145fdc1e6ae980630';
+const API_KEY = process.env.API_FOOTBALL_KEY || '';
 
 // World Cup 2026 constants
 export const WORLD_CUP_LEAGUE_ID = 1;

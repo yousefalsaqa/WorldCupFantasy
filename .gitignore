@@ -47,3 +47,6 @@ next-env.d.ts
 
 # Live-test snapshots saved from /admin/live-test
 live-test-*.json
+
+# API-Football sync cache (scripts/sync-from-api-football.ts)
+.sync-cache.json
