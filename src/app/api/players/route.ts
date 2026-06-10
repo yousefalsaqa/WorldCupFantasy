@@ -24,6 +24,8 @@ export async function GET(request: Request) {
         currentPrice: true,
         shirtNumber: true,
         photoUrl: true,
+        isAvailable: true,
+        availabilityNote: true,
         nation: {
           select: {
             id: true,

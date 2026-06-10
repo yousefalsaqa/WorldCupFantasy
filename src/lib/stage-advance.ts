@@ -29,6 +29,7 @@
 // ============================================
 
 import { prisma } from './db';
+import { settleStage } from './stage-settlement';
 import { TRANSFERS } from './wc-constants';
 
 const STAGE_COUNT = 9;
@@ -115,7 +116,7 @@ export async function maybeAdvanceStage(): Promise<AdvanceResult> {
 async function advanceOnce(): Promise<AdvanceResult> {
   const activeStage = await prisma.stage.findFirst({
     where: { isActive: true },
-    select: { id: true, stageId: true, name: true, order: true },
+    select: { id: true, stageId: true, name: true, order: true, deadlineTime: true },
   });
   if (!activeStage) return { advanced: false, reason: 'no-active-stage' };
 
@@ -157,6 +158,24 @@ async function advanceOnce(): Promise<AdvanceResult> {
   // for the knockouts (WC2 was already available as of R32; WC1 stays
   // consumed since it's the group-stage wildcard).
   const refreshChips = isEnteringKnockouts;
+
+  // 0) Settle the closing stage BEFORE the Free Hit revert: auto-subs,
+  // vice-captain fallback, and the TeamStage history snapshot must score
+  // the squad that actually played this stage (i.e. the Free Hit squad,
+  // not the one about to be restored).
+  let settlement = null;
+  try {
+    settlement = await settleStage(activeStage);
+    console.log(
+      `[Stage Advance] Settled ${activeStage.stageId}: ${settlement.teamsSettled} teams, ` +
+      `${settlement.autoSubs} auto-subs, ${settlement.vcFallbacks} VC fallbacks, ` +
+      `${settlement.pointsAdjusted > 0 ? '+' : ''}${settlement.pointsAdjusted} pts adjusted`,
+    );
+  } catch (err) {
+    // Settlement failing must not block the stage transition — but it's
+    // loud in the logs because it means points need a manual fix.
+    console.error('[Stage Advance] settleStage FAILED:', err);
+  }
 
   // 1) Revert any active Free Hit snapshots before resetting transfer
   // counts — otherwise the snapshot would restore the OLD freeTransfers

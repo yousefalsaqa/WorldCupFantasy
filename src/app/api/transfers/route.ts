@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
+import { getStageLock, LOCKED_ERROR } from '@/lib/deadline';
 import { cookies } from 'next/headers';
 import {
   parseActiveChips,
@@ -44,6 +45,13 @@ export async function POST(request: NextRequest) {
     
     if (!session) {
       return NextResponse.json({ error: 'Please log in to make transfers' }, { status: 401 });
+    }
+
+    // Hard deadline: transfers freeze 1h before the round's first kickoff
+    // and reopen when the next stage activates.
+    const { locked } = await getStageLock();
+    if (locked) {
+      return NextResponse.json({ error: LOCKED_ERROR }, { status: 403 });
     }
 
     const body = await request.json();
@@ -231,6 +239,9 @@ export async function POST(request: NextRequest) {
         await tx.transfer.create({
           data: {
             teamId: team.id,
+            // Stamp the stage so per-stage history (TeamStage.transferHits)
+            // and the wildcard-cancel guard can count this row.
+            stageId: activeStage?.id ?? null,
             playerInId: transfer.playerInId,
             playerOutId: transfer.playerOutId,
             priceIn: playerIn!.currentPrice,
@@ -257,7 +268,11 @@ export async function POST(request: NextRequest) {
           bankBalance: newBankBalance,
           teamValue: newTeamValue,
           freeTransfers: newFreeTransfers,
-          transfersUsed: team.transfersUsed + transfers.length
+          transfersUsed: team.transfersUsed + transfers.length,
+          // The -4/extra-transfer hit was always *reported* in the success
+          // toast but never actually charged. Deduct it here so the
+          // leaderboard reflects it immediately.
+          ...(hitPoints > 0 ? { totalPoints: { decrement: hitPoints } } : {}),
         }
       });
 

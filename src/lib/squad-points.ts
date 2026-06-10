@@ -68,6 +68,21 @@ function computeTeamContribution(
   return total;
 }
 
+/** Team ids created after the stage's deadline (late joiners — no points
+ * this stage). Empty array when the stage has no deadline. */
+async function getLateTeamIds(stageId: string): Promise<string[]> {
+  const stage = await prisma.stage.findUnique({
+    where: { id: stageId },
+    select: { deadlineTime: true },
+  });
+  if (!stage?.deadlineTime) return [];
+  const late = await prisma.team.findMany({
+    where: { createdAt: { gte: stage.deadlineTime } },
+    select: { id: true },
+  });
+  return late.map((t) => t.id);
+}
+
 /**
  * Load every team that owns at least one player with a performance row
  * for this match, plus map each team to its active chip set in the
@@ -75,7 +90,16 @@ function computeTeamContribution(
  * the same set of teams.
  */
 async function loadTeamsForMatch(matchId: string, stageId: string) {
-  const teamsWithPlayers = await prisma.team.findMany({
+  // Late-joiner rule: teams created AFTER the stage deadline don't earn
+  // anything for this stage (they'd otherwise be able to pick players who
+  // already scored). They start banking from the next stage.
+  const stage = await prisma.stage.findUnique({
+    where: { id: stageId },
+    select: { deadlineTime: true },
+  });
+  const cutoff = stage?.deadlineTime ?? null;
+
+  const teamsWithPlayers = (await prisma.team.findMany({
     include: {
       squadPlayers: {
         where: {
@@ -88,7 +112,7 @@ async function loadTeamsForMatch(matchId: string, stageId: string) {
         },
       },
     },
-  });
+  })).filter((t) => !cutoff || t.createdAt < cutoff);
 
   const teamIds = teamsWithPlayers.map((t) => t.id);
   const teamStages = teamIds.length > 0
@@ -122,12 +146,13 @@ export async function updateSquadPoints(matchId: string): Promise<void> {
   });
   if (!match) return;
 
+  const lateTeamIds = await getLateTeamIds(match.stageId);
   const performances = await prisma.playerPerformance.findMany({
     where: { matchId },
   });
   for (const perf of performances) {
     await prisma.squadPlayer.updateMany({
-      where: { playerId: perf.playerId },
+      where: { playerId: perf.playerId, teamId: { notIn: lateTeamIds } },
       data: { points: { increment: perf.totalPoints } },
     });
   }
@@ -178,12 +203,13 @@ export async function rollbackSquadPoints(matchId: string): Promise<void> {
   // Mirror updateSquadPoints in REVERSE — decrement SquadPlayer.points
   // by what the perf rows added, then decrement Team.totalPoints by the
   // same chip-adjusted contribution.
+  const lateTeamIds = await getLateTeamIds(match.stageId);
   const performances = await prisma.playerPerformance.findMany({
     where: { matchId },
   });
   for (const perf of performances) {
     await prisma.squadPlayer.updateMany({
-      where: { playerId: perf.playerId },
+      where: { playerId: perf.playerId, teamId: { notIn: lateTeamIds } },
       data: { points: { decrement: perf.totalPoints } },
     });
   }

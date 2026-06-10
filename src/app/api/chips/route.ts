@@ -229,6 +229,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No active stage' }, { status: 400 });
     }
 
+    // Hard deadline: chips lock with the squads. Without this a user could
+    // watch their captain score and THEN flip on Triple Captain.
+    if (stageIsLocked(activeStage.deadlineTime)) {
+      return NextResponse.json(
+        { error: 'Chips are locked while this round is being played. You can activate one for the next round once this one finishes.' },
+        { status: 403 },
+      );
+    }
+
     if (chipId === 'WILDCARD_2') {
       const knockoutStages = ['R32', 'R16', 'QF', 'SF', '3RD', 'F'];
       if (!knockoutStages.includes(activeStage.stageId)) {

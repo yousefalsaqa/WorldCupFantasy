@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyToken, JWTPayload } from '@/lib/auth';
+import { getStageLock, LOCKED_ERROR } from '@/lib/deadline';
 import { cookies } from 'next/headers';
 
 // This route is dynamic because it reads cookies for authentication
@@ -23,6 +24,13 @@ export async function PUT(request: NextRequest) {
     
     if (!session) {
       return NextResponse.json({ error: 'Please log in' }, { status: 401 });
+    }
+
+    // Hard deadline: no lineup changes from 1h before the round's first
+    // kickoff until the round finishes and the next stage activates.
+    const { locked } = await getStageLock();
+    if (locked) {
+      return NextResponse.json({ error: LOCKED_ERROR }, { status: 403 });
     }
 
     const { startingXI, bench, captainId, viceCaptainId } = await request.json();

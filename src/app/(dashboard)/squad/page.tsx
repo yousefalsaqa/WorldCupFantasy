@@ -54,6 +54,8 @@ interface Player {
   shirtNumber: number | null;
   photoUrl?: string | null;
   nation: Nation;
+  isAvailable?: boolean;
+  availabilityNote?: string | null;
   isStarting?: boolean;
   isCaptain?: boolean;
   isViceCaptain?: boolean;
@@ -1453,7 +1455,17 @@ export default function SquadPage() {
                         size="xs"
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-semibold truncate">{player.displayName}</p>
+                        <p className="text-white text-sm font-semibold truncate flex items-center gap-1.5">
+                          {player.displayName}
+                          {player.isAvailable === false && (
+                            <span
+                              className="shrink-0 text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 ring-1 ring-red-500/40"
+                              title={player.availabilityNote || 'Unavailable'}
+                            >
+                              {player.availabilityNote || 'OUT'}
+                            </span>
+                          )}
+                        </p>
                         <p className="text-white/40 text-xs flex items-center gap-1.5">
                           <img src={getFlagUrl(player.nation?.code || '')} alt="" className="w-4 h-3 rounded-[2px] object-cover" />
                           {player.nation?.name}
@@ -1944,7 +1956,17 @@ export default function SquadPage() {
                         size="xs"
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-semibold truncate">{player.displayName}</p>
+                        <p className="text-white text-sm font-semibold truncate flex items-center gap-1.5">
+                          {player.displayName}
+                          {player.isAvailable === false && (
+                            <span
+                              className="shrink-0 text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 ring-1 ring-red-500/40"
+                              title={player.availabilityNote || 'Unavailable'}
+                            >
+                              {player.availabilityNote || 'OUT'}
+                            </span>
+                          )}
+                        </p>
                         <p className="text-white/40 text-xs flex items-center gap-1.5">
                           <img
                             src={getFlagUrl(player.nation?.code || '')}

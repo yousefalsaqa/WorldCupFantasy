@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyToken, JWTPayload } from '@/lib/auth';
+import { getStageLock, LOCKED_ERROR } from '@/lib/deadline';
 
 // This route is dynamic because it reads cookies for authentication
 export const dynamic = 'force-dynamic';
@@ -83,11 +84,16 @@ export async function POST(request: NextRequest) {
       });
     }
     
-    // Calculate total cost
-    const totalCost = players.reduce((sum, p) => sum + p.purchasePrice, 0);
-    
-    if (totalCost > 100) {
-      return NextResponse.json({ error: 'Squad exceeds budget' }, { status: 400 });
+    // Deadline: re-saving an EXISTING squad is frozen while the round is
+    // live. A first-time build is always allowed — late joiners can set up
+    // immediately, they just don't earn points until the next stage (the
+    // banking code in lib/squad-points gates on Team.createdAt).
+    const existingCount = await prisma.squadPlayer.count({ where: { teamId: team.id } });
+    if (existingCount > 0) {
+      const { locked } = await getStageLock();
+      if (locked) {
+        return NextResponse.json({ error: LOCKED_ERROR }, { status: 403 });
+      }
     }
 
     // Nation-limit check (3 max per nation). Mirrors /api/transfers and the
@@ -95,8 +101,16 @@ export async function POST(request: NextRequest) {
     // players in one query and bucket by nationId.
     const submittedPlayers = await prisma.player.findMany({
       where: { id: { in: players.map((p) => p.playerId) } },
-      select: { id: true, nationId: true, displayName: true, nation: { select: { name: true } } },
+      select: { id: true, nationId: true, displayName: true, currentPrice: true, nation: { select: { name: true } } },
     });
+
+    // Budget check against DB prices — NEVER the client-sent purchasePrice,
+    // which an attacker could set to anything.
+    const priceById = new Map(submittedPlayers.map((p) => [p.id, p.currentPrice]));
+    const totalCost = players.reduce((sum, p) => sum + (priceById.get(p.playerId) ?? Infinity), 0);
+    if (totalCost > 100) {
+      return NextResponse.json({ error: 'Squad exceeds budget' }, { status: 400 });
+    }
     if (submittedPlayers.length !== players.length) {
       return NextResponse.json(
         { error: 'One or more players in your squad could not be found.' },
@@ -134,7 +148,8 @@ export async function POST(request: NextRequest) {
       return {
         teamId: team!.id,
         playerId: p.playerId,
-        purchasePrice: p.purchasePrice,
+        // Server-authoritative price (see budget check above)
+        purchasePrice: priceById.get(p.playerId) ?? p.purchasePrice,
         isStarting,
         isCaptain: p.playerId === captainId,
         isViceCaptain: p.playerId === viceCaptainId,
