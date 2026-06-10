@@ -945,7 +945,9 @@ export default function SquadPage() {
   // Pure check: would swapping p1 and p2 produce a valid formation?
   const isSwapValid = (p1: Player, p2: Player): boolean => {
     if (p1.id === p2.id) return false;
-    if (p1.isStarting === p2.isStarting) return false;
+    // Two bench players can always trade places — that's an auto-sub
+    // priority reorder, not a formation change.
+    if (p1.isStarting === p2.isStarting) return !p1.isStarting;
 
     const playerOut = p1.isStarting ? p1 : p2;
     const playerIn = p1.isStarting ? p2 : p1;
@@ -981,6 +983,22 @@ export default function SquadPage() {
     if (!isSwapValid(p1, p2)) {
       alert('Invalid formation!\n\n• 1 Goalkeeper\n• 3–5 Defenders\n• 2–5 Midfielders\n• 1–3 Forwards');
       setPlayerToSub(null);
+      return;
+    }
+
+    // Bench-to-bench: swap their slots in the priority list. Nothing about
+    // the starting XI, formation, or armbands changes.
+    if (!p1.isStarting && !p2.isStarting) {
+      const a = bench.findIndex(p => p.id === p1.id);
+      const b = bench.findIndex(p => p.id === p2.id);
+      if (a !== -1 && b !== -1) {
+        const next = [...bench];
+        [next[a], next[b]] = [next[b], next[a]];
+        setBench(next);
+        markDirty('You reordered your bench but haven’t saved your lineup.');
+      }
+      setPlayerToSub(null);
+      setSelectedPlayer(null);
       return;
     }
 
@@ -1022,8 +1040,8 @@ export default function SquadPage() {
       setPlayerToSub(null);
       return;
     }
-    if (playerToSub.isStarting === player.isStarting) {
-      setPlayerToSub(player); // Just switch focus
+    if (playerToSub.isStarting && player.isStarting) {
+      setPlayerToSub(player); // Two starters: just switch focus
       return;
     }
     performSwap(playerToSub, player);
@@ -2151,8 +2169,10 @@ export default function SquadPage() {
                   ))}
                 </ul>
                 <p className="text-white/35 text-[11px] leading-relaxed mb-1">
-                  Each chip works once in the whole tournament, but you can run more than one
-                  in the same stage. Triple Captain plus Bench Boost together is allowed.
+                  You can run more than one chip in the same stage. Triple Captain, Bench Boost
+                  and Free Hit come back when the knockouts start, so you get each once in the
+                  groups and once in the knockouts. Wildcards are one each: the first for the
+                  groups, the second for the knockouts.
                   {!chip.active && !chip.used && ' You can change your mind and cancel it any time before the stage deadline.'}
                 </p>
                 {chip.active && chipDeadline && !stageLocked && (
@@ -2303,7 +2323,7 @@ export default function SquadPage() {
                 <Users className="w-3.5 h-3.5" />
                 Substitutes Bench
               </h2>
-              <span className="text-[10px] text-white/30 uppercase tracking-wider">Auto-sub priority →</span>
+              <span className="text-[10px] text-white/30 uppercase tracking-wider">1 comes on first · hold + tap to reorder</span>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
