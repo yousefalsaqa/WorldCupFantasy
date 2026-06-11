@@ -68,8 +68,11 @@ function computeTeamContribution(
   return total;
 }
 
-/** Team ids created after the stage's deadline (late joiners — no points
- * this stage). Empty array when the stage has no deadline. */
+/** Team ids that missed the stage's deadline (late joiners — no points
+ * this stage). A team is late when its first COMPLETE squad save
+ * (firstSquadSavedAt, falling back to createdAt for rows that predate the
+ * column) happened at/after the deadline. Empty array when the stage has
+ * no deadline. */
 async function getLateTeamIds(stageId: string): Promise<string[]> {
   const stage = await prisma.stage.findUnique({
     where: { id: stageId },
@@ -77,7 +80,12 @@ async function getLateTeamIds(stageId: string): Promise<string[]> {
   });
   if (!stage?.deadlineTime) return [];
   const late = await prisma.team.findMany({
-    where: { createdAt: { gte: stage.deadlineTime } },
+    where: {
+      OR: [
+        { firstSquadSavedAt: { gte: stage.deadlineTime } },
+        { firstSquadSavedAt: null, createdAt: { gte: stage.deadlineTime } },
+      ],
+    },
     select: { id: true },
   });
   return late.map((t) => t.id);
@@ -90,9 +98,10 @@ async function getLateTeamIds(stageId: string): Promise<string[]> {
  * the same set of teams.
  */
 async function loadTeamsForMatch(matchId: string, stageId: string) {
-  // Late-joiner rule: teams created AFTER the stage deadline don't earn
-  // anything for this stage (they'd otherwise be able to pick players who
-  // already scored). They start banking from the next stage.
+  // Late-joiner rule: teams whose first complete squad save came AFTER the
+  // stage deadline don't earn anything for this stage (they'd otherwise be
+  // able to pick players who already scored). They start banking from the
+  // next stage.
   const stage = await prisma.stage.findUnique({
     where: { id: stageId },
     select: { deadlineTime: true },
@@ -112,7 +121,7 @@ async function loadTeamsForMatch(matchId: string, stageId: string) {
         },
       },
     },
-  })).filter((t) => !cutoff || t.createdAt < cutoff);
+  })).filter((t) => !cutoff || (t.firstSquadSavedAt ?? t.createdAt) < cutoff);
 
   const teamIds = teamsWithPlayers.map((t) => t.id);
   const teamStages = teamIds.length > 0

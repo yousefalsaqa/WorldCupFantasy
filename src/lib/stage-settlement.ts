@@ -17,7 +17,8 @@
 //   3. HISTORY SNAPSHOT: writes TeamStage rawPoints / captainPoints /
 //      transferHits / totalPoints so /history shows real numbers.
 //
-// Late joiners (Team.createdAt >= stage deadline) earned nothing this
+// Late joiners (first complete squad save — firstSquadSavedAt, falling
+// back to createdAt — at/after the stage deadline) earned nothing this
 // stage (squad-points gates them), so they get no adjustments and a
 // zeroed snapshot.
 //
@@ -106,7 +107,9 @@ export async function settleStage(stage: StageRef): Promise<SettlementResult> {
 
   for (const team of teams) {
     if (team.squadPlayers.length === 0) continue;
-    const isLate = !!stage.deadlineTime && team.createdAt >= stage.deadlineTime;
+    const isLate =
+      !!stage.deadlineTime &&
+      (team.firstSquadSavedAt ?? team.createdAt) >= stage.deadlineTime;
 
     const chips = chipsByTeam.get(team.id) ?? [];
     const captainMultiplier = hasTripleCaptain(chips) ? 3 : 2;

@@ -217,6 +217,10 @@ model Team {
   name            String
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  // When the first COMPLETE (15-player) squad was saved. The late-joiner
+  // gate compares this (falling back to createdAt for pre-existing rows)
+  // against the stage deadline: miss the deadline → no points that stage.
+  firstSquadSavedAt DateTime?
   
   // Budget
   initialBudget   Float    @default(100.0)

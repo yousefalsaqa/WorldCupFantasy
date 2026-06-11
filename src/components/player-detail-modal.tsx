@@ -34,7 +34,7 @@ import { X } from 'lucide-react';
 import Kit from '@/components/kit';
 import { getFlagUrl } from '@/lib/flags';
 import { fdrPill, getFixtureDifficulty } from '@/lib/fdr';
-import { getNextWcOpponent } from '@/lib/world-cup-fixtures';
+import { getNextWcOpponent, getNextWcFixture } from '@/lib/world-cup-fixtures';
 
 // Per-match performance payload. Mirrors the GET /api/players/[id]/performances
 // response shape one-for-one — kept here so both call sites import
@@ -250,6 +250,10 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
 
   const opponent = getNextWcOpponent(player.nation?.code || '');
   const fdr = getFixtureDifficulty(player.nation?.code || '', opponent);
+  // Kickoff of the next fixture, shown in the viewer's local timezone.
+  // null when the nation has no upcoming game (opponent then falls back
+  // to the LAST opponent faced — a date would be misleading there).
+  const nextKickoff = getNextWcFixture(player.nation?.code || '')?.kickoff ?? null;
 
   return (
     <div
@@ -338,6 +342,11 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
                   <img src={getFlagUrl(opponent)} alt={opponent} className="w-3.5 h-2.5 rounded-[1px] object-cover" />
                   <span className="text-white text-[10px] font-bold">{opponent}</span>
                   <span className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm text-[9px] font-black ${fdrPill(fdr)}`}>{fdr}</span>
+                  {nextKickoff && (
+                    <span className="text-white/60 text-[9px] font-semibold whitespace-nowrap pl-0.5">
+                      {nextKickoff.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    </span>
+                  )}
                 </span>
               </div>
             </div>

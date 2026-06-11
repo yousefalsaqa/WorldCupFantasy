@@ -87,7 +87,8 @@ export async function POST(request: NextRequest) {
     // Deadline: re-saving an EXISTING squad is frozen while the round is
     // live. A first-time build is always allowed — late joiners can set up
     // immediately, they just don't earn points until the next stage (the
-    // banking code in lib/squad-points gates on Team.createdAt).
+    // banking code in lib/squad-points gates on firstSquadSavedAt, stamped
+    // below on the first complete save).
     const existingCount = await prisma.squadPlayer.count({ where: { teamId: team.id } });
     if (existingCount > 0) {
       const { locked } = await getStageLock();
@@ -161,12 +162,14 @@ export async function POST(request: NextRequest) {
       data: squadPlayersData,
     });
     
-    // Update team
+    // Update team. firstSquadSavedAt is stamped exactly once — on the first
+    // complete save — and drives the late-joiner points gate.
     await prisma.team.update({
       where: { id: team.id },
       data: {
         bankBalance: 100 - totalCost,
         teamValue: totalCost,
+        ...(team.firstSquadSavedAt ? {} : { firstSquadSavedAt: new Date() }),
       },
     });
     

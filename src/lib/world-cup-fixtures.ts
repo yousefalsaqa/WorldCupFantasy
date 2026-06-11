@@ -313,6 +313,29 @@ export function getNextWcOpponent(nationCode: string, now: Date = new Date()): s
 }
 
 /**
+ * Like getNextWcOpponent, but also returns WHEN that fixture kicks off so
+ * UIs can show the date/time next to the opponent. Returns null when the
+ * nation has no upcoming fixture (eliminated / tournament over) — callers
+ * should hide the date in that case rather than show a past kickoff.
+ */
+export function getNextWcFixture(
+  nationCode: string,
+  now: Date = new Date(),
+): { opponent: string; kickoff: Date } | null {
+  const parse = (date: string, time: string) => new Date(`${date}T${time}:00-04:00`);
+  const next = ALL_WC_FIXTURES
+    .filter((f) => f.home === nationCode || f.away === nationCode)
+    .map((f) => ({ home: f.home, away: f.away, kickoff: parse(f.date, f.time) }))
+    .sort((a, b) => a.kickoff.getTime() - b.kickoff.getTime())
+    .find((f) => f.kickoff > now);
+  if (!next) return null;
+  return {
+    opponent: next.home === nationCode ? next.away : next.home,
+    kickoff: next.kickoff,
+  };
+}
+
+/**
  * Nation name lookup — keyed by the 3-letter codes used in fixture rows.
  * Single source of truth for both fixture pages and the squad header.
  */
