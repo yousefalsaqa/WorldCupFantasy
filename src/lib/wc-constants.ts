@@ -70,7 +70,7 @@ export const TRANSFERS = {
   // Group stage - after each round
   GROUP_ROUND_1: 2,
   GROUP_ROUND_2: 2,
-  GROUP_ROUND_3: 3, // More because eliminations happen
+  GROUP_ROUND_3: 2, // Eliminations are covered by the mercy rule + banking
   
   // Knockout stage - after each stage
   AFTER_R32: 3,

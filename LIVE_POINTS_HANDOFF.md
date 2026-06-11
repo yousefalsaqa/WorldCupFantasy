@@ -1,9 +1,47 @@
 # Live Points Feature — Handoff
 
-Last updated: 2026-06-11 (launch day — FIFA official-data sync APPLIED,
-player pool 100%-converged with play.fifa.com; see Session 2026-06-11)
+Last updated: 2026-06-11 (launch day, second pass — queued mid-round
+transfers + free-transfer banking SHIPPED; see Session 2026-06-11 №2)
 
 ---
+
+## Session 2026-06-11 №2 — TRANSFER SYSTEM PASS (shipped to prod)
+
+User-visible rules now live:
+- **Unlimited transfers until first kickoff** (GR1 deadline 19:00 UTC
+  Jun 11), shown as **∞** on dashboard + squad page. Root cause of the
+  old "still says 2" bug: `/api/transfers` knew the GR1 grace period
+  but `/api/squad/get` and `/api/team` had drifted copies that didn't.
+  All three now call ONE helper: `src/lib/unlimited-transfers.ts`.
+- **Queued mid-round transfers** (NEW). While a round is locked, POST
+  /api/transfers no longer 403s — it QUEUES (JSON column
+  `Team.pendingTransfers`, additive `prisma db push` already applied).
+  Queue spends free transfers immediately, is capped at the remaining
+  free-transfer count (no hits mid-round), DELETE /api/transfers
+  cancels (body `{playerInId}` or `{all:true}`) with refund.
+  Applied automatically inside `lib/stage-advance` at the boundary via
+  `lib/pending-transfers.applyPendingTransfers` — re-validates each
+  entry, skips+refunds invalid ones, stamps Transfer rows with the NEW
+  stage id. Squad page shows a violet "Queued for next round" card
+  with per-row Cancel; transfer mode gets a "Next round" pill + banner
+  and the confirm button reads "Queue N transfers for next round".
+- **Free-transfer banking** (NEW): unused transfers roll over, capped
+  at 5 (`lib/transfer-allocation.ts`, pure + unit-tested). Mercy rule
+  beats the cap. Allocation table now: GR2 2, GR3 **2** (was 3 —
+  user request, eliminations covered by mercy+banking), R32/R16/QF 3,
+  SF/3RD/F 2.
+- First-time squad saves still bypass the round lock (late joiners can
+  build tonight); only re-saves of an existing squad freeze.
+
+Verification: typecheck clean, 198 unit tests pass, 16/16 dashboard
+API smoke checks (incl. dream-team/trends/leagues/history), and a NEW
+end-to-end harness `scripts/smoke-test-queued-transfers.ts` (17/17):
+flips GR1 deadline into the past, exercises queue/cap/cancel/apply
+against the real server+DB, then restores the deadline and deletes the
+smoke user. Re-run any time the transfer rules change.
+
+Still on the user: rebuild the admin squad before kickoff; verify the
+iOS install prompt on a real iPhone.
 
 ## Session 2026-06-11 — FIFA OFFICIAL DATA SYNC (applied to prod DB)
 

@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
-import { getStageLock, LOCKED_ERROR } from '@/lib/deadline';
+import { getStageLock } from '@/lib/deadline';
 import { cookies } from 'next/headers';
 import {
   parseActiveChips,
   hasUnlimitedTransferChip,
   type ChipType,
 } from '@/lib/chips-active';
+import {
+  parsePendingTransfers,
+  serializePendingTransfers,
+  type PendingTransfer,
+} from '@/lib/pending-transfers';
 
 // This route is dynamic because it reads cookies for authentication
 export const dynamic = 'force-dynamic';
@@ -30,29 +35,28 @@ interface TransferRequest {
 async function getSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get('auth_token')?.value;
-  
+
   if (!token) return null;
-  
+
   const decoded = await verifyToken(token);
   if (!decoded) return null;
-  
+
   return { userId: decoded.userId };
 }
 
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession();
-    
+
     if (!session) {
       return NextResponse.json({ error: 'Please log in to make transfers' }, { status: 401 });
     }
 
-    // Hard deadline: transfers freeze 1h before the round's first kickoff
-    // and reopen when the next stage activates.
-    const { locked } = await getStageLock();
-    if (locked) {
-      return NextResponse.json({ error: LOCKED_ERROR }, { status: 403 });
-    }
+    // While the round is being played the squad is frozen — but instead of
+    // rejecting, we QUEUE the transfers and apply them automatically when
+    // the next round starts (lib/stage-advance → lib/pending-transfers).
+    const { locked, stage: lockedStage } = await getStageLock();
+    const queueMode = locked;
 
     const body = await request.json();
     const { transfers } = body as { transfers: TransferRequest[] };
@@ -79,9 +83,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Team not found' }, { status: 404 });
     }
 
+    // Transfers already queued for next round. They've left the (virtual)
+    // squad / joined it, spent free transfers, and reserved budget — all
+    // validation below has to treat them as if they already happened.
+    const existingPending = queueMode ? parsePendingTransfers(team.pendingTransfers) : [];
+    const pendingOutIds = new Set(existingPending.map((t) => t.playerOutId));
+    const pendingInIds = new Set(existingPending.map((t) => t.playerInId));
+    // £m the queued transfers will pull from the bank when applied.
+    const pendingNetCost = existingPending.reduce((sum, t) => sum + t.priceIn - t.priceOut, 0);
+
+    if (queueMode && transfers.length > team.freeTransfers) {
+      return NextResponse.json({
+        error:
+          team.freeTransfers <= 0
+            ? 'No free transfers left to queue for next round.'
+            : `You can only queue ${team.freeTransfers} more transfer${team.freeTransfers === 1 ? '' : 's'} for next round (point hits aren't available while a round is being played).`,
+      }, { status: 400 });
+    }
+
     // Validate all transfers
     const playersOut: string[] = [];
     const playersIn: string[] = [];
+    const queueEntries: PendingTransfer[] = [];
     let totalCost = 0;
     let moneyBack = 0;
 
@@ -89,8 +112,15 @@ export async function POST(request: NextRequest) {
       // Check player out is in squad
       const squadPlayer = team.squadPlayers.find(sp => sp.playerId === transfer.playerOutId);
       if (!squadPlayer) {
-        return NextResponse.json({ 
-          error: `Player ${transfer.playerOutId} is not in your squad` 
+        return NextResponse.json({
+          error: `Player ${transfer.playerOutId} is not in your squad`
+        }, { status: 400 });
+      }
+
+      // Can't sell the same player twice across queued batches.
+      if (pendingOutIds.has(transfer.playerOutId)) {
+        return NextResponse.json({
+          error: `${squadPlayer.player.displayName} already has a transfer queued for next round`,
         }, { status: 400 });
       }
 
@@ -101,72 +131,91 @@ export async function POST(request: NextRequest) {
       });
 
       if (!playerIn) {
-        return NextResponse.json({ 
-          error: `Player ${transfer.playerInId} not found` 
+        return NextResponse.json({
+          error: `Player ${transfer.playerInId} not found`
         }, { status: 400 });
       }
 
       if (!playerIn.isAvailable) {
-        return NextResponse.json({ 
-          error: `${playerIn.displayName} is not available` 
+        return NextResponse.json({
+          error: `${playerIn.displayName} is not available`
         }, { status: 400 });
       }
 
       // Check position match
       if (squadPlayer.player.position !== playerIn.position) {
-        return NextResponse.json({ 
-          error: `Position mismatch: ${squadPlayer.player.displayName} (${squadPlayer.player.position}) cannot be replaced by ${playerIn.displayName} (${playerIn.position})` 
+        return NextResponse.json({
+          error: `Position mismatch: ${squadPlayer.player.displayName} (${squadPlayer.player.position}) cannot be replaced by ${playerIn.displayName} (${playerIn.position})`
         }, { status: 400 });
       }
 
-      // Check not already in squad or pending transfer
-      if (team.squadPlayers.some(sp => sp.playerId === transfer.playerInId && !playersOut.includes(sp.playerId))) {
-        return NextResponse.json({ 
-          error: `${playerIn.displayName} is already in your squad` 
+      // Check not already in squad, pending transfer, or queued for next round
+      if (team.squadPlayers.some(sp => sp.playerId === transfer.playerInId && !playersOut.includes(sp.playerId) && !pendingOutIds.has(sp.playerId))) {
+        return NextResponse.json({
+          error: `${playerIn.displayName} is already in your squad`
+        }, { status: 400 });
+      }
+      if (pendingInIds.has(transfer.playerInId)) {
+        return NextResponse.json({
+          error: `${playerIn.displayName} is already queued to join your squad next round`,
         }, { status: 400 });
       }
 
       playersOut.push(transfer.playerOutId);
       playersIn.push(transfer.playerInId);
-      
+
       // In World Cup mode, sell price = purchase price (fixed prices)
       moneyBack += squadPlayer.purchasePrice;
       totalCost += playerIn.currentPrice;
+
+      queueEntries.push({
+        playerOutId: transfer.playerOutId,
+        playerInId: transfer.playerInId,
+        priceIn: playerIn.currentPrice,
+        priceOut: squadPlayer.purchasePrice,
+        queuedAt: new Date().toISOString(),
+      });
     }
 
-    // Check budget
+    // Check budget (minus what already-queued transfers will spend)
     const netCost = totalCost - moneyBack;
-    if (netCost > team.bankBalance) {
-      return NextResponse.json({ 
-        error: `Insufficient funds. Need £${netCost.toFixed(1)}m but only have £${team.bankBalance.toFixed(1)}m` 
+    const availableBank = team.bankBalance - pendingNetCost;
+    if (netCost > availableBank) {
+      return NextResponse.json({
+        error: `Insufficient funds. Need £${netCost.toFixed(1)}m but only have £${availableBank.toFixed(1)}m`
       }, { status: 400 });
     }
 
     // Nation-limit check (3 max per nation). The UI in /transfers has always
     // checked this client-side; we move it server-side so an attacker can't
     // bypass the rule by hitting the API directly. We model the final squad
-    // as: (current squad minus players being sold) + (new incoming players),
-    // then bucket by nation. The new player's nation is the one we need to
-    // look up explicitly because team.squadPlayers doesn't include them.
+    // as: (current squad minus players being sold or already queued out) +
+    // (new incoming players + players already queued in), then bucket by
+    // nation. Incoming players' nations need explicit lookups because
+    // team.squadPlayers doesn't include them.
+    const allIncomingIds = [...playersIn, ...Array.from(pendingInIds)];
     const incomingPlayers = await prisma.player.findMany({
-      where: { id: { in: playersIn } },
+      where: { id: { in: allIncomingIds } },
       select: { id: true, nationId: true, displayName: true, nation: { select: { name: true } } },
     });
     const finalNationCounts: Record<string, number> = {};
-    // Add players that are STAYING (in squad and not being sold)
+    // Add players that are STAYING (in squad and not being sold or queued out)
     for (const sp of team.squadPlayers) {
       if (playersOut.includes(sp.playerId)) continue;
+      if (pendingOutIds.has(sp.playerId)) continue;
       finalNationCounts[sp.player.nationId] =
         (finalNationCounts[sp.player.nationId] || 0) + 1;
     }
-    // Add incoming players
+    // Add incoming players (this batch + already queued)
     for (const p of incomingPlayers) {
       finalNationCounts[p.nationId] = (finalNationCounts[p.nationId] || 0) + 1;
     }
     // Find the offender (if any) and report it cleanly. We report the FIRST
     // breach so the user gets a specific actionable error rather than a
-    // generic "too many players".
+    // generic "too many players". Only players in THIS batch can be the
+    // newly-reported offender.
     for (const p of incomingPlayers) {
+      if (!playersIn.includes(p.id)) continue;
       if (finalNationCounts[p.nationId] > MAX_PLAYERS_PER_NATION) {
         return NextResponse.json(
           {
@@ -176,6 +225,43 @@ export async function POST(request: NextRequest) {
         );
       }
     }
+
+    // ============================================
+    // QUEUE MODE — round in progress. Persist the queue + spend the free
+    // transfers now; the squad itself changes at the next stage boundary.
+    // ============================================
+    if (queueMode) {
+      await prisma.$transaction(async (tx) => {
+        await tx.team.update({
+          where: { id: team.id },
+          data: {
+            pendingTransfers: serializePendingTransfers([...existingPending, ...queueEntries]),
+            freeTransfers: Math.max(0, team.freeTransfers - queueEntries.length),
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            userId: session.userId,
+            action: 'TRANSFERS_QUEUED',
+            details: JSON.stringify({
+              transfers: queueEntries.length,
+              stageLocked: lockedStage?.stageId ?? null,
+              cost: netCost,
+            }),
+          },
+        });
+      });
+
+      return NextResponse.json({
+        success: true,
+        queued: true,
+        message: `${queueEntries.length} transfer${queueEntries.length === 1 ? '' : 's'} queued — they'll be applied when the next round starts`,
+      });
+    }
+
+    // ============================================
+    // IMMEDIATE MODE — squads are open; transfers execute right away.
+    // ============================================
 
     // Check for unlimited transfers: pre-tournament or wildcard active
     const activeStage = await prisma.stage.findFirst({ where: { isActive: true } });
@@ -189,9 +275,10 @@ export async function POST(request: NextRequest) {
       unlimitedTransfers = true;
     } else if (activeStage.stageId === 'GR1') {
       // Free tinkering until the very first whistle of the tournament.
-      // (The deadline lock above already blocks this route once GR1 kicks
-      // off, so reaching here during GR1 means we're pre-kickoff.) From
-      // GR2 onward the normal 2-free-per-stage allocation applies.
+      // (The deadline lock above already diverts this route to queue mode
+      // once GR1 kicks off, so reaching here during GR1 means we're
+      // pre-kickoff.) From GR2 onward the normal per-stage allocation
+      // applies.
       unlimitedTransfers = true;
     } else {
       const teamStage = await prisma.teamStage.findUnique({
@@ -260,7 +347,7 @@ export async function POST(request: NextRequest) {
 
       const newFreeTransfers = unlimitedTransfers ? team.freeTransfers : Math.max(0, team.freeTransfers - transfers.length);
       const newBankBalance = team.bankBalance - netCost;
-      
+
       // Recalculate team value
       const updatedSquad = await tx.squadPlayer.findMany({
         where: { teamId: team.id },
@@ -296,12 +383,78 @@ export async function POST(request: NextRequest) {
       });
     });
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
       message: `${transfers.length} transfer(s) confirmed${hitPoints > 0 ? ` (-${hitPoints} points)` : ''}`
     });
   } catch (error) {
     console.error('Error processing transfers:', error);
     return NextResponse.json({ error: 'Failed to process transfers' }, { status: 500 });
+  }
+}
+
+// DELETE /api/transfers — cancel a transfer queued for next round.
+// Body: { playerInId: string }  (cancels the queue entry bringing that
+// player in) or { all: true } to clear the whole queue. Refunds the free
+// transfer(s) spent at queue time.
+export async function DELETE(request: NextRequest) {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Please log in' }, { status: 401 });
+    }
+
+    const team = await prisma.team.findUnique({
+      where: { userId: session.userId },
+      select: { id: true, freeTransfers: true, pendingTransfers: true },
+    });
+    if (!team) {
+      return NextResponse.json({ error: 'Team not found' }, { status: 404 });
+    }
+
+    const pending = parsePendingTransfers(team.pendingTransfers);
+    if (pending.length === 0) {
+      return NextResponse.json({ error: 'No queued transfers to cancel' }, { status: 400 });
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const { playerInId, all } = body as { playerInId?: string; all?: boolean };
+
+    let remaining: PendingTransfer[];
+    if (all) {
+      remaining = [];
+    } else if (playerInId) {
+      remaining = pending.filter((t) => t.playerInId !== playerInId);
+      if (remaining.length === pending.length) {
+        return NextResponse.json({ error: 'That queued transfer no longer exists' }, { status: 400 });
+      }
+    } else {
+      return NextResponse.json({ error: 'Specify playerInId or all:true' }, { status: 400 });
+    }
+
+    const refunded = pending.length - remaining.length;
+    await prisma.team.update({
+      where: { id: team.id },
+      data: {
+        pendingTransfers: serializePendingTransfers(remaining),
+        freeTransfers: team.freeTransfers + refunded,
+      },
+    });
+    await prisma.auditLog.create({
+      data: {
+        userId: session.userId,
+        action: 'QUEUED_TRANSFERS_CANCELLED',
+        details: JSON.stringify({ cancelled: refunded, remaining: remaining.length }),
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `${refunded} queued transfer${refunded === 1 ? '' : 's'} cancelled`,
+      remaining: remaining.length,
+    });
+  } catch (error) {
+    console.error('Error cancelling queued transfers:', error);
+    return NextResponse.json({ error: 'Failed to cancel queued transfers' }, { status: 500 });
   }
 }

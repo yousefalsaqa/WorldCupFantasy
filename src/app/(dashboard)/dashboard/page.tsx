@@ -37,6 +37,7 @@ export default function DashboardPage() {
   const { timezone } = useUserTimezone();
   const [user, setUser] = useState<User | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
+  const [unlimitedTransfers, setUnlimitedTransfers] = useState(false);
   const [currentStage, setCurrentStage] = useState<Stage | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCreateTeam, setShowCreateTeam] = useState(false);
@@ -65,6 +66,7 @@ export default function DashboardPage() {
       setUser(userData.user);
       if (teamRes.ok && teamData.team) {
         setTeam(teamData.team);
+        setUnlimitedTransfers(Boolean(teamData.unlimitedTransfers));
       } else {
         setTeam(null);
       }
@@ -258,7 +260,7 @@ export default function DashboardPage() {
             />
             <StatCard
               label="Free Transfers"
-              value={team.freeTransfers.toString()}
+              value={unlimitedTransfers ? '∞' : team.freeTransfers.toString()}
               icon={<TransferIcon />}
             />
           </div>

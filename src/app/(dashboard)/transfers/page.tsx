@@ -124,9 +124,9 @@ export default function TransfersHistoryPage() {
         </div>
         <Link
           href="/squad"
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-200 hover:bg-amber-500/25 text-xs sm:text-sm font-bold transition-colors self-start sm:self-auto"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-amber-950 hover:from-amber-300 hover:to-orange-400 text-xs sm:text-sm font-black shadow-[0_4px_16px_rgba(245,158,11,0.35)] hover:shadow-[0_4px_20px_rgba(245,158,11,0.5)] active:scale-95 transition-all self-start sm:self-auto"
         >
-          <ArrowLeftRight className="w-4 h-4" />
+          <ArrowLeftRight className="w-4 h-4" strokeWidth={2.5} />
           Make a transfer
         </Link>
       </div>

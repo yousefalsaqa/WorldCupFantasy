@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
-import {
-  parseActiveChips,
-  hasUnlimitedTransferChip,
-  type ChipType,
-} from '@/lib/chips-active';
+import { computeUnlimitedTransfers } from '@/lib/unlimited-transfers';
+import { parsePendingTransfers } from '@/lib/pending-transfers';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,35 +82,6 @@ async function maybeRevertFreeHit(teamId: string, snapshotJson: string | null): 
     });
   }, { timeout: 15000 });
   return true;
-}
-
-// Mirrors the logic in /api/transfers: transfers are unlimited when (a) the
-// global compile-time flag is on (pre-launch testing), (b) no stage is
-// currently active (i.e. pre-tournament or between gameweeks), or (c) the
-// active stage has Wildcard / Free Hit applied. Surfacing this to the squad
-// page lets the transfer UI hide hit-cost messaging when it doesn't apply.
-//
-// Keep this in lockstep with /api/transfers/route.ts → the constant there
-// IS the source of truth; we mirror it here.
-const UNLIMITED_TRANSFERS = false;
-
-async function computeUnlimitedTransfers(teamId: string): Promise<boolean> {
-  if (UNLIMITED_TRANSFERS) return true;
-  const activeStage = await prisma.stage.findFirst({
-    where: { isActive: true },
-    select: { id: true },
-  });
-  if (!activeStage) return true;
-  const teamStage = await prisma.teamStage.findUnique({
-    where: { teamId_stageId: { teamId, stageId: activeStage.id } },
-    select: { chipsUsed: true, chipUsed: true },
-  });
-  // Stacking-aware: any unlimited-transfer chip in the active set counts.
-  let activeChips = parseActiveChips(teamStage?.chipsUsed);
-  if (activeChips.length === 0 && teamStage?.chipUsed) {
-    activeChips = [teamStage.chipUsed as ChipType];
-  }
-  return hasUnlimitedTransferChip(activeChips);
 }
 
 export async function GET(request: NextRequest) {
@@ -241,6 +209,46 @@ export async function GET(request: NextRequest) {
 
     const unlimitedTransfers = await computeUnlimitedTransfers(team.id);
 
+    // Hydrate transfers queued for next round so the squad page can show a
+    // "queued for next round" card with cancel buttons. Player lookups only
+    // run when a queue exists (rare path).
+    const pendingList = parsePendingTransfers((refreshedTeam ?? team).pendingTransfers);
+    let queuedTransfers: Array<{
+      playerOut: { id: string; displayName: string; position: string; nationCode: string } | null;
+      playerIn: { id: string; displayName: string; position: string; nationCode: string } | null;
+      priceIn: number;
+      priceOut: number;
+      queuedAt: string;
+    }> = [];
+    if (pendingList.length > 0) {
+      const ids = Array.from(
+        new Set(pendingList.flatMap((t) => [t.playerOutId, t.playerInId])),
+      );
+      const players = await prisma.player.findMany({
+        where: { id: { in: ids } },
+        select: {
+          id: true,
+          displayName: true,
+          position: true,
+          nation: { select: { code: true } },
+        },
+      });
+      const byId = new Map(players.map((p) => [p.id, p]));
+      const summary = (id: string) => {
+        const p = byId.get(id);
+        return p
+          ? { id: p.id, displayName: p.displayName, position: p.position, nationCode: p.nation.code }
+          : null;
+      };
+      queuedTransfers = pendingList.map((t) => ({
+        playerOut: summary(t.playerOutId),
+        playerIn: summary(t.playerInId),
+        priceIn: t.priceIn,
+        priceOut: t.priceOut,
+        queuedAt: t.queuedAt,
+      }));
+    }
+
     return NextResponse.json({
       squad,
       teamId: team.id,
@@ -253,6 +261,9 @@ export async function GET(request: NextRequest) {
       // When true the squad page suppresses point-hit messaging since
       // transfers are effectively free.
       unlimitedTransfers,
+      // Transfers queued while the current round is locked; applied at the
+      // next stage boundary. Empty array when nothing is queued.
+      queuedTransfers,
       // True iff there is at least one match currently in progress. The
       // squad page polls this endpoint every 60s while this is true so
       // the live-points pill ticks up. We keep the signal at the response

@@ -244,6 +244,19 @@ export default function SquadPage() {
   const [pendingTransfers, setPendingTransfers] = useState<
     Array<{ playerOut: Player; playerIn: Player }>
   >([]);
+  // Transfers already QUEUED on the server for next round (made while the
+  // current round was locked). Shown as a card in view mode with per-row
+  // cancel; applied automatically when the next stage starts.
+  const [queuedTransfers, setQueuedTransfers] = useState<
+    Array<{
+      playerOut: { id: string; displayName: string; position: string; nationCode: string } | null;
+      playerIn: { id: string; displayName: string; position: string; nationCode: string } | null;
+      priceIn: number;
+      priceOut: number;
+      queuedAt: string;
+    }>
+  >([]);
+  const [queueCancelling, setQueueCancelling] = useState<string | null>(null);
   // The squad player the user just tapped Replace on. Drives the picker
   // modal's position filter and refund math. Distinct from `selectedPlayer`
   // (view-mode player detail) and `selectingPosition` (builder slot).
@@ -419,6 +432,7 @@ export default function SquadPage() {
             setFreeTransfers(squadData.freeTransfers ?? 0);
             setUnlimitedTransfers(Boolean(squadData.unlimitedTransfers));
             setAnyMatchLive(Boolean(squadData.anyMatchLive));
+            setQueuedTransfers(squadData.queuedTransfers || []);
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const players: Player[] = squadData.squad.map((sp: any) => ({
@@ -643,10 +657,16 @@ export default function SquadPage() {
   // unlimited (pre-tournament, wildcard, free hit) so the UI doesn't show
   // a deduction the API won't actually apply.
   const transferHitCost = useMemo(() => {
-    if (unlimitedTransfers) return 0;
+    // While the round is locked, transfers are QUEUED for next round and
+    // hits aren't available — the count is capped at freeTransfers instead.
+    if (unlimitedTransfers || stageLocked) return 0;
     const extra = Math.max(0, pendingTransfers.length - freeTransfers);
     return extra * 4;
-  }, [pendingTransfers.length, freeTransfers, unlimitedTransfers]);
+  }, [pendingTransfers.length, freeTransfers, unlimitedTransfers, stageLocked]);
+
+  // Queue mode (round in progress): you can only queue up to your remaining
+  // free transfers. Mirrors the server-side cap in /api/transfers.
+  const overQueueLimit = stageLocked && pendingTransfers.length > freeTransfers;
 
   // Nation counts after applying pending transfers, used by the picker to
   // grey out players who would breach the 3-per-nation cap. We start from
@@ -745,6 +765,29 @@ export default function SquadPage() {
     setDiscardConfirmOpen(false);
     setDirty(false);
   }, [setDirty]);
+
+  // Cancel a transfer queued for next round (made while the current round
+  // was locked). The server refunds the free transfer; we mirror both
+  // changes locally so the card and counters update without a reload.
+  const cancelQueuedTransfer = useCallback(async (playerInId: string) => {
+    setQueueCancelling(playerInId);
+    try {
+      const res = await fetch('/api/transfers', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ playerInId }),
+      });
+      if (res.ok) {
+        setQueuedTransfers((prev) => prev.filter((t) => t.playerIn?.id !== playerInId));
+        setFreeTransfers((prev) => prev + 1);
+      }
+    } catch (err) {
+      console.error('Cancel queued transfer failed:', err);
+    } finally {
+      setQueueCancelling(null);
+    }
+  }, []);
 
   const submitTransfers = useCallback(async () => {
     if (pendingTransfers.length === 0) return;
@@ -1783,21 +1826,27 @@ export default function SquadPage() {
                     : Math.max(0, freeTransfers - pendingTransfers.length)}
                 </span>
               </div>
-              {!unlimitedTransfers && (
-                <div
-                  className={`px-2.5 py-1 rounded-lg border ${
-                    transferHitCost > 0
-                      ? 'bg-red-500/15 border-red-500/30'
-                      : 'bg-white/5 border-white/10'
-                  }`}
-                >
-                  <span className="text-white/50 mr-1">Hit</span>
-                  <span
-                    className={`font-black ${transferHitCost > 0 ? 'text-red-300' : 'text-white/70'}`}
-                  >
-                    {transferHitCost > 0 ? `-${transferHitCost}` : '0'}
-                  </span>
+              {stageLocked ? (
+                <div className="px-2.5 py-1 rounded-lg bg-violet-500/15 border border-violet-500/30">
+                  <span className="font-black text-violet-300">Next round</span>
                 </div>
+              ) : (
+                !unlimitedTransfers && (
+                  <div
+                    className={`px-2.5 py-1 rounded-lg border ${
+                      transferHitCost > 0
+                        ? 'bg-red-500/15 border-red-500/30'
+                        : 'bg-white/5 border-white/10'
+                    }`}
+                  >
+                    <span className="text-white/50 mr-1">Hit</span>
+                    <span
+                      className={`font-black ${transferHitCost > 0 ? 'text-red-300' : 'text-white/70'}`}
+                    >
+                      {transferHitCost > 0 ? `-${transferHitCost}` : '0'}
+                    </span>
+                  </div>
+                )
               )}
             </div>
           </div>
@@ -1807,6 +1856,19 @@ export default function SquadPage() {
             Pending swaps glow amber — tap again to{' '}
             <span className="text-amber-300 font-bold">undo</span>.
           </p>
+          {stageLocked && (
+            <div className="mt-2 px-3 py-2 rounded-xl bg-violet-500/10 border border-violet-500/30 text-[11px] sm:text-xs text-violet-200 leading-snug">
+              This round is being played, so your current squad is locked in.
+              Transfers you confirm now are <span className="font-bold">queued</span> and
+              applied automatically the moment the next round starts.
+              {overQueueLimit && (
+                <span className="block mt-1 text-red-300 font-bold">
+                  You only have {freeTransfers} free transfer{freeTransfers === 1 ? '' : 's'} to
+                  queue — point hits aren&apos;t available mid-round.
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {transferError && (
@@ -1861,13 +1923,19 @@ export default function SquadPage() {
             <button
               type="button"
               onClick={submitTransfers}
-              disabled={pendingTransfers.length === 0 || transferSubmitting || projectedBank < 0}
-              className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-black text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              disabled={pendingTransfers.length === 0 || transferSubmitting || projectedBank < 0 || overQueueLimit}
+              className={`flex-1 px-4 py-3 rounded-xl text-white font-black text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all ${
+                stageLocked
+                  ? 'bg-gradient-to-r from-violet-500 to-fuchsia-600 hover:from-violet-400 hover:to-fuchsia-500'
+                  : 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500'
+              }`}
             >
               {transferSubmitting
-                ? 'Confirming…'
+                ? stageLocked ? 'Queueing…' : 'Confirming…'
                 : pendingTransfers.length === 0
                 ? 'No transfers yet'
+                : stageLocked
+                ? `Queue ${pendingTransfers.length} transfer${pendingTransfers.length === 1 ? '' : 's'} for next round`
                 : `Confirm ${pendingTransfers.length} transfer${pendingTransfers.length === 1 ? '' : 's'}${
                     !unlimitedTransfers && transferHitCost > 0
                       ? ` · -${transferHitCost} pts`
@@ -2075,11 +2143,16 @@ export default function SquadPage() {
             <button
               type="button"
               onClick={enterTransferMode}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-200 hover:bg-amber-500/25 hover:text-amber-100 text-xs sm:text-sm font-bold transition-colors"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-amber-950 hover:from-amber-300 hover:to-orange-400 text-xs sm:text-sm font-black shadow-[0_4px_16px_rgba(245,158,11,0.35)] hover:shadow-[0_4px_20px_rgba(245,158,11,0.5)] active:scale-95 transition-all"
               title="Make transfers"
             >
-              <ArrowLeftRight className="w-4 h-4" />
-              <span>Transfer</span>
+              <ArrowLeftRight className="w-4 h-4" strokeWidth={2.5} />
+              <span>Transfers</span>
+              {queuedTransfers.length > 0 && (
+                <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-amber-950/20 text-[10px] font-black">
+                  {queuedTransfers.length}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -2118,6 +2191,56 @@ export default function SquadPage() {
                 Make as many transfers as you like. Your squad will automatically revert to its previous lineup once this stage ends.
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Queued-transfers card — swaps confirmed while the round was locked.
+          They execute automatically at the next stage boundary; until then
+          each row can be cancelled (which refunds the free transfer). */}
+      {queuedTransfers.length > 0 && (
+        <div className="px-3 sm:px-0 mb-3">
+          <div className="rounded-2xl border border-violet-500/30 bg-gradient-to-r from-violet-500/15 via-violet-500/10 to-transparent p-3 sm:p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded-full bg-violet-500/20 flex items-center justify-center flex-shrink-0">
+                <ArrowLeftRight className="w-4 h-4 text-violet-300" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-violet-200 font-black text-sm">
+                  Queued for next round
+                </p>
+                <p className="text-violet-200/60 text-[11px] leading-snug">
+                  These swaps happen automatically when the next round starts.
+                </p>
+              </div>
+            </div>
+            <ul className="space-y-1.5">
+              {queuedTransfers.map((t) => (
+                <li
+                  key={`${t.playerOut?.id}-${t.playerIn?.id}`}
+                  className="flex items-center justify-between gap-2 rounded-xl bg-white/5 border border-white/10 px-2.5 py-2"
+                >
+                  <div className="flex items-center gap-2 min-w-0 text-xs sm:text-sm">
+                    <span className="text-white/60 truncate">{t.playerOut?.displayName ?? 'Unknown'}</span>
+                    <span className="text-violet-300 font-bold flex-shrink-0">→</span>
+                    <span className="text-white font-semibold truncate">{t.playerIn?.displayName ?? 'Unknown'}</span>
+                    <span className="hidden sm:inline text-white/40 text-[10px] flex-shrink-0">
+                      £{t.priceOut.toFixed(1)}m → £{t.priceIn.toFixed(1)}m
+                    </span>
+                  </div>
+                  {t.playerIn && (
+                    <button
+                      type="button"
+                      onClick={() => cancelQueuedTransfer(t.playerIn!.id)}
+                      disabled={queueCancelling === t.playerIn.id}
+                      className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-red-500/15 border border-red-500/30 text-red-300 hover:bg-red-500/25 text-[10px] font-bold disabled:opacity-50 transition-colors"
+                    >
+                      {queueCancelling === t.playerIn.id ? '…' : 'Cancel'}
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       )}

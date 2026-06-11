@@ -226,7 +226,11 @@ model Team {
   // Transfers tracking (resets per stage)
   freeTransfers   Int      @default(2)
   transfersUsed   Int      @default(0)
-  
+  // JSON array of transfers queued while the active round is locked.
+  // Applied automatically by stage-advance when the next round starts.
+  // Shape: [{ playerOutId, playerInId, priceIn, priceOut, queuedAt }]
+  pendingTransfers String?
+
   // Chips
   wildcard1Used   Boolean  @default(false)
   wildcard2Used   Boolean  @default(false)

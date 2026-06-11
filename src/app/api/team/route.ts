@@ -2,12 +2,10 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth';
+import { computeUnlimitedTransfers } from '@/lib/unlimited-transfers';
 
 // This route is dynamic because it reads cookies for authentication
 export const dynamic = 'force-dynamic';
-
-// Set to true to allow unlimited free transfers (for testing before first gameweek)
-const UNLIMITED_TRANSFERS = false;
 
 async function getUser() {
   const cookieStore = await cookies();
@@ -36,22 +34,14 @@ export async function GET() {
     where: { userId: user.id },
   });
 
-  // If unlimited transfers mode is enabled, override free transfers to a high number
-  if (team && UNLIMITED_TRANSFERS) {
-    return NextResponse.json({
-      team: { ...team, freeTransfers: 999 },
-      unlimitedTransfers: true,
-    }, {
-      // Tiny private cache so quick back-and-forth between dashboard and other
-      // pages doesn't refetch every single time. Stale-while-revalidate keeps
-      // the data fresh without making the user wait.
-      headers: {
-        'Cache-Control': 'private, max-age=10, stale-while-revalidate=30',
-      },
-    });
-  }
+  // Surface the unlimited-transfers window (pre-tournament / GR1 pre-kickoff
+  // / wildcard) so the dashboard can show ∞ instead of a misleading "2".
+  const unlimitedTransfers = team ? await computeUnlimitedTransfers(team.id) : false;
 
-  return NextResponse.json({ team }, {
+  return NextResponse.json({ team, unlimitedTransfers }, {
+    // Tiny private cache so quick back-and-forth between dashboard and other
+    // pages doesn't refetch every single time. Stale-while-revalidate keeps
+    // the data fresh without making the user wait.
     headers: {
       'Cache-Control': 'private, max-age=10, stale-while-revalidate=30',
     },

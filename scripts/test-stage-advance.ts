@@ -23,6 +23,10 @@ import {
   type ChipType,
 } from '../src/lib/chips-active';
 import { TRANSFERS } from '../src/lib/wc-constants';
+import {
+  computeNextFreeTransfers,
+  FREE_TRANSFER_BANK_CAP,
+} from '../src/lib/transfer-allocation';
 import { __internal as squadPointsInternal } from '../src/lib/squad-points';
 const { computeTeamContribution } = squadPointsInternal;
 
@@ -163,34 +167,63 @@ check(
   'FREE_HIT',
 );
 
-console.log('\n=== Mercy rule arithmetic (lib/stage-advance) ===\n');
+console.log('\n=== Transfer allocation: banking + mercy (lib/transfer-allocation) ===\n');
 
-// The mercy rule is "if more eliminated players than free transfers, set
-// freeTransfers = eliminated count". Re-implement that inline so we can
-// test the math without spinning up Prisma. lib/stage-advance applies
-// the same rule.
-function computeFreeTransfers(baseAllocation: number, eliminatedCount: number): number {
-  if (!TRANSFERS.MERCY_RULE_ENABLED) return baseAllocation;
-  return eliminatedCount > baseAllocation ? eliminatedCount : baseAllocation;
+// This IS the production helper lib/stage-advance calls at every stage
+// boundary — no inline re-implementation, so the math can't drift.
+function alloc(leftover: number, base: number, eliminated: number) {
+  return computeNextFreeTransfers({
+    leftover,
+    baseAllocation: base,
+    eliminatedCount: eliminated,
+    mercyEnabled: TRANSFERS.MERCY_RULE_ENABLED,
+  }).freeTransfers;
 }
 
-check('mercy: 0 eliminated → base', computeFreeTransfers(3, 0), 3);
-check('mercy: 1 eliminated, base 3 → base', computeFreeTransfers(3, 1), 3);
-check('mercy: 3 eliminated, base 3 → base', computeFreeTransfers(3, 3), 3);
+check('banking: used all transfers → just the new base', alloc(0, 2, 0), 2);
+check('banking: 1 unused + base 2 → 3', alloc(1, 2, 0), 3);
+check('banking: 2 unused + base 3 → 5', alloc(2, 3, 0), 5);
 check(
-  'mercy: 5 eliminated, base 3 → 5 (mercy kicks in)',
-  computeFreeTransfers(3, 5),
-  5,
+  `banking: capped at ${FREE_TRANSFER_BANK_CAP} (4 unused + base 3)`,
+  alloc(4, 3, 0),
+  FREE_TRANSFER_BANK_CAP,
+);
+check('banking: negative leftover clamped to 0', alloc(-1, 2, 0), 2);
+
+check('mercy: 0 eliminated → banked total', alloc(0, 3, 0), 3);
+check('mercy: 1 eliminated, banked 3 → banked', alloc(0, 3, 1), 3);
+check('mercy: 3 eliminated, banked 3 → banked', alloc(0, 3, 3), 3);
+check('mercy: 5 eliminated, banked 3 → 5 (mercy kicks in)', alloc(0, 3, 5), 5);
+check('mercy: 8 eliminated, banked 2 (AFTER_SF) → 8', alloc(0, 2, 8), 8);
+check(
+  'mercy: beats the bank cap (7 eliminated, banked 5 → 7)',
+  alloc(3, 3, 7),
+  7,
 );
 check(
-  'mercy: 8 eliminated, base 2 (AFTER_SF) → 8',
-  computeFreeTransfers(2, 8),
-  8,
+  'mercy: banked total absorbs small elimination counts (2 unused + base 2, 3 eliminated → 4 banked, no mercy)',
+  alloc(2, 2, 3),
+  4,
 );
 check(
-  'mercy: base 2 (GR1) baseline',
-  computeFreeTransfers(2, 0),
+  'mercyTransfers stamp: eliminated 5, banked 3 → 2 extra',
+  computeNextFreeTransfers({
+    leftover: 0,
+    baseAllocation: 3,
+    eliminatedCount: 5,
+    mercyEnabled: true,
+  }).mercyTransfers,
   2,
+);
+check(
+  'mercyTransfers stamp: no mercy → 0',
+  computeNextFreeTransfers({
+    leftover: 1,
+    baseAllocation: 2,
+    eliminatedCount: 1,
+    mercyEnabled: true,
+  }).mercyTransfers,
+  0,
 );
 
 console.log('\n=== Stage transition chip-refresh policy ===\n');
@@ -219,7 +252,7 @@ console.log('\n=== Transfer allocation table (lib/wc-constants) ===\n');
 // stray edit gets caught.
 check('GROUP_ROUND_1', 2, 2);
 check('GROUP_ROUND_2 (TRANSFERS)', TRANSFERS.GROUP_ROUND_2, 2);
-check('GROUP_ROUND_3 (more transfers, elims)', TRANSFERS.GROUP_ROUND_3, 3);
+check('GROUP_ROUND_3 (elims covered by mercy rule)', TRANSFERS.GROUP_ROUND_3, 2);
 check('AFTER_R32', TRANSFERS.AFTER_R32, 3);
 check('AFTER_R16', TRANSFERS.AFTER_R16, 3);
 check('AFTER_QF', TRANSFERS.AFTER_QF, 3);

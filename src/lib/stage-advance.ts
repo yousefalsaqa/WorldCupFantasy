@@ -31,6 +31,8 @@
 import { prisma } from './db';
 import { settleStage } from './stage-settlement';
 import { TRANSFERS } from './wc-constants';
+import { applyPendingTransfers, parsePendingTransfers } from './pending-transfers';
+import { computeNextFreeTransfers } from './transfer-allocation';
 
 const STAGE_COUNT = 9;
 
@@ -248,19 +250,23 @@ async function advanceOnce(): Promise<AdvanceResult> {
     }
   });
 
-  // 3) Reset transfer allocations + apply mercy rule + (optionally)
-  // refresh chips. If there's no next stage we still want to zero
-  // `transfersUsed` so the final-stage points reset cleanly.
+  // 3) Apply queued transfers, then reset transfer allocations (with
+  // banking: unused free transfers carry over, capped) + mercy rule +
+  // (optionally) refresh chips.
   let teamsReset = 0;
+  let pendingApplied = 0;
+  let pendingSkipped = 0;
   if (nextStage) {
     const baseAllocation = TRANSFERS_FOR_STAGE[nextStage.stageId] ?? TRANSFERS.GROUP_ROUND_1;
 
-    // Pre-compute per-team mercy data: count the eliminated players in
-    // each team's current squad (after any FH revert above) so we can
-    // bump their transfer allocation in a single update batch.
+    // Per-team data: leftover free transfers (for banking), the queued
+    // transfer list, and the squad (for eliminated-player counts, after
+    // any FH revert above).
     const teams = await prisma.team.findMany({
       select: {
         id: true,
+        freeTransfers: true,
+        pendingTransfers: true,
         squadPlayers: {
           select: {
             player: {
@@ -272,22 +278,60 @@ async function advanceOnce(): Promise<AdvanceResult> {
     });
 
     for (const team of teams) {
-      const eliminatedCount = team.squadPlayers.filter(
+      // Execute transfers the user queued while this round was locked.
+      // Queued transfers already spent free transfers at queue time, so
+      // only SKIPPED entries refund into the banking math below.
+      let applied = 0;
+      let skipped = 0;
+      if (team.pendingTransfers) {
+        try {
+          const res = await applyPendingTransfers(team.id, team.pendingTransfers, nextStage.id);
+          applied = res.applied;
+          skipped = res.skipped;
+          pendingApplied += applied;
+          pendingSkipped += skipped;
+        } catch (err) {
+          // A failed apply must not block the stage transition for everyone
+          // else. Clear the queue (one-shot semantics) and refund the lot.
+          console.error(`[Stage Advance] applyPendingTransfers FAILED for team ${team.id}:`, err);
+          skipped = parsePendingTransfers(team.pendingTransfers).length;
+          pendingSkipped += skipped;
+          await prisma.team.update({
+            where: { id: team.id },
+            data: { pendingTransfers: null },
+          });
+        }
+      }
+
+      // Eliminated count for the mercy rule. If queued transfers just
+      // changed the squad, count on the POST-apply squad — the user may
+      // have already replaced their eliminated players.
+      let squadForElims = team.squadPlayers;
+      if (applied > 0) {
+        squadForElims = await prisma.squadPlayer.findMany({
+          where: { teamId: team.id },
+          select: {
+            player: { select: { nation: { select: { isEliminated: true } } } },
+          },
+        });
+      }
+      const eliminatedCount = squadForElims.filter(
         (sp) => sp.player.nation?.isEliminated,
       ).length;
 
-      let freeTransfers = baseAllocation;
-      let mercyApplied = false;
-      if (TRANSFERS.MERCY_RULE_ENABLED && eliminatedCount > baseAllocation) {
-        freeTransfers = eliminatedCount;
-        mercyApplied = true;
-      }
+      const allocation = computeNextFreeTransfers({
+        leftover: team.freeTransfers + skipped,
+        baseAllocation,
+        eliminatedCount,
+        mercyEnabled: TRANSFERS.MERCY_RULE_ENABLED,
+      });
 
       // Build the team update. Refresh per-stage chips when entering
       // knockouts. WC1 stays consumed — it's the group-stage wildcard.
       const teamUpdate: Record<string, number | boolean> = {
-        freeTransfers,
-        transfersUsed: 0,
+        freeTransfers: allocation.freeTransfers,
+        // Applied queue entries count as transfers made in the new stage.
+        transfersUsed: applied,
       };
       if (refreshChips) {
         teamUpdate.tripleCaptainUsed = false;
@@ -310,11 +354,11 @@ async function advanceOnce(): Promise<AdvanceResult> {
           teamId: team.id,
           stageId: activeStage.id,
           eliminatedCount,
-          mercyTransfers: mercyApplied ? eliminatedCount - baseAllocation : 0,
+          mercyTransfers: allocation.mercyTransfers,
         },
         update: {
           eliminatedCount,
-          mercyTransfers: mercyApplied ? eliminatedCount - baseAllocation : 0,
+          mercyTransfers: allocation.mercyTransfers,
         },
       });
 
@@ -337,6 +381,8 @@ async function advanceOnce(): Promise<AdvanceResult> {
         finishedMatches,
         freeHitsReverted,
         teamsReset,
+        pendingTransfersApplied: pendingApplied,
+        pendingTransfersSkipped: pendingSkipped,
         chipsRefreshed: refreshChips,
         mercyRuleEnabled: TRANSFERS.MERCY_RULE_ENABLED,
       }),
