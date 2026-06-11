@@ -1,7 +1,28 @@
 # Live Points Feature — Handoff
 
-Last updated: 2026-06-11 (launch day, second pass — queued mid-round
-transfers + free-transfer banking SHIPPED; see Session 2026-06-11 №2)
+Last updated: 2026-06-11 (**WE ARE LIVE** — tournament kicked off,
+real users have squads in prod; see Session 2026-06-11 №3)
+
+---
+
+## Session 2026-06-11 №3 — LIVE IN PRODUCTION + flag fix
+
+**The app is live.** Tournament underway, real player base onboarded
+in prod (https://world-cup-fantasy-coral.vercel.app), cron firing
+every minute. From here on: NO destructive DB operations (no reseeds,
+no resets) — every change must be safe against live user data.
+
+- **Flag fix** in `/api/team/[teamId]/squad`: when `nation.flagUrl` is
+  null (it always is — nothing ever populates that column), the
+  fallback built flagcdn URLs from the raw 3-letter nation code
+  (`flagcdn.com/24x18/rsa.png`), which flagcdn doesn't serve (it wants
+  ISO-2: `za`, `cv`, `jo`…). Now routed through `getFlagCode()` from
+  `src/lib/flags.ts` — the same complete 48-nation mapping every other
+  page already uses via `getFlagUrl()`. Affected the leagues
+  team-view page only. Code-only change, no DB touched.
+- User also reported RSA/CPV/JOR flags transiently missing elsewhere
+  in the UI; mapping verified correct, self-healed on reload — almost
+  certainly a flagcdn CDN blip, no action taken.
 
 ---
 

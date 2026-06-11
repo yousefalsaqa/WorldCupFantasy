@@ -6,6 +6,7 @@ import {
   hasBenchBoost,
   type ChipType,
 } from '@/lib/chips-active';
+import { getFlagCode } from '@/lib/flags';
 
 export const dynamic = 'force-dynamic';
 
@@ -117,7 +118,7 @@ export async function GET(
           kitColor1: sp.player.nation.kitColor1,
           kitColor2: sp.player.nation.kitColor2,
           flagUrl: sp.player.nation.flagUrl
-            || `https://flagcdn.com/24x18/${sp.player.nation.code.toLowerCase()}.png`,
+            || `https://flagcdn.com/24x18/${getFlagCode(sp.player.nation.code)}.png`,
         },
       };
     });
