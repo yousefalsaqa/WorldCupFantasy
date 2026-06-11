@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
@@ -71,6 +71,12 @@ interface Player {
 }
 
 type Position = 'GK' | 'DEF' | 'MID' | 'FWD';
+
+// Lowercase + strip diacritics + trim, so search is accent-insensitive and
+// survives iOS keyboard auto-capitalisation/trailing spaces.
+function normSearch(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+}
 
 // Per-match performance + adjustment types now live alongside the
 // shared PlayerDetailModal (`src/components/player-detail-modal.tsx`).
@@ -805,8 +811,14 @@ export default function SquadPage() {
     return allPlayers
       .filter((p) => {
         if (p.position !== selectingPosition) return false;
-        if (searchTerm && !p.displayName.toLowerCase().includes(searchTerm.toLowerCase())) {
-          return false;
+        // Accent-insensitive search ("goncalo" must find "Gonçalo"; iOS
+        // keyboards also sneak in capitals and trailing spaces). Matches
+        // nation name too so "brazil" lists the whole squad.
+        if (searchTerm) {
+          const q = normSearch(searchTerm);
+          if (!normSearch(p.displayName).includes(q) && !normSearch(p.nation?.name || '').includes(q)) {
+            return false;
+          }
         }
         if (isTransferPicker) {
           // Hide players that are STILL in the squad (and not on their way
@@ -1420,6 +1432,10 @@ export default function SquadPage() {
                   <input
                     type="text"
                     placeholder="Search players..."
+                    autoCorrect="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    enterKeyHint="search"
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
                     className="w-full pl-9 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-white/30 focus:bg-white/10 transition-colors"
@@ -1440,7 +1456,7 @@ export default function SquadPage() {
                 {availablePlayers.length === 0 ? (
                   <div className="p-8 text-center text-white/40">No players available</div>
                 ) : (
-                  availablePlayers.slice(0, 50).map(player => (
+                  availablePlayers.map(player => (
                     <button
                       key={player.id}
                       onClick={() => addPlayer(player)}
@@ -1920,6 +1936,10 @@ export default function SquadPage() {
                   <input
                     type="text"
                     placeholder="Search players..."
+                    autoCorrect="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    enterKeyHint="search"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full pl-9 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-white/30 focus:bg-white/10 transition-colors"
@@ -1941,7 +1961,7 @@ export default function SquadPage() {
                     No players available within budget for this slot.
                   </div>
                 ) : (
-                  availablePlayers.slice(0, 50).map((player) => (
+                  availablePlayers.map((player) => (
                     <button
                       key={player.id}
                       onClick={() => addPlayer(player)}

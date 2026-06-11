@@ -187,6 +187,12 @@ export async function POST(request: NextRequest) {
     } else if (!activeStage) {
       // No active stage = pre-tournament, allow unlimited
       unlimitedTransfers = true;
+    } else if (activeStage.stageId === 'GR1') {
+      // Free tinkering until the very first whistle of the tournament.
+      // (The deadline lock above already blocks this route once GR1 kicks
+      // off, so reaching here during GR1 means we're pre-kickoff.) From
+      // GR2 onward the normal 2-free-per-stage allocation applies.
+      unlimitedTransfers = true;
     } else {
       const teamStage = await prisma.teamStage.findUnique({
         where: { teamId_stageId: { teamId: team.id, stageId: activeStage.id } },
