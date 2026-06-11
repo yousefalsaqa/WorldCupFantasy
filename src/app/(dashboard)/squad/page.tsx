@@ -463,7 +463,19 @@ export default function SquadPage() {
             setSquad(players);
             const starting = players.filter(p => p.isStarting);
             setStartingXI(starting);
-            setBench(players.filter(p => !p.isStarting));
+            // /api/squad/get returns rows in DB order, not sub priority —
+            // sort the bench by benchOrder (same rule as the league
+            // team-view endpoint) or a saved reorder won't survive a reload.
+            const benchOrderById = new Map<string, number>();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            for (const sp of squadData.squad as any[]) {
+              benchOrderById.set(sp.player.id, sp.benchOrder ?? 99);
+            }
+            setBench(
+              players
+                .filter(p => !p.isStarting)
+                .sort((a, b) => (benchOrderById.get(a.id) ?? 99) - (benchOrderById.get(b.id) ?? 99))
+            );
             
             // Set formation based on starting XI
             const defs = starting.filter(p => p.position === 'DEF').length;
