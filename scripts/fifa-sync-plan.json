@@ -1,0 +1,108 @@
+{
+  "generated": "2026-06-11T04:02:04.038Z",
+  "priceChanges": [
+    {
+      "id": "cmp15jey600scygauf069oi6s",
+      "code": "CRO",
+      "name": "Mario Pašalić",
+      "pos": "MID",
+      "from": 6,
+      "to": 7,
+      "fifa": 6.4,
+      "band": "LOG"
+    },
+    {
+      "id": "cmq88bggv011bsaeph3sezubh",
+      "code": "FRA",
+      "name": "A. Rabiot",
+      "pos": "MID",
+      "from": 6,
+      "to": 7,
+      "fifa": 6.4,
+      "band": "LOG"
+    },
+    {
+      "id": "cmq88auos004fsaepn6ye27th",
+      "code": "MEX",
+      "name": "Álvaro Fidalgo",
+      "pos": "MID",
+      "from": 6,
+      "to": 7,
+      "fifa": 6.4,
+      "band": "LOG"
+    },
+    {
+      "id": "cmp15cwli00bqygau2z10opv7",
+      "code": "SWE",
+      "name": "Elanga",
+      "pos": "FWD",
+      "from": 7,
+      "to": 6,
+      "fifa": 5.8,
+      "band": "LOG"
+    },
+    {
+      "id": "cmq88bfux010hsaepkghfk74z",
+      "code": "URU",
+      "name": "M. Araújo",
+      "pos": "MID",
+      "from": 6,
+      "to": 7,
+      "fifa": 6.4,
+      "band": "LOG"
+    },
+    {
+      "id": "cmq88bq6001f3saepyx8i104f",
+      "code": "GHA",
+      "name": "A. Fatawu",
+      "pos": "FWD",
+      "from": 6,
+      "to": 7,
+      "fifa": 6.4,
+      "band": "LOG"
+    }
+  ],
+  "cuts": [
+    {
+      "id": "cmp15h19700m8ygauu56rfclt",
+      "code": "JOR",
+      "name": "Sabra"
+    },
+    {
+      "id": "cmq88axm8008tsaep4e4yai4s",
+      "code": "CAN",
+      "name": "M. Flores"
+    },
+    {
+      "id": "cmq88b05i00crsaep6b3xngce",
+      "code": "BRA",
+      "name": "Wesley"
+    },
+    {
+      "id": "cmq88b83z00orsaepwyd52um8",
+      "code": "NED",
+      "name": "J. Timber"
+    },
+    {
+      "id": "cmq88bhp7012lsaepp818s4rx",
+      "code": "IRQ",
+      "name": "A. Yahya"
+    },
+    {
+      "id": "cmq88bix5014hsaeprpc3trti",
+      "code": "ARG",
+      "name": "L. Balerdi"
+    },
+    {
+      "id": "cmp15ba6r007iygauyj0s782a",
+      "code": "AUT",
+      "name": "Baumgartner"
+    },
+    {
+      "id": "cmq88b5mp00l3saep2qphjihm",
+      "code": "GER",
+      "name": "L. Karl"
+    }
+  ],
+  "posFixes": []
+}

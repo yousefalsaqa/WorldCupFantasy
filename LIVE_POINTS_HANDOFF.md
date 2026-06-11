@@ -1,7 +1,88 @@
 # Live Points Feature — Handoff
 
-Last updated: 2026-06-10 (launch day -1 — full production launch ops
-complete + visual polish pass IN PROGRESS, see Session 2026-06-10)
+Last updated: 2026-06-11 (launch day — FIFA official-data sync APPLIED,
+player pool 100%-converged with play.fifa.com; see Session 2026-06-11)
+
+---
+
+## Session 2026-06-11 — FIFA OFFICIAL DATA SYNC (applied to prod DB)
+
+The entire player pool was audited against FIFA's own fantasy game
+(play.fifa.com — public JSON API) and synced. The DB is now
+**100% converged**: every one of FIFA's 1,245 squad players matches one
+of ours, 0 position mismatches, 0 price flags.
+
+### What was applied (all via scripts, dry-run first)
+
+- **329 price changes** — everyone ≥£0.7m off FIFA's price after
+  quantile-mapping their 3.5–10.5 scale onto our 3.5–14 curve
+  (preserves our spread, adopts their rankings). Kane 11→13.5 (joins
+  Haaland/Mbappé at top), Ronaldo 10→11; Gyökeres 11→8, Vitinha
+  9→6.5, De Bruyne 10→8, Isak 10.5→8.5. Balance verified:
+  cheapest XV £55m, triple-premium squad £82.5m fits.
+- **136 position fixes** to FIFA's official classification (Kimmich
+  MID→DEF, Nico Williams FWD→MID, Kluivert/Summerville FWD→MID …).
+  Only 1 squad existed (admin ops) — it broke composition and was
+  reset (picks deleted, bank back to £100m). Rebuild before kickoff.
+- **6 identity fixes** — rows whose displayName didn't match the player
+  their apiFootballId actually is: Mitoma→**H. Ito** (FWD→DEF!),
+  Dia→**M. Diaw** (FWD→GK!), Hwang H-C→**Kim Moon-Hwan**,
+  K. Rocha→**CJ dos Santos**, Al-Rawabdeh→**I. Sa'deh**, and
+  D. Eckert Ayensa→**D. Dargahi** (took Iranian citizenship May 2026).
+- **8 cut players** → `isAvailable=false` ("Not in final World Cup
+  squad"): Baumgartner, J. Timber, Balerdi, Wesley, Sabra, M. Flores,
+  L. Karl, A. Yahya (IRQ).
+- **5 additions**: L. Geertruida (NED, 37143), A. Ouédraogo (GER,
+  380978), Éderson the BRA MID (10097), Mohammad Taha (JOR, 601853 —
+  FIFA mislabels him "Abu Ghoush"), **A. Maknzi (IRQ, apiFootballId
+  NULL — not in API-Football; BACKFILL his id from day-of lineups or
+  he will never score points)**.
+- DB now: **1,253 players, 1,245 available** (= FIFA's playing count),
+  prices 3.5–13.5.
+
+### Scripts (all dry-run by default, `--apply` to write)
+
+- `scripts/cross-check-fifa-prices.ts` — the auditor. Downloads needed:
+  `scripts/fifa-players.json` + `fifa-squads.json` (refetch from
+  `https://play.fifa.com/json/fantasy/players.json` / `squads.json` —
+  FIFA updates prices/status between rounds). Writes
+  `fifa-cross-check-report.md` + machine-readable `fifa-sync-plan.json`.
+  Matching: exact → subset → initial+last → fuzzy → API-Football
+  profile assisted (cache: `scripts/.api-profile-cache.json`) →
+  leftover pairing. Re-run between rounds to catch FIFA price moves.
+- `scripts/apply-fifa-sync.ts` — applies plan prices + cuts, plus
+  hardcoded identity fixes + additions. Idempotent (skips existing).
+- `scripts/apply-fifa-positions.ts` — applies plan posFixes, detects
+  squads broken by composition/formation rules, resets them.
+- `scripts/find-api-ids.ts` — scratch helper for hunting API-Football
+  ids (profiles search + club/national squads). Reuse for the Maknzi
+  backfill.
+
+### Gotchas discovered
+
+- **npx/node "not recognized"** in fresh Claude Code shells on this
+  box: the shell inherits a stale PATH copy missing
+  `C:\Program Files\nodejs` (it IS in machine PATH). Fix per command:
+  `$env:Path = "C:\Program Files\nodejs;$env:Path"; npx ...`
+- FIFA's Arabic-name entries chain the full name through `firstName`
+  ("Zaid Ismael Khaleel" / lastName "Al Dulaimi") with the usable form
+  in `knownName` — match on knownName too.
+- FIFA "transferred" status = cut from squad (239 rows). A cut player
+  + his replacement look like a rename if you pair leftovers before
+  checking transferred rows.
+
+### iPhone / PWA reminders (user-flagged)
+
+- `src/components/ios-install-prompt.tsx` — iOS add-to-home-screen
+  prompt; `public/manifest.json` + icons via `scripts/generate-icons.ts`.
+  Verify the prompt fires on a real iPhone (Safari, not in-app browser)
+  before friends onboard today.
+- Pitch background (`src/components/pitch-bg.tsx`) uses SVG
+  feTurbulence — **known risk of GPU lag on iPhone Safari**. If a
+  friend reports a laggy squad page: bake the noise into a small tiled
+  PNG (plan already noted in Session 2026-06-10).
+- Phone testing: `npm run dev`, open `http://192.168.2.25:3000` on the
+  same Wi-Fi (Windows Firewall inbound rule for TCP 3000 if needed).
 
 ---
 
