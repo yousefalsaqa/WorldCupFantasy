@@ -1536,7 +1536,7 @@ export default function SquadPage() {
         {/* Player Selection Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-            <div className="bg-slate-900 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden border border-white/10 shadow-2xl">
+            <div className="bg-slate-900 rounded-2xl w-full max-w-2xl max-h-[82dvh] overflow-hidden border border-white/10 shadow-2xl">
               <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-800">
                 <div className="flex items-center gap-3">
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${
@@ -1591,7 +1591,7 @@ export default function SquadPage() {
               </div>
 
               {/* Player List */}
-              <div className="max-h-[55vh] overflow-y-auto">
+              <div className="max-h-[55dvh] overflow-y-auto">
                 {availablePlayers.length === 0 ? (
                   <div className="p-8 text-center text-white/40">No players available</div>
                 ) : (
@@ -2091,7 +2091,7 @@ export default function SquadPage() {
             commitTransfer() in that case. */}
         {showModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-            <div className="bg-slate-900 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden border border-white/10 shadow-2xl">
+            <div className="bg-slate-900 rounded-2xl w-full max-w-2xl max-h-[82dvh] overflow-hidden border border-white/10 shadow-2xl">
               <div className="p-4 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-800">
                 <div className="flex items-center gap-3 min-w-0">
                   <div
@@ -2163,7 +2163,7 @@ export default function SquadPage() {
                 </select>
               </div>
 
-              <div className="max-h-[55vh] overflow-y-auto">
+              <div className="max-h-[55dvh] overflow-y-auto">
                 {availablePlayers.length === 0 ? (
                   <div className="p-8 text-center text-white/40">
                     No players available within budget for this slot.

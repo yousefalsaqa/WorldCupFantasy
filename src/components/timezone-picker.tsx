@@ -161,7 +161,7 @@ function TimezonePickerModal({ currentTz, onClose }: TimezonePickerModalProps) {
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
       <div
-        className="relative w-full max-w-md card p-6 animate-scale-in max-h-[85vh] flex flex-col rounded-b-none sm:rounded-2xl"
+        className="relative w-full max-w-md card p-6 animate-scale-in max-h-[82dvh] flex flex-col rounded-b-none sm:rounded-2xl"
       >
         <button
           onClick={onClose}

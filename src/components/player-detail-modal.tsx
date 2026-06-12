@@ -275,7 +275,7 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
       }}
     >
       <div
-        className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl max-h-[90vh] overflow-y-auto"
+        className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl max-h-[85dvh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

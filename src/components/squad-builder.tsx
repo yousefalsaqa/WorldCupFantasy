@@ -400,7 +400,7 @@ export function SquadBuilder({
             }}
           />
           
-          <div className="relative w-full max-w-4xl max-h-[90vh] card overflow-hidden animate-scale-in">
+          <div className="relative w-full max-w-4xl max-h-[85dvh] card overflow-hidden animate-scale-in">
             {/* Modal Header */}
             <div className="p-4 border-b border-surface-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -477,7 +477,7 @@ export function SquadBuilder({
             </div>
 
             {/* Player List */}
-            <div className="max-h-[60vh] overflow-y-auto p-4">
+            <div className="max-h-[55dvh] overflow-y-auto p-4">
               {filteredPlayers.length === 0 ? (
                 <div className="text-center py-12">
                   <Users className="w-12 h-12 text-surface-600 mx-auto mb-3" />
