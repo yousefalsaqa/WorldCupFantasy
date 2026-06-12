@@ -362,8 +362,8 @@ export default function PredictedLineupsAdmin() {
           internally. */}
       {picker && selected && (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 backdrop-blur-sm p-3"
-          style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
+          className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/70 backdrop-blur-sm p-3"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top) + 4.5rem)' }}
           onClick={() => setPicker(null)}
         >
           <div

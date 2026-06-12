@@ -1537,7 +1537,7 @@ export default function SquadPage() {
         {showModal && (
           <div
             className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-start sm:items-center justify-center z-50 p-3 sm:p-4 animate-fade-in"
-            style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
+            style={{ paddingTop: 'calc(env(safe-area-inset-top) + 4.5rem)' }}
           >
             <div className="bg-slate-900 rounded-2xl w-full max-w-2xl max-h-[82dvh] overflow-hidden border border-white/10 shadow-2xl">
               <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-800">
@@ -2095,7 +2095,7 @@ export default function SquadPage() {
         {showModal && (
           <div
             className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-start sm:items-center justify-center z-50 p-3 sm:p-4 animate-fade-in"
-            style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
+            style={{ paddingTop: 'calc(env(safe-area-inset-top) + 4.5rem)' }}
           >
             <div className="bg-slate-900 rounded-2xl w-full max-w-2xl max-h-[82dvh] overflow-hidden border border-white/10 shadow-2xl">
               <div className="p-4 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-800">
