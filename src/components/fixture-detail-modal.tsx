@@ -426,7 +426,7 @@ function LineupsTab({ detail }: { detail: Detail }) {
               {groupByGridRow(lu.startXI).map((row, i) => (
                 <div key={i} className="flex justify-around">
                   {row.map((p) => (
-                    <div key={p.apiId} className="flex flex-col items-center w-14">
+                    <div key={p.apiId} className="flex flex-col items-center flex-1 min-w-0 max-w-[56px]">
                       <PlayerFace
                         photoUrl={p.photoUrl}
                         primaryColor={team.kitColor1}

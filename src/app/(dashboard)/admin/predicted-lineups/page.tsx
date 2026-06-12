@@ -211,18 +211,18 @@ export default function PredictedLineupsAdmin() {
     let slotIdx = -1;
     return (
       <div key={side}>
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-white text-sm font-bold">{nation.name}</span>
+        <div className="flex items-center gap-2 mb-2 min-w-0">
+          <span className="text-white text-sm font-bold truncate min-w-0">{nation.name}</span>
           <select
             value={formations[side]}
             onChange={(e) => setFormations((prev) => ({ ...prev, [side]: e.target.value }))}
-            className="px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-white text-xs cursor-pointer"
+            className="px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-white text-xs cursor-pointer shrink-0"
           >
             {FORMATIONS.map((f) => (
               <option key={f} value={f} className="bg-slate-900">{f}</option>
             ))}
           </select>
-          <span className={`ml-auto text-[11px] font-black ${filled === 11 ? 'text-emerald-400' : 'text-amber-400'}`}>
+          <span className={`ml-auto text-[11px] font-black shrink-0 ${filled === 11 ? 'text-emerald-400' : 'text-amber-400'}`}>
             {filled}/11
           </span>
         </div>
@@ -245,7 +245,7 @@ export default function PredictedLineupsAdmin() {
                         setPicker({ side, idx });
                       }
                     }}
-                    className="flex flex-col items-center w-14 group"
+                    className="flex flex-col items-center flex-1 min-w-0 max-w-[56px] group"
                     title={p ? `Remove ${p.displayName}` : 'Add player'}
                   >
                     {p ? (
