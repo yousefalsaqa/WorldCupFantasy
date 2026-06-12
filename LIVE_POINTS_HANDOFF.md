@@ -156,6 +156,27 @@ matchday (CAN-BIH, USA-PAR). Everything below is pushed + deployed.
   re-confirmed with user; he's fine with the "free look" meta (matches
   UCL fantasy his friends know).
 
+### Late additions (same session, after the entry above)
+
+- **Predicted→official switch VERIFIED**: `scripts/test-lineup-precedence.ts`
+  planted a prediction on finished KOR-CZE → payload still leads with the
+  2 official lineups (modal rule `lineups.length===0 && predicted`);
+  USA-PAR (no officials) correctly serves predicted. State restored.
+- **dvh sweep**: ALL modal max-heights converted vh→dvh (squad pickers,
+  PlayerDetailModal, timezone picker, legacy squad-builder). iOS `vh` =
+  largest viewport; bottom/center-anchored sheets clipped at the top.
+- **Search-popup geometry saga** (three iterations — record so nobody
+  repeats it): (1) bottom sheets jumped when TYPING because the sheet
+  height was content-driven — each filtered keystroke resized it and iOS
+  re-panned. Fix: FIXED height cards (h-[55dvh] / stable inner list).
+  (2) top-anchored cards slid UNDER the sticky nav (nav is h-16 + z-50
+  and paints above the overlays). (3) Final: cards anchor just below the
+  nav — `paddingTop: calc(env(safe-area-inset-top) + 4.5rem)`,
+  `items-start sm:items-center`. Applies to the builder picker AND both
+  squad-page pickers. No autoFocus (mount-time keyboard pop = pan).
+- USA-PAR prediction set + verified via script. CAN-BIH still needs the
+  user's redo in the visual builder (old typed entry has scrambled rows).
+
 ### Carryover (unchanged)
 
 - Knockout fixtures + REAL knockout deadlines after GR3 (~Jun 27) —
