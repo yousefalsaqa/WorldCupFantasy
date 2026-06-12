@@ -152,7 +152,12 @@ model Match {
   // Live match tracking
   currentMinute Int?     // Current minute (for live updates)
   lastUpdated   DateTime? // Last time live data was fetched
-  
+
+  // Match-detail cache for the fixture modal (stats/lineups/events).
+  // JSON string: { fetchedAt, final, payload }. Fetched on demand from
+  // API-Football; short TTL while live, frozen forever once final.
+  detailCache   String?
+
   stage         Stage    @relation(fields: [stageId], references: [id])
   homeNation    Nation   @relation("HomeNation", fields: [homeNationId], references: [id])
   awayNation    Nation   @relation("AwayNation", fields: [awayNationId], references: [id])

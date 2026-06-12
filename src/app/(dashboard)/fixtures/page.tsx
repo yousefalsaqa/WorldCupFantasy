@@ -10,6 +10,7 @@ import {
   parseFixtureDateTime,
 } from '@/lib/format-time';
 import { TimezoneIndicator } from '@/components/timezone-picker';
+import FixtureDetailModal from '@/components/fixture-detail-modal';
 import {
   WC_STADIUMS as STADIUMS,
   WORLD_CUP_FIXTURES as GROUP_FIXTURES,
@@ -22,6 +23,7 @@ import {
 // static schedule by nation-code pair (+ closest kickoff, so a hypothetical
 // knockout rematch of a group pairing can't collide).
 interface MatchScore {
+  id: string;
   home: string;
   away: string;
   kickoff: string;
@@ -55,6 +57,8 @@ function FixturesContent() {
   const [filter, setFilter] = useState<FilterOption>('all');
   const [scores, setScores] = useState<Record<string, MatchScore[]>>({});
   const [anyLive, setAnyLive] = useState(false);
+  // Open fixture-detail modal (only fixtures that exist in the DB).
+  const [openMatch, setOpenMatch] = useState<{ matchId: string; kickoffLabel: string } | null>(null);
   // Clock for the kickoff countdown. Starts null and is only set after
   // mount so the server-rendered HTML never contains a countdown string
   // (Date.now() differs between server and client → hydration mismatch).
@@ -249,11 +253,18 @@ function FixturesContent() {
                   <div className="flex-1 h-px bg-white/10" />
                 </div>
               )}
-            <div className={`bg-white/5 border rounded-xl p-4 hover:bg-white/[0.07] transition-all ${
-              isLive
-                ? 'border-emerald-400/60 shadow-[0_0_24px_rgba(16,185,129,0.18)]'
-                : isToday ? 'border-emerald-500/25' : 'border-white/10'
-            }`}>
+            <div
+              onClick={score ? () => setOpenMatch({
+                matchId: score.id,
+                kickoffLabel: formatTime(fixture.date, fixture.time),
+              }) : undefined}
+              className={`bg-white/5 border rounded-xl p-4 hover:bg-white/[0.07] transition-all ${
+                score ? 'cursor-pointer active:scale-[0.99]' : ''
+              } ${
+                isLive
+                  ? 'border-emerald-400/60 shadow-[0_0_24px_rgba(16,185,129,0.18)]'
+                  : isToday ? 'border-emerald-500/25' : 'border-white/10'
+              }`}>
               {/* Stage & Date Row */}
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold text-white/40 uppercase tracking-wider">{fixture.stage}</span>
@@ -341,6 +352,14 @@ function FixturesContent() {
         <div className="text-center py-12 text-white/40">
           No fixtures found for this filter.
         </div>
+      )}
+
+      {openMatch && (
+        <FixtureDetailModal
+          matchId={openMatch.matchId}
+          kickoffLabel={openMatch.kickoffLabel}
+          onClose={() => setOpenMatch(null)}
+        />
       )}
     </div>
   );

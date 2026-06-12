@@ -152,6 +152,53 @@ export interface APIPlayerStats {
   }>;
 }
 
+/** One side's lineup as returned inside a by-id fixture request. */
+export interface APILineup {
+  team: {
+    id: number;
+    name: string;
+    logo: string;
+    colors: unknown;
+  };
+  coach: { id: number | null; name: string | null; photo: string | null };
+  formation: string | null;
+  startXI: Array<{
+    player: {
+      id: number;
+      name: string;
+      number: number;
+      pos: string | null;
+      grid: string | null; // "row:col" from the goalkeeper outward
+    };
+  }>;
+  substitutes: Array<{
+    player: {
+      id: number;
+      name: string;
+      number: number;
+      pos: string | null;
+      grid: string | null;
+    };
+  }>;
+}
+
+/** One side's team statistics as returned inside a by-id fixture request. */
+export interface APITeamStatistics {
+  team: { id: number; name: string; logo: string };
+  statistics: Array<{ type: string; value: string | number | null }>;
+}
+
+/**
+ * Fixture requested by id — API-Football embeds events, lineups,
+ * statistics and players in the same response (1 call for everything).
+ */
+export interface APIFixtureFullDetail extends APIFixture {
+  events?: APIEvent[];
+  lineups?: APILineup[];
+  statistics?: APITeamStatistics[];
+  players?: APITeamPlayersResponse[];
+}
+
 export interface APITeamPlayersResponse {
   team: {
     id: number;
@@ -311,6 +358,19 @@ class APIFootballClient {
 
   async getFixtureById(fixtureId: number): Promise<APIFixture | null> {
     const response = await this.makeRequest<APIFixture[]>('/fixtures', {
+      id: fixtureId,
+    });
+    return response.response[0] || null;
+  }
+
+  /**
+   * Single fixture WITH events, lineups and statistics embedded.
+   * API-Football bundles all of them into the response when the fixture
+   * is requested by id, so the whole match-detail modal costs exactly
+   * ONE call per refresh.
+   */
+  async getFixtureFullDetail(fixtureId: number): Promise<APIFixtureFullDetail | null> {
+    const response = await this.makeRequest<APIFixtureFullDetail[]>('/fixtures', {
       id: fixtureId,
     });
     return response.response[0] || null;

@@ -13,6 +13,7 @@ export async function GET() {
   try {
     const matches = await prisma.match.findMany({
       select: {
+        id: true,
         kickoffTime: true,
         homeScore: true,
         awayScore: true,
@@ -27,6 +28,7 @@ export async function GET() {
     });
 
     const payload = matches.map((m) => ({
+      id: m.id,
       home: m.homeNation.code,
       away: m.awayNation.code,
       kickoff: m.kickoffTime.toISOString(),
