@@ -70,6 +70,16 @@ export default function PredictedLineupsAdmin() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // Body scroll lock while the picker sheet is open — without it, iOS
+  // pans the page when the search input focuses and the fixed sheet
+  // visually slides off behind the keyboard.
+  useEffect(() => {
+    if (!picker) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [picker]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -344,14 +354,17 @@ export default function PredictedLineupsAdmin() {
         </div>
       )}
 
-      {/* Player picker — bottom sheet with faces */}
+      {/* Player picker with faces. Top-anchored on phones: the search bar
+          sits ABOVE the keyboard so iOS never pans the viewport (bottom
+          sheets get shoved off-screen when the keyboard opens). 60dvh
+          leaves room for the keyboard underneath. */}
       {picker && selected && (
         <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/70 backdrop-blur-sm pt-safe-or-3 sm:pt-0 px-0 sm:px-4"
           onClick={() => setPicker(null)}
         >
           <div
-            className="w-full sm:max-w-md bg-slate-900 ring-1 ring-white/10 rounded-t-2xl sm:rounded-2xl max-h-[75dvh] flex flex-col overflow-hidden"
+            className="w-full sm:max-w-md bg-slate-900 ring-1 ring-white/10 rounded-b-2xl sm:rounded-2xl max-h-[60dvh] sm:max-h-[70vh] flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-3 border-b border-white/10">
