@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth';
 import {
   matchNamesToNationPlayers,
+  playerIdsToPredicted,
   type PredictedLineups,
 } from '@/lib/predicted-lineups';
 
@@ -13,15 +14,16 @@ export const dynamic = 'force-dynamic';
 //
 // Body: {
 //   matchId: string,
-//   home: { formation?: string, names: string[] },   // 11 editorial names
-//   away: { formation?: string, names: string[] },
+//   home: { formation?: string, names?: string[], playerIds?: string[] },
+//   away: { formation?: string, names?: string[], playerIds?: string[] },
 //   dryRun?: boolean,                                // preview matching only
 // }
 //
-// Names are fuzzy-matched against each nation's squad (shared lib —
-// same logic as scripts/set-predicted-lineup.ts). Anything ambiguous or
-// unknown comes back in `unmatched` and NOTHING is saved, so a typo can't
-// silently publish a 10-man prediction.
+// Each side supplies EITHER playerIds (the visual admin builder — exact,
+// in pitch order: GK first, then each formation row) OR names (the ops
+// script — fuzzy-matched against the nation's squad). Anything ambiguous,
+// unknown or wrong-nation comes back in `unmatched` and NOTHING is saved,
+// so a typo can't silently publish a 10-man prediction.
 //
 // DELETE /api/admin/predicted-lineup?matchId=... — clear the prediction.
 // ============================================
@@ -33,12 +35,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { matchId, home, away, dryRun } = body as {
       matchId: string;
-      home: { formation?: string; names: string[] };
-      away: { formation?: string; names: string[] };
+      home: { formation?: string; names?: string[]; playerIds?: string[] };
+      away: { formation?: string; names?: string[]; playerIds?: string[] };
       dryRun?: boolean;
     };
-    if (!matchId || !Array.isArray(home?.names) || !Array.isArray(away?.names)) {
-      return NextResponse.json({ error: 'matchId, home.names and away.names are required' }, { status: 400 });
+    const sideValid = (s: typeof home) =>
+      Array.isArray(s?.playerIds) || Array.isArray(s?.names);
+    if (!matchId || !sideValid(home) || !sideValid(away)) {
+      return NextResponse.json({ error: 'matchId plus names or playerIds per side are required' }, { status: 400 });
     }
 
     const match = await prisma.match.findUnique({
@@ -55,9 +59,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Match not found' }, { status: 404 });
     }
 
+    const resolve = (nationId: string, side: typeof home) =>
+      Array.isArray(side.playerIds)
+        ? playerIdsToPredicted(nationId, side.playerIds)
+        : matchNamesToNationPlayers(nationId, side.names ?? []);
+
     const [homeResult, awayResult] = await Promise.all([
-      matchNamesToNationPlayers(match.homeNationId, home.names),
-      matchNamesToNationPlayers(match.awayNationId, away.names),
+      resolve(match.homeNationId, home),
+      resolve(match.awayNationId, away),
     ]);
 
     const preview = {

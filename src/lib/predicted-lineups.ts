@@ -66,6 +66,54 @@ export interface MatchResult {
 }
 
 /**
+ * Resolve explicit player ids (the visual admin builder's path — no fuzzy
+ * matching needed). Order is preserved: ids arrive in pitch order (GK
+ * first, then each formation row) and that order drives the rendered
+ * shape. Ids that don't exist or belong to another nation are reported.
+ */
+export async function playerIdsToPredicted(
+  nationId: string,
+  playerIds: string[],
+): Promise<MatchResult> {
+  const players = await prisma.player.findMany({
+    where: { id: { in: playerIds } },
+    select: {
+      id: true,
+      displayName: true,
+      shirtNumber: true,
+      position: true,
+      photoUrl: true,
+      nationId: true,
+    },
+  });
+  const byId = new Map(players.map((p) => [p.id, p]));
+
+  const matched: PredictedPlayer[] = [];
+  const unmatched: MatchResult['unmatched'] = [];
+  const seen = new Set<string>();
+  for (const id of playerIds) {
+    const p = byId.get(id);
+    if (!p) {
+      unmatched.push({ name: id, reason: 'player not found' });
+    } else if (p.nationId !== nationId) {
+      unmatched.push({ name: p.displayName, reason: 'plays for a different nation' });
+    } else if (seen.has(id)) {
+      unmatched.push({ name: p.displayName, reason: 'duplicate' });
+    } else {
+      seen.add(id);
+      matched.push({
+        playerId: p.id,
+        name: p.displayName,
+        number: p.shirtNumber,
+        pos: POS_CODE[p.position] ?? 'M',
+        photoUrl: p.photoUrl,
+      });
+    }
+  }
+  return { matched, unmatched };
+}
+
+/**
  * Resolve editorial player names against one nation's squad.
  *
  * Tiers (first unique hit wins): exact normalized displayName → exact last
