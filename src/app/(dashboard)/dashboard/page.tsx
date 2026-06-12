@@ -45,6 +45,19 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadData();
+    // Re-pull when the user returns to this tab/page. The team card shows
+    // live-ish numbers (free transfers, bank) that change on OTHER pages —
+    // e.g. queueing a transfer spends a free transfer immediately, and a
+    // dashboard rendered from cache kept showing the old count.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadData();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
   }, []);
 
   async function loadData() {
@@ -55,7 +68,10 @@ export default function DashboardPage() {
     try {
       const [userRes, teamRes, stageRes] = await Promise.all([
         fetch('/api/auth/me', { signal: ctrl.signal }),
-        fetch('/api/team', { signal: ctrl.signal }),
+        // no-store: the team card must reflect transfer-queue spends made
+        // moments ago on the squad page; the API's 10s/30s SWR cache was
+        // serving a stale freeTransfers count here.
+        fetch('/api/team', { signal: ctrl.signal, cache: 'no-store' }),
         fetch('/api/stages/current', { signal: ctrl.signal }),
       ]);
 

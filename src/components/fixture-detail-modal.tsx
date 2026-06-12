@@ -143,7 +143,7 @@ export default function FixtureDetailModal({
       onClick={onClose}
     >
       <div
-        className="w-full sm:max-w-md bg-slate-900 ring-1 ring-white/10 rounded-t-2xl sm:rounded-2xl max-h-[88vh] flex flex-col overflow-hidden"
+        className="w-full sm:max-w-md bg-slate-900 ring-1 ring-white/10 rounded-t-2xl sm:rounded-2xl max-h-[82dvh] sm:max-h-[85vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

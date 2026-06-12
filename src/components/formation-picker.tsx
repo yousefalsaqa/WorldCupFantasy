@@ -40,6 +40,11 @@ function FormationDots({ formation }: { formation: string }) {
 
 export default function FormationPicker({ formations, current, onChange }: FormationPickerProps) {
   const [open, setOpen] = useState(false);
+  // Panel anchor side. Default right-aligned to the button; flips to left
+  // when the button is so close to the screen's left edge that a
+  // right-anchored panel would extend past it (the "formations cut off on
+  // phone" bug).
+  const [align, setAlign] = useState<'left' | 'right'>('right');
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -49,6 +54,13 @@ export default function FormationPicker({ formations, current, onChange }: Forma
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
+
+  useEffect(() => {
+    if (!open || !ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const panelWidth = Math.min(288, window.innerWidth - 24); // mirrors the style width
+    setAlign(rect.right - panelWidth < 12 ? 'left' : 'right');
+  }, [open]);
 
   return (
     <div ref={ref} className="relative">
@@ -63,7 +75,7 @@ export default function FormationPicker({ formations, current, onChange }: Forma
 
       {open && (
         <div
-          className="absolute top-full mt-2 right-0 z-50 p-2 rounded-xl bg-slate-900/95 backdrop-blur-md border border-white/15 shadow-2xl animate-fade-in max-h-[70vh] overflow-y-auto"
+          className={`absolute top-full mt-2 ${align === 'right' ? 'right-0' : 'left-0'} z-50 p-2 rounded-xl bg-slate-900/95 backdrop-blur-md border border-white/15 shadow-2xl animate-fade-in max-h-[70vh] overflow-y-auto`}
           style={{ width: 'min(18rem, calc(100vw - 24px))' }}
         >
           <p className="px-2 pt-1 pb-2 text-[10px] font-bold text-white/40 uppercase tracking-wider">Choose Formation</p>

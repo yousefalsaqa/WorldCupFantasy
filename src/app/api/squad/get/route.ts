@@ -249,9 +249,41 @@ export async function GET(request: NextRequest) {
       }));
     }
 
+    // Nations whose match in the ACTIVE stage has kicked off. The squad
+    // page uses this to grey out / block illegal sub targets client-side
+    // (played players can't enter the XI or have their bench slot moved).
+    // Same gate as /api/squad/update: isStarted OR kickoff in the past —
+    // empty when the stage isn't locked yet (pre-deadline, anything goes).
+    const startedNationCodes: string[] = [];
+    const activeStageRow = await prisma.stage.findFirst({
+      where: { isActive: true },
+      select: { id: true, deadlineTime: true },
+    });
+    if (activeStageRow?.deadlineTime && activeStageRow.deadlineTime <= new Date()) {
+      const stageMatches = await prisma.match.findMany({
+        where: { stageId: activeStageRow.id },
+        select: {
+          isStarted: true,
+          kickoffTime: true,
+          homeNation: { select: { code: true } },
+          awayNation: { select: { code: true } },
+        },
+      });
+      const now = new Date();
+      const codes = new Set<string>();
+      for (const m of stageMatches) {
+        if (m.isStarted || m.kickoffTime <= now) {
+          codes.add(m.homeNation.code);
+          codes.add(m.awayNation.code);
+        }
+      }
+      startedNationCodes.push(...Array.from(codes));
+    }
+
     return NextResponse.json({
       squad,
       teamId: team.id,
+      startedNationCodes,
       bankBalance: refreshedTeam?.bankBalance ?? team.bankBalance,
       teamValue: refreshedTeam?.teamValue ?? team.teamValue,
       // Surface the transfer-budget fields so the squad page can drive the
