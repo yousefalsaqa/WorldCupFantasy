@@ -1,7 +1,265 @@
 # Live Points Feature — Handoff
 
-Last updated: 2026-06-11 (**WE ARE LIVE** — tournament kicked off,
-real users have squads in prod; see Session 2026-06-11 №3)
+Last updated: 2026-06-12 (**LIVE** — day-2 feature blitz: live fixtures
+tab + match-detail modal + predicted lineups + selection chips; see
+Session 2026-06-12)
+
+---
+
+## Session 2026-06-12 — FIXTURES TAB OVERHAUL + PREDICTED LINEUPS (all in prod)
+
+Marathon session spanning KOR-CZE (finished 2-1) into the Jun-12
+matchday (CAN-BIH, USA-PAR). Everything below is pushed + deployed.
+
+### ⚠ Facts that prevent future confusion
+
+- **Dev and prod share ONE database** (local `.env` = prod Neon). Data
+  changes made "in dev" (predictions, admin actions) are instantly live
+  for real users; only CODE needs a push. Treat every local run as prod.
+- **League standings + team-view header are now LIVE** (banked +
+  in-progress overlay). The user explicitly reversed the old
+  "league updates at end of gameday" decision.
+- Per-player pills were never broken on day 1 — banked totals only move
+  at FT by design; that's what the overlay now papers over.
+
+### Fixtures tab (now the app's live hub)
+
+- **`/api/fixtures/scores`** (public): every DB match keyed by nation
+  codes; the static-schedule page overlays score/status. Live cards:
+  emerald glow + pulsing LIVE badge w/ minute; FT cards show score
+  (+pens). Polls 60s only while live.
+- **Kickoff countdown** inside final 24h (amber pill, seconds under 1h),
+  then pulsing **KICKING OFF** bridge (≤15 min past scheduled) until the
+  cron flips it live. Page also polls during a window 1 min before →
+  15 min after each kickoff so an open tab discovers the flip without
+  reload.
+- **Fixture detail modal** (`src/components/fixture-detail-modal.tsx`,
+  tap any fixture card): Stats / Lineups / Timeline tabs, tappable +
+  swipeable. Venue + referee in ONE muted header line (user wanted it
+  subtle). VAR events get a violet chip. Backed by
+  `/api/fixtures/[id]/detail` + `Match.detailCache` (JSON envelope
+  `{fetchedAt, final, payload}`): by-id API-Football requests bundle
+  events+lineups+stats = **1 call per refresh**, TTL 60s live / 5 min
+  inside 90-min-pre-kickoff / 60 min before that / **frozen forever at
+  FT** (old games cost zero after first open). Momentum graph
+  deliberately skipped (API has no equivalent; don't fake it).
+
+### Predicted lineups (admin-entered, FotMob-transcribed)
+
+- `Match.predictedLineups` JSON (additive push applied). Shapes +
+  name-matching in **`src/lib/predicted-lineups.ts`**.
+- **Modal precedence — VERIFIED by test**: Lineups tab shows the
+  predicted XI (amber "PREDICTED XI" banner) ONLY while
+  `lineups.length === 0`; official team sheets (~40 min pre-kickoff,
+  ≤5 min cache lag) replace it automatically. Test proof:
+  `scripts/test-lineup-precedence.ts` (plants a prediction on a
+  finished match → payload still leads with officials; restores state).
+- **Admin UI is a visual builder** (`/admin/predicted-lineups`, 🔮 card
+  on /admin): formation dropdown FIRST (rows redraw), tap slot → search
+  picker with PlayerFace headshots (identity-confirm), ANY player in
+  ANY slot (out-of-position is real), duplicates impossible, tap filled
+  slot to remove, prefills saved predictions for editing, saves exact
+  playerIds in pitch order. v1 was typed names — scrapped because away
+  FotMob screenshots read bottom-up and entry order silently flipped
+  rows (CAN 4-4-2 rendered 4-2-4).
+- **Rendering uses formation string + entry order** (rows = [1,
+  ...formation parts]), NOT fantasy positions (a DEF-classified
+  wing-back used to turn back-threes into back-fives).
+- Script path for screenshot transcription:
+  `scripts/set-predicted-lineup.ts` (edit INPUT block, dry-run default,
+  `--apply`). Fuzzy matcher refuses ambiguity (5 KOR Lees, 2 USA
+  Robinsons, 2 PAR Gómezes) — give initials like FotMob prints them.
+- State: USA-PAR set (script, verified). CAN-BIH was set via the old
+  typed flow with scrambled rows — **user to redo in the builder**.
+
+### Selection-history chips ("did he actually start?")
+
+- `PlayerPerformance.startedMatch Boolean?` (additive). Live cron now
+  persists `!games.substitute`; `scripts/backfill-started-match.ts`
+  backfilled MEX-RSA + KOR-CZE (idempotent, 1 API call per match).
+- `/api/players` returns `lastMatch: {played, started, minutes} | null`
+  (latest FINISHED match of the player's nation; null pre-first-game).
+- Picker rows (builder + transfer) show: green **"Started 61′"** /
+  amber **"Sub 12′"** / gray **"Unused"**. Wording matters: bare
+  "✓ 61′" read as "came on at 61" during user testing.
+- This is the agreed stand-in for predicted-lineup data dependence:
+  facts over guesses from GR2 onward. (Sportmonks sells model-predicted
+  XIs if ever wanted — separate paid sub, declined for now.)
+
+### Transfer-mode + sub-flow UX hardening (from live user testing)
+
+- **Queued-out players get violet ring + QUEUED pill** on the transfer
+  pitch; tapping explains instead of opening the picker (server always
+  rejected double-sells; now the UI prevents the attempt).
+- **Played players grey out in sub selection**: `/api/squad/get` returns
+  `startedNationCodes` (active stage, kicked-off nations — same gate as
+  squad/update); `isSwapValid`/`performSwap` block bench→XI and
+  bench-order moves for played players with a SPECIFIC message (was a
+  misleading "Invalid formation!" alert).
+- **ⓘ info button on picker rows** opens the shared PlayerDetailModal
+  readOnly WITHOUT committing the swap. Gotchas hit: needs
+  `cursor-pointer` (iOS won't click otherwise) AND must be mounted in
+  the transfer-mode render branch — the squad page has THREE separate
+  returns (builder / transfer / view); a modal mounted in only one stays
+  invisible in the others. New `hideRole` prop hides Role/Capt badges
+  (they describe fantasy-squad role; nonsense for un-owned players —
+  source of a user confusion incident with Son's "STARTING ROLE").
+- **Dashboard staleness fixed**: `/api/team` fetched with
+  `cache:'no-store'` + refetch on focus/visibilitychange (free-transfer
+  count lagged the queue spend by up to ~40s of SWR cache).
+- **Queue rules confirmed live**: queue spends FTs immediately
+  (3rd queue attempt correctly blocked at 0 left), cancel refunds, and
+  post-round hits ARE charged (`totalPoints: {decrement}` in the same
+  transaction — verified in code).
+
+### Live league standings + team-view header
+
+- **`src/lib/live-team-totals.ts # liveTeamDeltas`** — in-progress delta
+  per team from isLive perf rows, mirroring banking exactly (starters
+  only, captain ×2/×3, bench only on Bench Boost, late-gate excluded).
+  `totalPoints + delta` converges to the banked number at FT (no jump).
+- Standings rows earning live get pulsing dot + green points; team-view
+  header pill shows `liveTotalPoints` w/ green tint. Private leagues use
+  the same code path (verified vs prod data;
+  `scripts/check-private-league-live.ts`).
+
+### Visual / mobile fixes
+
+- Dream team uses PlayerFace headshots (photoUrl added to API).
+- **Native iOS splash screens**: `scripts/generate-splash.ts` → 10
+  device-exact PNGs in `public/splash/`, declared via
+  `appleWebApp.startupImage`. iOS caches at install — existing
+  home-screen users must delete + re-add to see it.
+- League table long team names: `min-w-0` + truncate (flex children
+  refuse to shrink without min-w-0 — recurring theme, also fixed in
+  team-name header + lineup slots).
+- Modal heights use **dvh** not vh (iOS vh = largest viewport → bottom
+  sheets poked above the visible screen).
+- Formation picker dropdown flips left-anchored near the screen edge.
+- Lineup slots are flex (shrink, max 56px) so back-fives never clip.
+- **16px form fields at phone widths** (globals.css) — kills iOS
+  focus-zoom app-wide.
+- Fixtures page countdown starts only after mount (no SSR hydration
+  mismatch from Date.now()).
+
+### Ops notes
+
+- New Wi-Fi = new IP for phone testing (university net was
+  10.216.114.115; home is 192.168.2.25). Firewall rule "Next.js dev
+  server (TCP 3000, local subnet only)" added (elevated). Uni networks
+  may block phone↔laptop entirely (client isolation).
+- `prisma generate` EPERM on the query-engine DLL while `npm run dev`
+  is up — stop dev, generate, restart.
+- `$HOME` is a read-only PowerShell automatic variable — don't use it
+  in test snippets.
+- Late-swap forfeit, auto-sub, UEFA-style mid-round sub optionality all
+  re-confirmed with user; he's fine with the "free look" meta (matches
+  UCL fantasy his friends know).
+
+### Carryover (unchanged)
+
+- Knockout fixtures + REAL knockout deadlines after GR3 (~Jun 27) —
+  placeholder deadlines are WRONG (R32 before GR3!).
+- FIFA price re-check before GR2 unlock (Jun 18).
+- Youssef1820 still has no squad (scores from GR2 onward if he builds).
+- Per-matchday routine now: transcribe FotMob predicted XIs into the
+  builder (or send screenshots to the assistant), and watch the first
+  lineup-drop swap happen on USA-PAR tonight.
+
+---
+
+## Session 2026-06-11 №4 — FIRST LIVE MATCH VERIFIED + strict deadline lockout
+
+**The pipeline works for real.** During MEX-RSA (19:00 UTC kickoff) we
+watched the full chain in prod: cron flipped the match LIVE at kickoff,
+scores/minutes update every tick, 22 PlayerPerformance rows appeared
+~10 min in (API-Football publishes player stats with that much lag —
+0 rows in the first minutes is NORMAL, don't panic), and the green pill
+showed live on a real user's bench card. 22 users / 22 teams, all
+consistent with the global league counter.
+
+### Shipped to prod this session
+
+- **Bench-order fix** (`afe0ee9`): saved sub-priority looked reverted
+  after navigating away and back. `/api/squad/get` returns rows in DB
+  order and the squad page never sorted by `benchOrder` (the league
+  team-view endpoint sorts server-side, which is why IT looked right).
+  Now sorted on fetch in `src/app/(dashboard)/squad/page.tsx`.
+- **STRICT DEADLINE LOCKOUT** (`09ab8c6`): miss the stage deadline →
+  zero points that stage. New nullable `Team.firstSquadSavedAt`
+  (additive `prisma db push` already applied to prod), stamped exactly
+  once in `/api/squad/save` when the first complete 15 is saved. Both
+  gates — banking (`lib/squad-points`: `getLateTeamIds` +
+  `loadTeamsForMatch`) and settlement (`lib/stage-settlement`:
+  `isLate`) — compare `(firstSquadSavedAt ?? createdAt) >=
+  stage.deadlineTime`. The `createdAt` fallback makes every team that
+  existed before the column correct with NO backfill. First-time saves
+  still bypass the round lock (late joiners can build mid-round, they
+  just score nothing until next stage). Live case: `Youssef1820`
+  ("Dream FC") never built — 0 squad players, and if he saves now he
+  gets stamped late for GR1 automatically.
+- **Player modal kickoff time**: NEXT badge now shows the next
+  fixture's kickoff (e.g. "Jun 14, 3:00 PM") in the VIEWER's local
+  timezone (`toLocaleString`, deliberately not hardcoded EST). New
+  `getNextWcFixture()` in `lib/world-cup-fixtures` (returns
+  `{opponent, kickoff} | null`); date hidden when a nation has no
+  upcoming game (the old `getNextWcOpponent` falls back to the LAST
+  opponent there — a date would lie). Chip row has `flex-wrap` +
+  `whitespace-nowrap` so it wraps as a unit on phones.
+- **User deletion**: `Zaabi` (team "France") removed on request —
+  verified sole match, owned no leagues, empty squad. 23 → 22 users; global league membership cascade-deleted
+  cleanly. Pattern: copy `scripts/delete-smoke-user.ts`, add safety
+  stops (exact id + email match, refuse admins/league owners).
+  NOTE: `League.owner` has NO cascade — a user owning a league blocks
+  deletion; handle ownership first.
+
+### Rules confirmed (user asked, code verified)
+
+- **Auto-sub is NOT injury-specific**: fires at stage settlement for
+  any starter whose nation played but who got 0 minutes (injury,
+  benched, whatever). Highest-priority bench player who played, GK for
+  GK, formation kept legal, scoring-only, skipped on Bench Boost.
+- **Late-swap forfeit** works as designed: subbing out a played player
+  mid-round forfeits his banked round points (x2/x3 if armband);
+  incoming player scores only his own remaining games.
+- **Bench points show on the card but don't count** toward team total
+  unless Bench Boost or end-of-round auto-sub promotes them.
+
+### Ops gotchas discovered
+
+- **Vercel webhook silently skipped a deploy.** The lockout push
+  produced NO deployment (verified via `npx vercel ls` — no queued/
+  building/error entry at all, just nothing). An empty commit
+  (`git commit --allow-empty`) re-fired it. After ANY important push,
+  confirm a new deployment appears and `npx vercel inspect
+  https://world-cup-fantasy-coral.vercel.app` serves it.
+- **PowerShell 5.1 + git commit messages**: embedded double quotes
+  inside a here-string broke argument passing (`fatal: '3:00' is
+  outside repository`). Avoid `"` inside commit messages, or use
+  `git commit -F <file>`.
+- **No Co-Authored-By trailers in commits** — user preference, applies
+  to every commit in this repo.
+
+- **⚠ KNOCKOUT STAGE DEADLINES ARE WRONG PLACEHOLDERS** (R32 =
+  Jun 20, BEFORE GR3's Jun 24!). Harmless during groups, but the
+  lockout gate compares against `stage.deadlineTime`, so they MUST be
+  re-stamped when knockout fixtures are synced after GR3 (~Jun 27) or
+  late-joining teams get mis-gated in knockouts.
+
+### Read-only ops scripts (in `scripts/`)
+
+- `live-health-check.ts` — match flags, perf-row flow, late-gate state
+  per team. Run during any gameday wobble.
+- `audit-users.ts` — every user/team: squad completeness, captain/vice
+  counts, benchOrder integrity, unavailable picks, league counters.
+- (untracked scratch: `check-late-saves.ts`, `check-mex-rsa-owners.ts`)
+
+### Carryover
+
+- Youssef1820 needs a nudge to build (scores from GR2 onward).
+- FIFA price re-check before GR2 unlock (Jun 18) — see scripts section
+  in Session №1 below.
+- Knockout fixtures + REAL knockout deadlines after GR3.
 
 ---
 
