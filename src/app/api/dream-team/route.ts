@@ -9,6 +9,7 @@ interface PlayerWithPoints {
   position: string;
   shirtNumber: number | null;
   currentPrice: number;
+  photoUrl: string | null;
   nation: { name: string; code: string; kitColor1: string; kitColor2: string };
   totalPoints: number;
 }
@@ -73,6 +74,7 @@ export async function GET(request: NextRequest) {
           position: p.position,
           shirtNumber: p.shirtNumber,
           currentPrice: p.currentPrice,
+          photoUrl: p.photoUrl,
           nation: p.nation,
           totalPoints: perf._sum.totalPoints || 0,
         };

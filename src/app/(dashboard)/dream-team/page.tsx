@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Kit from '@/components/kit';
+import { PlayerFace } from '@/components/kit';
 
 const STAGES = [
   { id: '', name: 'Overall' },
@@ -22,6 +22,7 @@ interface DreamPlayer {
   position: string;
   shirtNumber: number | null;
   currentPrice: number;
+  photoUrl: string | null;
   nation: { name: string; code: string; kitColor1: string; kitColor2: string };
   totalPoints: number;
 }
@@ -64,12 +65,13 @@ export default function DreamTeamPage() {
     return (
       <div key={player.playerId} className="flex flex-col items-center">
         <div className="relative">
-          <Kit
+          <PlayerFace
+            photoUrl={player.photoUrl}
             primaryColor={player.nation.kitColor1}
             secondaryColor={player.nation.kitColor2}
             number={player.shirtNumber}
             nationCode={player.nation.code}
-            size="xs"
+            size="sm"
           />
         </div>
         <div className="mt-1 px-2 py-0.5 bg-gray-900/95 rounded min-w-[50px] text-center backdrop-blur-sm">
