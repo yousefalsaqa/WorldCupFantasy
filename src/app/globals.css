@@ -178,3 +178,13 @@ input:-webkit-autofill:focus {
  * the additive form so the content keeps its existing internal spacing
  * AND clears the home indicator. */
 .add-pb-safe { padding-bottom: calc(env(safe-area-inset-bottom) + 0.625rem); }
+
+/* iOS Safari auto-zooms the whole page when focusing any input whose font
+ * is under 16px, and does not zoom back out on blur. Forcing 16px on form
+ * fields at phone widths disables that zoom entirely (it only triggers
+ * below 16px). Desktop keeps the designed sizes. */
+@media (max-width: 640px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
