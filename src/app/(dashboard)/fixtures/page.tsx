@@ -55,6 +55,16 @@ function FixturesContent() {
   const [filter, setFilter] = useState<FilterOption>('all');
   const [scores, setScores] = useState<Record<string, MatchScore[]>>({});
   const [anyLive, setAnyLive] = useState(false);
+  // Clock for the kickoff countdown. Starts null and is only set after
+  // mount so the server-rendered HTML never contains a countdown string
+  // (Date.now() differs between server and client → hydration mismatch).
+  const [now, setNow] = useState<number | null>(null);
+
+  useEffect(() => {
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   // Score overlay: fetch once on mount, then re-poll every 60s while at
   // least one match is live (same cadence/convention as /squad). Failures
@@ -85,6 +95,17 @@ function FixturesContent() {
     const id = setInterval(loadScores, 60_000);
     return () => clearInterval(id);
   }, [anyLive, loadScores]);
+
+  // "5h 12m" above an hour, "12m 45s" under it — only ever shown inside
+  // the final 24h before kickoff so it reads as urgency, not noise.
+  const fmtCountdown = (ms: number) => {
+    const s = Math.floor(ms / 1000);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${(s % 60).toString().padStart(2, '0')}s`;
+    return `${s}s`;
+  };
 
   // Find the DB match for a static fixture: same nation-code pair, closest
   // kickoff. Knockout placeholders ("1A", "W M73") never match a code pair
@@ -175,6 +196,17 @@ function FixturesContent() {
           const isFT = !!score && score.isFinished;
           const hasPens =
             isFT && score.homePenalties != null && score.awayPenalties != null;
+          // Kickoff countdown: only inside the final 24h, only before
+          // kickoff, never on top of live/finished state. Falls back to
+          // the plain date outside that window.
+          const msToKickoff = now !== null
+            ? parseFixtureDateTime(fixture.date, fixture.time).getTime() - now
+            : null;
+          const showCountdown =
+            !isLive && !isFT &&
+            msToKickoff !== null &&
+            msToKickoff > 0 &&
+            msToKickoff <= 24 * 60 * 60 * 1000;
           const dayLabel = formatDate(fixture.date, fixture.time);
           const prevLabel = i > 0
             ? formatDate(filteredFixtures[i - 1].date, filteredFixtures[i - 1].time)
@@ -213,6 +245,15 @@ function FixturesContent() {
                     </span>
                     <span className="text-[10px] font-black tracking-wider text-emerald-300">
                       LIVE{score.currentMinute != null ? ` ${score.currentMinute}'` : ''}
+                    </span>
+                  </span>
+                ) : showCountdown ? (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 ring-1 ring-amber-400/40">
+                    <svg className="w-2.5 h-2.5 text-amber-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-[10px] font-black tracking-wider text-amber-300 tabular-nums">
+                      {fmtCountdown(msToKickoff!)}
                     </span>
                   </span>
                 ) : (
