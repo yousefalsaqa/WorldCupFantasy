@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getFlagUrl } from '@/lib/flags';
 import { useUserTimezone } from '@/hooks/useTimezone';
@@ -15,7 +15,24 @@ import {
   WORLD_CUP_FIXTURES as GROUP_FIXTURES,
   KNOCKOUT_FIXTURES,
   NATION_NAMES,
+  type WorldCupFixture,
 } from '@/lib/world-cup-fixtures';
+
+// One synced DB match as returned by /api/fixtures/scores. Matched to the
+// static schedule by nation-code pair (+ closest kickoff, so a hypothetical
+// knockout rematch of a group pairing can't collide).
+interface MatchScore {
+  home: string;
+  away: string;
+  kickoff: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  homePenalties: number | null;
+  awayPenalties: number | null;
+  isStarted: boolean;
+  isFinished: boolean;
+  currentMinute: number | null;
+}
 
 // 3-letter nation code → ISO flag slug used by the CDN. Kept local because
 // the flag rendering helper lives in this page.
@@ -36,6 +53,53 @@ function FixturesContent() {
   const searchParams = useSearchParams();
   const { timezone, abbreviation } = useUserTimezone();
   const [filter, setFilter] = useState<FilterOption>('all');
+  const [scores, setScores] = useState<Record<string, MatchScore[]>>({});
+  const [anyLive, setAnyLive] = useState(false);
+
+  // Score overlay: fetch once on mount, then re-poll every 60s while at
+  // least one match is live (same cadence/convention as /squad). Failures
+  // are silent — the page degrades to the plain schedule.
+  const loadScores = useCallback(async () => {
+    try {
+      const res = await fetch('/api/fixtures/scores');
+      if (!res.ok) return;
+      const data = await res.json();
+      const map: Record<string, MatchScore[]> = {};
+      for (const m of (data.matches ?? []) as MatchScore[]) {
+        const key = `${m.home}|${m.away}`;
+        (map[key] ??= []).push(m);
+      }
+      setScores(map);
+      setAnyLive(Boolean(data.anyMatchLive));
+    } catch {
+      // overlay only — keep showing the static schedule
+    }
+  }, []);
+
+  useEffect(() => {
+    loadScores();
+  }, [loadScores]);
+
+  useEffect(() => {
+    if (!anyLive) return;
+    const id = setInterval(loadScores, 60_000);
+    return () => clearInterval(id);
+  }, [anyLive, loadScores]);
+
+  // Find the DB match for a static fixture: same nation-code pair, closest
+  // kickoff. Knockout placeholders ("1A", "W M73") never match a code pair
+  // so they fall through to the plain time pill.
+  const scoreFor = (fixture: WorldCupFixture): MatchScore | null => {
+    const list = scores[`${fixture.home}|${fixture.away}`];
+    if (!list || list.length === 0) return null;
+    const t = parseFixtureDateTime(fixture.date, fixture.time).getTime();
+    return list.reduce((best, m) =>
+      Math.abs(new Date(m.kickoff).getTime() - t) <
+      Math.abs(new Date(best.kickoff).getTime() - t)
+        ? m
+        : best,
+    );
+  };
 
   // Read initial filter from URL
   useEffect(() => {
@@ -106,6 +170,11 @@ function FixturesContent() {
       <div className="space-y-3">
         {filteredFixtures.map((fixture, i) => {
           const stadium = STADIUMS[fixture.stadium];
+          const score = scoreFor(fixture);
+          const isLive = !!score && score.isStarted && !score.isFinished;
+          const isFT = !!score && score.isFinished;
+          const hasPens =
+            isFT && score.homePenalties != null && score.awayPenalties != null;
           const dayLabel = formatDate(fixture.date, fixture.time);
           const prevLabel = i > 0
             ? formatDate(filteredFixtures[i - 1].date, filteredFixtures[i - 1].time)
@@ -128,11 +197,27 @@ function FixturesContent() {
                   <div className="flex-1 h-px bg-white/10" />
                 </div>
               )}
-            <div className={`bg-white/5 border rounded-xl p-4 hover:bg-white/[0.07] transition-all ${isToday ? 'border-emerald-500/25' : 'border-white/10'}`}>
+            <div className={`bg-white/5 border rounded-xl p-4 hover:bg-white/[0.07] transition-all ${
+              isLive
+                ? 'border-emerald-400/60 shadow-[0_0_24px_rgba(16,185,129,0.18)]'
+                : isToday ? 'border-emerald-500/25' : 'border-white/10'
+            }`}>
               {/* Stage & Date Row */}
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold text-white/40 uppercase tracking-wider">{fixture.stage}</span>
-                <span className="text-xs text-white/50">{formatDate(fixture.date, fixture.time)}</span>
+                {isLive ? (
+                  <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-500/15 ring-1 ring-emerald-400/40">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+                    </span>
+                    <span className="text-[10px] font-black tracking-wider text-emerald-300">
+                      LIVE{score.currentMinute != null ? ` ${score.currentMinute}'` : ''}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-xs text-white/50">{formatDate(fixture.date, fixture.time)}</span>
+                )}
               </div>
 
               {/* Teams Row */}
@@ -142,10 +227,28 @@ function FixturesContent() {
                   <TeamCell code={fixture.home} side="home" />
                 </div>
 
-                {/* Time */}
-                <div className="px-2 sm:px-4 py-1.5 sm:py-2 bg-white/10 rounded-lg flex-shrink-0">
-                  <span className="text-white font-bold text-[10px] sm:text-sm whitespace-nowrap">{formatTime(fixture.date, fixture.time)}</span>
-                </div>
+                {/* Time / Score */}
+                {score && (isLive || isFT) ? (
+                  <div className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg flex-shrink-0 flex flex-col items-center gap-0.5 ${
+                    isLive ? 'bg-emerald-500/15 ring-1 ring-emerald-400/50' : 'bg-white/10'
+                  }`}>
+                    <span className={`font-black text-sm sm:text-lg leading-none whitespace-nowrap ${isLive ? 'text-emerald-300' : 'text-white'}`}>
+                      {score.homeScore ?? 0} - {score.awayScore ?? 0}
+                    </span>
+                    {hasPens && (
+                      <span className="text-[9px] text-white/50 whitespace-nowrap">
+                        ({score.homePenalties} - {score.awayPenalties} pens)
+                      </span>
+                    )}
+                    <span className={`text-[9px] sm:text-[10px] font-bold tracking-wider ${isLive ? 'text-emerald-300/80' : 'text-white/40'}`}>
+                      {isLive ? (score.currentMinute != null ? `${score.currentMinute}'` : 'LIVE') : 'FT'}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="px-2 sm:px-4 py-1.5 sm:py-2 bg-white/10 rounded-lg flex-shrink-0">
+                    <span className="text-white font-bold text-[10px] sm:text-sm whitespace-nowrap">{formatTime(fixture.date, fixture.time)}</span>
+                  </div>
+                )}
 
                 {/* Away Team */}
                 <div className="flex items-center gap-2 flex-1 justify-end min-w-0">

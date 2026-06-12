@@ -299,19 +299,21 @@ export default function LeaguesPage() {
                     </span>
                   </div>
 
-                  {/* Team & Manager */}
-                  <div className="col-span-5 flex flex-col justify-center">
-                    <div className="flex items-center gap-2">
-                      <span className={`font-semibold group-hover:text-emerald-400 transition-colors ${isYou ? 'text-emerald-400' : 'text-white'}`}>
+                  {/* Team & Manager — min-w-0 at each level so truncate can
+                      actually shrink inside the grid cell (long team names
+                      were overflowing and getting clipped). */}
+                  <div className="col-span-5 flex flex-col justify-center min-w-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={`font-semibold text-sm sm:text-base truncate min-w-0 group-hover:text-emerald-400 transition-colors ${isYou ? 'text-emerald-400' : 'text-white'}`}>
                         {team.teamName}
                       </span>
                       {isYou && (
-                        <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-500 text-white">
+                        <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-500 text-white flex-shrink-0">
                           You
                         </span>
                       )}
                     </div>
-                    <span className="text-sm text-white/40">{team.managerName}</span>
+                    <span className="text-sm text-white/40 truncate">{team.managerName}</span>
                   </div>
 
                   {/* Points */}
