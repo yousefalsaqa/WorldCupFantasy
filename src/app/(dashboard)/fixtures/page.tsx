@@ -90,11 +90,22 @@ function FixturesContent() {
     loadScores();
   }, [loadScores]);
 
+  // A kickoff is "imminent" from 1 min before scheduled time until 15 min
+  // after (real first whistles run late). During that window we must poll
+  // even though nothing is live yet — otherwise a page opened before
+  // kickoff never discovers the match went live without a manual reload.
+  const nearKickoff =
+    now !== null &&
+    [...GROUP_FIXTURES, ...KNOCKOUT_FIXTURES].some((f) => {
+      const diff = parseFixtureDateTime(f.date, f.time).getTime() - now;
+      return diff <= 60_000 && diff >= -15 * 60_000;
+    });
+
   useEffect(() => {
-    if (!anyLive) return;
+    if (!anyLive && !nearKickoff) return;
     const id = setInterval(loadScores, 60_000);
     return () => clearInterval(id);
-  }, [anyLive, loadScores]);
+  }, [anyLive, nearKickoff, loadScores]);
 
   // "5h 12m" above an hour, "12m 45s" under it — only ever shown inside
   // the final 24h before kickoff so it reads as urgency, not noise.
@@ -207,6 +218,15 @@ function FixturesContent() {
             msToKickoff !== null &&
             msToKickoff > 0 &&
             msToKickoff <= 24 * 60 * 60 * 1000;
+          // Bridge between countdown hitting zero and the cron flipping the
+          // match live (real whistles run a few minutes late, plus up to a
+          // minute of cron lag). Capped at 15 min so a missing DB match
+          // can't pin a card in this state forever.
+          const kickingOff =
+            !isLive && !isFT &&
+            msToKickoff !== null &&
+            msToKickoff <= 0 &&
+            msToKickoff > -15 * 60 * 1000;
           const dayLabel = formatDate(fixture.date, fixture.time);
           const prevLabel = i > 0
             ? formatDate(filteredFixtures[i - 1].date, filteredFixtures[i - 1].time)
@@ -254,6 +274,12 @@ function FixturesContent() {
                     </svg>
                     <span className="text-[10px] font-black tracking-wider text-amber-300 tabular-nums">
                       {fmtCountdown(msToKickoff!)}
+                    </span>
+                  </span>
+                ) : kickingOff ? (
+                  <span className="px-2 py-0.5 rounded-md bg-amber-500/15 ring-1 ring-amber-400/40 animate-pulse">
+                    <span className="text-[10px] font-black tracking-wider text-amber-300">
+                      KICKING OFF
                     </span>
                   </span>
                 ) : (
