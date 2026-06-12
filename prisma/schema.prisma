@@ -197,6 +197,12 @@ model PlayerPerformance {
   // breakdown when admins/users open the player modal.
   defensiveActions      Int      @default(0)
 
+  // Was the player in the starting XI (vs came off the bench)? From
+  // API-Football's games.substitute flag. Null on rows written before
+  // this column existed (backfillable). Drives the "Started last match"
+  // selection chip in the squad builder.
+  startedMatch          Boolean?
+
   totalPoints           Int      @default(0)
   
   // Live tracking

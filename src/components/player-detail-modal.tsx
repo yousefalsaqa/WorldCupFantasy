@@ -148,6 +148,11 @@ type InteractiveProps = BaseProps & {
 
 type ReadOnlyProps = BaseProps & {
   readOnly: true;
+  /** Hide the Role/Capt/V-Capt badges. For players inspected from the
+   * squad-builder picker, who aren't in any squad — a "BENCH" role badge
+   * there would be nonsense (it describes fantasy-squad role, not
+   * real-life selection). */
+  hideRole?: boolean;
 };
 
 export type PlayerDetailModalProps = InteractiveProps | ReadOnlyProps;
@@ -357,27 +362,29 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
         <div className="p-4 space-y-4">
           {/* Action row OR read-only status badges */}
           {readOnly ? (
-            <div className="grid grid-cols-4 gap-2">
-              <ReadOnlyBadge
-                label="Role"
-                value={isStarting ? 'STARTING' : 'BENCH'}
-                tone={isStarting ? 'emerald' : 'slate'}
-              />
-              <ReadOnlyBadge
-                label="Capt"
-                value={isCaptain ? 'YES' : '—'}
-                tone={isCaptain ? 'yellow' : 'mute'}
-              />
-              <ReadOnlyBadge
-                label="V-Capt"
-                value={isViceCaptain ? 'YES' : '—'}
-                tone={isViceCaptain ? 'silver' : 'mute'}
-              />
-              <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-white/5 border border-white/10 text-emerald-400">
-                <span className="text-sm font-bold mb-0.5">{player.points ?? 0}</span>
-                <span className="text-[9px] font-bold text-white/40">Points</span>
+            (props as ReadOnlyProps).hideRole ? null : (
+              <div className="grid grid-cols-4 gap-2">
+                <ReadOnlyBadge
+                  label="Role"
+                  value={isStarting ? 'STARTING' : 'BENCH'}
+                  tone={isStarting ? 'emerald' : 'slate'}
+                />
+                <ReadOnlyBadge
+                  label="Capt"
+                  value={isCaptain ? 'YES' : '—'}
+                  tone={isCaptain ? 'yellow' : 'mute'}
+                />
+                <ReadOnlyBadge
+                  label="V-Capt"
+                  value={isViceCaptain ? 'YES' : '—'}
+                  tone={isViceCaptain ? 'silver' : 'mute'}
+                />
+                <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-white/5 border border-white/10 text-emerald-400">
+                  <span className="text-sm font-bold mb-0.5">{player.points ?? 0}</span>
+                  <span className="text-[9px] font-bold text-white/40">Points</span>
+                </div>
               </div>
-            </div>
+            )
           ) : (
             <>
               <div className="grid grid-cols-4 gap-2">

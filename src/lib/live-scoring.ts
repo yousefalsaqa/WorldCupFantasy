@@ -41,6 +41,10 @@ export interface PlayerPerformanceData {
   // Surfaced so the admin UI can show "Player got +2 because he had 11 DCs"
   // and so users understand why a defender suddenly jumped 2 points.
   defensiveActions: number;
+  // True when the player was in the starting XI (inverse of API-Football's
+  // games.substitute). Persisted so the squad builder can show selection
+  // history ("Started last match" vs "Sub").
+  startedMatch: boolean;
 
   // Calculated points
   points: PointsBreakdown;
@@ -473,6 +477,7 @@ export class LiveScoringCalculator {
           goalsConceeded: inWindowConceded,
           cleanSheet: isCleanSheet,
           defensiveActions: this.countDefensiveActions(stats),
+          startedMatch: isStartingXI,
           points,
           totalPoints,
         });

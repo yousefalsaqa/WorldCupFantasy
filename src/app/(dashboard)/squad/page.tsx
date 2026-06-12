@@ -56,6 +56,9 @@ interface Player {
   nation: Nation;
   isAvailable?: boolean;
   availabilityNote?: string | null;
+  /** Selection in his nation's most recent finished match (null = nation
+   * hasn't played yet). Drives the Started/Sub/Unused picker chip. */
+  lastMatch?: { played: boolean; started: boolean | null; minutes: number } | null;
   isStarting?: boolean;
   isCaptain?: boolean;
   isViceCaptain?: boolean;
@@ -71,6 +74,48 @@ interface Player {
 }
 
 type Position = 'GK' | 'DEF' | 'MID' | 'FWD';
+
+/**
+ * Selection-history chip for picker rows: did this guy actually play his
+ * nation's last match? Green = started, amber = bench cameo, gray = unused.
+ * Nothing renders before a nation's first game (no history) or when the
+ * red OUT badge is already showing (don't stack chips).
+ */
+function LastMatchChip({ player }: { player: Player }) {
+  const lm = player.lastMatch;
+  if (!lm || player.isAvailable === false) return null;
+  if (!lm.played) {
+    return (
+      <span
+        className="shrink-0 text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-white/5 text-white/35 ring-1 ring-white/10"
+        title="Didn't play in his nation's last match"
+      >
+        Unused
+      </span>
+    );
+  }
+  if (lm.started === false) {
+    return (
+      <span
+        className="shrink-0 text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/30"
+        title="Came off the bench in his nation's last match"
+      >
+        Sub {lm.minutes}&apos;
+      </span>
+    );
+  }
+  // started === true, or null on legacy rows (pre-backfill) — show minutes.
+  // "Started 61'" not "✓ 61'" — the bare number read as "came on at 61'"
+  // during user testing; minutes-played needs the word.
+  return (
+    <span
+      className="shrink-0 text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30"
+      title="Started his nation's last match (minutes played)"
+    >
+      {lm.started ? 'Started ' : ''}{lm.minutes}&apos;
+    </span>
+  );
+}
 
 // Lowercase + strip diacritics + trim, so search is accent-insensitive and
 // survives iOS keyboard auto-capitalisation/trailing spaces.
@@ -215,7 +260,15 @@ export default function SquadPage() {
 
   // View mode state
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  // Player being INSPECTED from a picker row (the little info button) —
+  // opens the shared modal read-only without committing the swap/buy.
+  const [pickerInfoPlayer, setPickerInfoPlayer] = useState<Player | null>(null);
   const [playerToSub, setPlayerToSub] = useState<Player | null>(null);
+  // Nations whose match in the active stage has kicked off (server-derived,
+  // same gate as /api/squad/update). Played players can't enter the XI or
+  // move bench slots — this drives the client-side grey-out so users don't
+  // build an illegal sub and only find out on save.
+  const [startedNations, setStartedNations] = useState<Set<string>>(new Set());
 
   // isAdmin drives the "Undo" button visibility on per-player adjustment
   // rows inside the shared PlayerDetailModal. We fetch it once on mount;
@@ -433,6 +486,7 @@ export default function SquadPage() {
             setUnlimitedTransfers(Boolean(squadData.unlimitedTransfers));
             setAnyMatchLive(Boolean(squadData.anyMatchLive));
             setQueuedTransfers(squadData.queuedTransfers || []);
+            setStartedNations(new Set<string>(squadData.startedNationCodes || []));
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const players: Player[] = squadData.squad.map((sp: any) => ({
@@ -1011,9 +1065,33 @@ export default function SquadPage() {
     }
   };
 
+  // Has this player's nation already kicked off this round? Mirrors the
+  // server gate in /api/squad/update — played players can't enter the XI
+  // or have their bench slot moved (subbing them OUT is allowed, with
+  // forfeit, handled server-side).
+  const nationStarted = (p: Player) => startedNations.has(p.nation?.code || '');
+
+  // Why a proposed swap is blocked by the played-this-round rules, or null
+  // if it isn't. Split from isSwapValid so performSwap can show the right
+  // message instead of the generic formation alert.
+  const playedLockReason = (p1: Player, p2: Player): string | null => {
+    if (p1.isStarting === p2.isStarting) {
+      if (p1.isStarting) return null; // starter↔starter focus switch, no move
+      const lockedOne = [p1, p2].find(nationStarted);
+      return lockedOne
+        ? `${lockedOne.displayName} already played this round — his bench slot is locked.`
+        : null;
+    }
+    const incoming = p1.isStarting ? p2 : p1; // the bench player coming on
+    return nationStarted(incoming)
+      ? `${incoming.displayName} already played this round — you can't bring him into your XI now.`
+      : null;
+  };
+
   // Pure check: would swapping p1 and p2 produce a valid formation?
   const isSwapValid = (p1: Player, p2: Player): boolean => {
     if (p1.id === p2.id) return false;
+    if (playedLockReason(p1, p2) !== null) return false;
     // Two bench players can always trade places — that's an auto-sub
     // priority reorder, not a formation change.
     if (p1.isStarting === p2.isStarting) return !p1.isStarting;
@@ -1049,6 +1127,12 @@ export default function SquadPage() {
 
   // Core swap routine used by both tap-to-sub and drag-and-drop
   const performSwap = (p1: Player, p2: Player) => {
+    const lockMsg = playedLockReason(p1, p2);
+    if (lockMsg) {
+      alert(lockMsg);
+      setPlayerToSub(null);
+      return;
+    }
     if (!isSwapValid(p1, p2)) {
       alert('Invalid formation!\n\n• 1 Goalkeeper\n• 3–5 Defenders\n• 2–5 Midfielders\n• 1–3 Forwards');
       setPlayerToSub(null);
@@ -1536,6 +1620,7 @@ export default function SquadPage() {
                               {player.availabilityNote || 'OUT'}
                             </span>
                           )}
+                          <LastMatchChip player={player} />
                         </p>
                         <p className="text-white/40 text-xs flex items-center gap-1.5">
                           <img src={getFlagUrl(player.nation?.code || '')} alt="" className="w-4 h-3 rounded-[2px] object-cover" />
@@ -1543,12 +1628,33 @@ export default function SquadPage() {
                         </p>
                       </div>
                       <p className="text-emerald-400 text-sm font-bold whitespace-nowrap">£{player.currentPrice.toFixed(1)}m</p>
+                      <span
+                        role="button"
+                        onClick={(e) => { e.stopPropagation(); setPickerInfoPlayer(player); }}
+                        className="shrink-0 w-6 h-6 rounded-full ring-1 ring-white/20 text-white/50 hover:text-white hover:ring-white/50 flex items-center justify-center text-[11px] font-serif italic font-bold cursor-pointer"
+                        title="View player details"
+                      >
+                        i
+                      </span>
                     </button>
                   ))
                 )}
               </div>
             </div>
           </div>
+        )}
+
+        {pickerInfoPlayer && (
+          <PlayerDetailModal
+            player={pickerInfoPlayer}
+            isCaptain={false}
+            isViceCaptain={false}
+            isStarting={false}
+            isAdmin={isAdmin}
+            readOnly
+            hideRole
+            onClose={() => setPickerInfoPlayer(null)}
+          />
         )}
       </div>
     );
@@ -1727,11 +1833,23 @@ export default function SquadPage() {
     //     shown in transfer mode) as a discoverability hint.
     const renderTransferCard = (p: Player) => {
       const incoming = isPendingIncoming(p.id);
+      // Already queued OUT on the server (made in an earlier locked-round
+      // session). Without the violet marker users re-sell the same player:
+      // the server rejects it, but only after they've been through the
+      // whole picker flow.
+      const queuedOut = queuedTransfers.some((t) => t.playerOut?.id === p.id);
       return (
         <button
           key={p.id}
           type="button"
-          onClick={() => (incoming ? undoTransfer(p.id) : startReplace(p))}
+          onClick={() => {
+            if (incoming) return undoTransfer(p.id);
+            if (queuedOut) {
+              alert(`${p.displayName} already has a transfer queued for next round.\n\nCancel it from the "Queued for next round" card on the squad page if you change your mind.`);
+              return;
+            }
+            startReplace(p);
+          }}
           aria-label={incoming ? `Undo swap for ${p.displayName}` : `Replace ${p.displayName}`}
           className="relative flex-shrink-0 group focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 rounded-2xl"
         >
@@ -1739,7 +1857,9 @@ export default function SquadPage() {
             className={
               incoming
                 ? 'rounded-2xl ring-2 ring-amber-400 shadow-[0_0_22px_rgba(251,191,36,0.45)]'
-                : 'rounded-2xl ring-1 ring-transparent group-active:ring-laliga-gold/40 transition'
+                : queuedOut
+                  ? 'rounded-2xl ring-2 ring-violet-400 shadow-[0_0_22px_rgba(167,139,250,0.45)]'
+                  : 'rounded-2xl ring-1 ring-transparent group-active:ring-laliga-gold/40 transition'
             }
           >
             <PlayerCard
@@ -1781,6 +1901,14 @@ export default function SquadPage() {
               aria-hidden="true"
             >
               UNDO
+            </span>
+          )}
+          {queuedOut && !incoming && (
+            <span
+              className="mt-1 mx-auto block w-fit px-2 py-[2px] rounded-full bg-violet-400 text-violet-950 text-[9px] font-black tracking-wider shadow"
+              aria-hidden="true"
+            >
+              QUEUED
             </span>
           )}
         </button>
@@ -2066,6 +2194,7 @@ export default function SquadPage() {
                               {player.availabilityNote || 'OUT'}
                             </span>
                           )}
+                          <LastMatchChip player={player} />
                         </p>
                         <p className="text-white/40 text-xs flex items-center gap-1.5">
                           <img
@@ -2079,6 +2208,14 @@ export default function SquadPage() {
                       <p className="text-emerald-400 text-sm font-bold whitespace-nowrap">
                         £{player.currentPrice.toFixed(1)}m
                       </p>
+                      <span
+                        role="button"
+                        onClick={(e) => { e.stopPropagation(); setPickerInfoPlayer(player); }}
+                        className="shrink-0 w-6 h-6 rounded-full ring-1 ring-white/20 text-white/50 hover:text-white hover:ring-white/50 flex items-center justify-center text-[11px] font-serif italic font-bold cursor-pointer"
+                        title="View player details"
+                      >
+                        i
+                      </span>
                     </button>
                   ))
                 )}
@@ -2120,6 +2257,23 @@ export default function SquadPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Inspect-from-picker modal — must be mounted in THIS branch too:
+            transfer mode has its own return, and a modal mounted only in
+            the view branch stays invisible until the user leaves transfers
+            (the "card showed up after I cancelled" bug). */}
+        {pickerInfoPlayer && (
+          <PlayerDetailModal
+            player={pickerInfoPlayer}
+            isCaptain={false}
+            isViceCaptain={false}
+            isStarting={false}
+            isAdmin={isAdmin}
+            readOnly
+            hideRole
+            onClose={() => setPickerInfoPlayer(null)}
+          />
         )}
       </div>
     );
@@ -2624,6 +2778,19 @@ export default function SquadPage() {
           onCancelSub={() => setPlayerToSub(null)}
           onAdjustmentReverted={handleAdjustmentReverted}
           onClose={() => setSelectedPlayer(null)}
+        />
+      )}
+
+      {pickerInfoPlayer && (
+        <PlayerDetailModal
+          player={pickerInfoPlayer}
+          isCaptain={false}
+          isViceCaptain={false}
+          isStarting={false}
+          isAdmin={isAdmin}
+          readOnly
+          hideRole
+          onClose={() => setPickerInfoPlayer(null)}
         />
       )}
     </div>
