@@ -28,8 +28,22 @@ interface LineupPlayer {
   photoUrl: string | null;
 }
 
+interface PredictedSide {
+  formation: string | null;
+  players: Array<{
+    playerId: string;
+    name: string;
+    number: number | null;
+    pos: 'G' | 'D' | 'M' | 'F';
+    photoUrl: string | null;
+  }>;
+}
+
 interface Detail {
   available: boolean;
+  /** Admin-entered probable XI. Rendered ONLY while `lineups` is empty —
+   * the official team sheets replace it the moment they exist. */
+  predicted?: { home: PredictedSide; away: PredictedSide; updatedAt: string } | null;
   referee: string | null;
   venue: { name: string; city: string } | null;
   status: { short: string; minute: number | null; isLive: boolean; isFinished: boolean };
@@ -328,13 +342,41 @@ function StatsTab({ detail }: { detail: Detail }) {
 // ---------------------------------------------------------------------------
 
 function LineupsTab({ detail }: { detail: Detail }) {
-  if (detail.lineups.length === 0) {
+  // Official lineups absent → fall back to the admin-entered predicted XI
+  // (clearly badged). Officials always win once they exist.
+  const usePredicted = detail.lineups.length === 0 && !!detail.predicted;
+
+  if (detail.lineups.length === 0 && !usePredicted) {
     return <Empty text="Lineups drop roughly 40 minutes before kickoff." />;
   }
+
+  const sides = usePredicted
+    ? (['home', 'away'] as const).map((side) => ({
+        side,
+        formation: detail.predicted![side].formation,
+        coach: null as string | null,
+        startXI: detail.predicted![side].players.map((p, i) => ({
+          apiId: i, // synthetic key — predicted players aren't API entities
+          name: p.name,
+          number: p.number ?? 0,
+          pos: p.pos,
+          grid: null,
+          photoUrl: p.photoUrl,
+        })),
+        subs: [] as LineupPlayer[],
+      }))
+    : detail.lineups;
+
   return (
     <div className="space-y-6">
+      {usePredicted && (
+        <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 ring-1 ring-amber-400/40">
+          <span className="text-[10px] font-black tracking-wider text-amber-300">PREDICTED XI</span>
+          <span className="text-[10px] text-amber-200/60">— unofficial, replaced when team sheets drop</span>
+        </div>
+      )}
       {(['home', 'away'] as const).map((side) => {
-        const lu = detail.lineups.find((l) => l.side === side);
+        const lu = sides.find((l) => l.side === side);
         if (!lu) return null;
         const team = detail.teams[side];
         return (
@@ -345,6 +387,9 @@ function LineupsTab({ detail }: { detail: Detail }) {
               <span className="text-white text-sm font-bold">{team.name}</span>
               {lu.formation && (
                 <span className="text-[10px] font-mono text-white/50 bg-white/5 px-1.5 py-0.5 rounded">{lu.formation}</span>
+              )}
+              {usePredicted && (
+                <span className="text-[9px] font-black tracking-wider text-amber-300/80 bg-amber-500/10 px-1.5 py-0.5 rounded">PREDICTED</span>
               )}
               {lu.coach && <span className="ml-auto text-[10px] text-white/35 truncate">Coach: {lu.coach}</span>}
             </div>

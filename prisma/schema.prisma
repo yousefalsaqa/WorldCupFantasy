@@ -158,6 +158,12 @@ model Match {
   // API-Football; short TTL while live, frozen forever once final.
   detailCache   String?
 
+  // Admin-entered predicted lineups (from editorial sources, e.g. FotMob
+  // screenshots). JSON string — see src/lib/predicted-lineups.ts. Shown
+  // in the fixture modal's Lineups tab ONLY until the official lineups
+  // arrive from API-Football, then ignored.
+  predictedLineups String?
+
   stage         Stage    @relation(fields: [stageId], references: [id])
   homeNation    Nation   @relation("HomeNation", fields: [homeNationId], references: [id])
   awayNation    Nation   @relation("AwayNation", fields: [awayNationId], references: [id])

@@ -464,6 +464,7 @@ export default function AdminDashboard() {
           <ActionCard href="/admin/fixtures" icon="📅" label="Fixtures" />
           <ActionCard href="/admin/users" icon="👥" label="Users" />
           <ActionCard href="/admin/audit" icon="📋" label="Audit Log" />
+          <ActionCard href="/admin/predicted-lineups" icon="🔮" label="Predicted XIs" />
           <ActionCard href="/admin/live-test" icon="🧪" label="Live Test" />
           <ActionCard href="/admin/match-simulator" icon="🎮" label="Match Simulator" />
         </div>

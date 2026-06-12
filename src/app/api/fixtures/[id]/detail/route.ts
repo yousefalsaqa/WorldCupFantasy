@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { apiFootball, type APIFixtureFullDetail } from '@/lib/api-football';
+import { parsePredictedLineups } from '@/lib/predicted-lineups';
 
 export const dynamic = 'force-dynamic';
 
@@ -202,8 +203,15 @@ export async function GET(
     if (!match) {
       return NextResponse.json({ error: 'Match not found' }, { status: 404 });
     }
+
+    // Admin-entered predicted XI. Read fresh on EVERY request (it's on the
+    // match row we already loaded) and attached outside the cached payload,
+    // so an admin update shows up immediately regardless of cache TTLs.
+    // The modal only renders it while the official lineups are absent.
+    const predicted = parsePredictedLineups(match.predictedLineups);
+
     if (!match.apiFootballId) {
-      return NextResponse.json({ available: false });
+      return NextResponse.json({ available: false, predicted });
     }
 
     // Cache check
@@ -216,7 +224,7 @@ export async function GET(
       }
     }
     if (cached) {
-      if (cached.final) return NextResponse.json(cached.payload);
+      if (cached.final) return NextResponse.json({ ...cached.payload, predicted });
       const age = Date.now() - new Date(cached.fetchedAt).getTime();
       const msToKickoff = match.kickoffTime.getTime() - Date.now();
       const ttl = match.isStarted
@@ -224,14 +232,14 @@ export async function GET(
         : msToKickoff > LINEUP_WINDOW_MS
           ? PREMATCH_FAR_TTL_MS
           : PREMATCH_NEAR_TTL_MS;
-      if (age < ttl) return NextResponse.json(cached.payload);
+      if (age < ttl) return NextResponse.json({ ...cached.payload, predicted });
     }
 
     // Fetch fresh (1 API-Football call — everything is bundled)
     const detail = await apiFootball.getFixtureFullDetail(match.apiFootballId);
     if (!detail) {
-      if (cached) return NextResponse.json(cached.payload); // stale > nothing
-      return NextResponse.json({ available: false });
+      if (cached) return NextResponse.json({ ...cached.payload, predicted }); // stale > nothing
+      return NextResponse.json({ available: false, predicted });
     }
 
     // Map lineup players to our DB photos via apiFootballId (one query).
@@ -261,7 +269,7 @@ export async function GET(
       data: { detailCache: JSON.stringify(envelope) },
     });
 
-    return NextResponse.json(payload);
+    return NextResponse.json({ ...payload, predicted });
   } catch (error) {
     console.error('Fixture detail error:', error);
     return NextResponse.json({ error: 'Failed to load match detail' }, { status: 500 });
