@@ -1535,7 +1535,10 @@ export default function SquadPage() {
 
         {/* Player Selection Modal */}
         {showModal && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-start sm:items-center justify-center z-50 p-3 sm:p-4 animate-fade-in"
+            style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
+          >
             <div className="bg-slate-900 rounded-2xl w-full max-w-2xl max-h-[82dvh] overflow-hidden border border-white/10 shadow-2xl">
               <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-800">
                 <div className="flex items-center gap-3">
@@ -1591,7 +1594,7 @@ export default function SquadPage() {
               </div>
 
               {/* Player List */}
-              <div className="max-h-[55dvh] overflow-y-auto">
+              <div className="h-[50dvh] sm:h-auto sm:max-h-[55dvh] overflow-y-auto">
                 {availablePlayers.length === 0 ? (
                   <div className="p-8 text-center text-white/40">No players available</div>
                 ) : (
@@ -2090,7 +2093,10 @@ export default function SquadPage() {
             because `transferReplacingFor` is set; addPlayer() forwards to
             commitTransfer() in that case. */}
         {showModal && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-start sm:items-center justify-center z-50 p-3 sm:p-4 animate-fade-in"
+            style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
+          >
             <div className="bg-slate-900 rounded-2xl w-full max-w-2xl max-h-[82dvh] overflow-hidden border border-white/10 shadow-2xl">
               <div className="p-4 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-800">
                 <div className="flex items-center gap-3 min-w-0">
@@ -2163,7 +2169,7 @@ export default function SquadPage() {
                 </select>
               </div>
 
-              <div className="max-h-[55dvh] overflow-y-auto">
+              <div className="h-[50dvh] sm:h-auto sm:max-h-[55dvh] overflow-y-auto">
                 {availablePlayers.length === 0 ? (
                   <div className="p-8 text-center text-white/40">
                     No players available within budget for this slot.

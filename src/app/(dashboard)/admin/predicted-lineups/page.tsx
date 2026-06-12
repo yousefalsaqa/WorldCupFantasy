@@ -354,27 +354,36 @@ export default function PredictedLineupsAdmin() {
         </div>
       )}
 
-      {/* Player picker with faces. Top-anchored on phones: the search bar
-          sits ABOVE the keyboard so iOS never pans the viewport (bottom
-          sheets get shoved off-screen when the keyboard opens). 60dvh
-          leaves room for the keyboard underneath. */}
+      {/* Player picker with faces. A FIXED-HEIGHT popup card near the top
+          of the screen: fixed height means the panel never resizes as
+          typing filters the list (content-driven resizes made iOS re-pan
+          the viewport and visually threw the sheet around), and sitting
+          high keeps the search bar clear of the keyboard. List scrolls
+          internally. */}
       {picker && selected && (
         <div
-          className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/70 backdrop-blur-sm pt-safe-or-3 sm:pt-0 px-0 sm:px-4"
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 backdrop-blur-sm p-3"
+          style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
           onClick={() => setPicker(null)}
         >
           <div
-            className="w-full sm:max-w-md bg-slate-900 ring-1 ring-white/10 rounded-b-2xl sm:rounded-2xl max-h-[60dvh] sm:max-h-[70vh] flex flex-col overflow-hidden"
+            className="w-full max-w-md bg-slate-900 ring-1 ring-white/10 rounded-2xl h-[55dvh] flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-3 border-b border-white/10">
+            <div className="p-3 border-b border-white/10 flex items-center gap-2">
               <input
-                autoFocus
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={`Search ${nationCodeFor(picker.side)} players…`}
-                className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-white/30 focus:outline-none focus:border-white/30"
+                className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-white/30 focus:outline-none focus:border-white/30"
               />
+              <button
+                onClick={() => setPicker(null)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white/70 flex items-center justify-center text-sm shrink-0"
+                aria-label="Close"
+              >
+                ✕
+              </button>
             </div>
             <div className="flex-1 overflow-y-auto">
               {pickerCandidates.length === 0 ? (
