@@ -7,6 +7,7 @@ import {
   type ChipType,
 } from '@/lib/chips-active';
 import { getFlagCode } from '@/lib/flags';
+import { liveTeamDeltas } from '@/lib/live-team-totals';
 
 export const dynamic = 'force-dynamic';
 
@@ -138,11 +139,17 @@ export async function GET(
       where: { isStarted: true, isFinished: false },
     });
 
+    // Header live preview: banked + in-progress delta, chip/late-gate
+    // aware (shared helper mirrors banking math). Equals totalPoints
+    // whenever nothing is live.
+    const liveDelta = (await liveTeamDeltas([team.id])).get(team.id) ?? 0;
+
     return NextResponse.json({
       teamId: team.id,
       teamName: team.name,
       managerName: team.user.username,
       totalPoints: team.totalPoints,
+      liveTotalPoints: team.totalPoints + liveDelta,
       starting,
       bench,
       activeChips,

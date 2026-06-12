@@ -56,6 +56,9 @@ interface TeamData {
   teamName: string;
   managerName: string;
   totalPoints: number;
+  /** Banked + in-progress points (server-computed, chip-aware). Falls
+   * back to `totalPoints` if absent; equals it when nothing is live. */
+  liveTotalPoints?: number;
   starting: ApiPlayer[];
   bench: ApiPlayer[];
   activeChips?: string[];
@@ -265,8 +268,17 @@ export default function LeagueTeamViewPage({
           <p className="text-white/80 text-xs sm:text-sm truncate">@{team.managerName}</p>
         </div>
 
-        <div className="bg-white/20 rounded-lg px-3 py-1 shrink-0">
-          <span className="text-white font-bold text-sm">{team.totalPoints} pts</span>
+        <div className={`rounded-lg px-3 py-1 shrink-0 flex items-center gap-1.5 ${
+          (team.liveTotalPoints ?? team.totalPoints) > team.totalPoints
+            ? 'bg-emerald-500/25 ring-1 ring-emerald-400/50'
+            : 'bg-white/20'
+        }`}>
+          {(team.liveTotalPoints ?? team.totalPoints) > team.totalPoints && (
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
+          )}
+          <span className="text-white font-bold text-sm">
+            {team.liveTotalPoints ?? team.totalPoints} pts
+          </span>
         </div>
       </div>
 

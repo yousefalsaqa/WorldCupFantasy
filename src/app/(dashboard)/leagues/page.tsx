@@ -11,7 +11,10 @@ interface Standing {
   teamId: string;
   teamName: string;
   managerName: string;
+  /** Banked + in-progress (server computes the live overlay). */
   totalPoints: number;
+  /** In-progress portion of totalPoints; > 0 marks a row earning live. */
+  liveDelta?: number;
   teamValue: number;
   isCurrentUser?: boolean;
 }
@@ -316,10 +319,16 @@ export default function LeaguesPage() {
                     <span className="text-sm text-white/40 truncate">{team.managerName}</span>
                   </div>
 
-                  {/* Points */}
-                  <div className="col-span-3 flex items-center justify-end">
-                    <span className={`text-xl font-bold ${isYou ? 'text-emerald-400' : 'text-white'}`}>{team.totalPoints}</span>
-                    <span className="text-xs text-white/40 ml-1">pts</span>
+                  {/* Points — pulsing dot + green tint while this team is
+                      earning from an in-progress match */}
+                  <div className="col-span-3 flex items-center justify-end gap-1.5">
+                    {(team.liveDelta ?? 0) > 0 && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                    )}
+                    <span className={`text-xl font-bold ${
+                      isYou || (team.liveDelta ?? 0) > 0 ? 'text-emerald-400' : 'text-white'
+                    }`}>{team.totalPoints}</span>
+                    <span className="text-xs text-white/40">pts</span>
                   </div>
 
                   {/* Value */}

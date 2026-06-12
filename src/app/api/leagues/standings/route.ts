@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { liveTeamDeltas } from '@/lib/live-team-totals';
 
 // This route is dynamic to ensure fresh data
 export const dynamic = 'force-dynamic';
@@ -61,16 +62,29 @@ export async function GET(request: NextRequest) {
     // Sort by total points descending. The GLOBAL table hides admin/ops
     // teams; private leagues show every member (friends may well invite
     // the admin account on purpose).
-    const standings = league.memberships
-      .filter((m) => m.team && (!league.isGlobal || !m.team.user.isAdmin))
-      .map((m) => ({
-        rank: 0,
-        teamId: m.team!.id,
-        teamName: m.team!.name,
-        managerName: m.team!.user.username,
-        totalPoints: m.team!.totalPoints,
-        teamValue: m.team!.teamValue,
-      }))
+    const memberTeams = league.memberships.filter(
+      (m) => m.team && (!league.isGlobal || !m.team.user.isAdmin),
+    );
+
+    // Live overlay: while matches are in progress, show banked + live so
+    // first place moves in real time. `liveDelta` lets the UI mark which
+    // rows are currently earning. At FT banking absorbs the delta, so the
+    // displayed number never jumps.
+    const deltas = await liveTeamDeltas(memberTeams.map((m) => m.team!.id));
+
+    const standings = memberTeams
+      .map((m) => {
+        const liveDelta = deltas.get(m.team!.id) ?? 0;
+        return {
+          rank: 0,
+          teamId: m.team!.id,
+          teamName: m.team!.name,
+          managerName: m.team!.user.username,
+          totalPoints: m.team!.totalPoints + liveDelta,
+          liveDelta,
+          teamValue: m.team!.teamValue,
+        };
+      })
       .sort((a, b) => b.totalPoints - a.totalPoints)
       .map((team, index) => ({ ...team, rank: index + 1 }));
 
