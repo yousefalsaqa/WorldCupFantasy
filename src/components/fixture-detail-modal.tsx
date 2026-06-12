@@ -350,19 +350,46 @@ function LineupsTab({ detail }: { detail: Detail }) {
     return <Empty text="Lineups drop roughly 40 minutes before kickoff." />;
   }
 
+  // Predicted players carry no grid coordinates, and grouping by fantasy
+  // position draws the wrong shape (a wing-back classified DEF turns a
+  // back-three into a back-five). Instead, lay them out from the entered
+  // formation: players are saved in pitch order (GK first, defense →
+  // attack), so we chunk them into rows of [1, ...formation parts].
+  const predictedXI = (side: 'home' | 'away'): LineupPlayer[] => {
+    const data = detail.predicted![side];
+    const players: LineupPlayer[] = data.players.map((p, i) => ({
+      apiId: i, // synthetic key — predicted players aren't API entities
+      name: p.name,
+      number: p.number ?? 0,
+      pos: p.pos,
+      grid: null,
+      photoUrl: p.photoUrl,
+    }));
+    const parts = (data.formation ?? '')
+      .split('-')
+      .map(Number)
+      .filter((n) => Number.isFinite(n) && n > 0);
+    const rowSizes = [1, ...parts];
+    if (rowSizes.reduce((a, b) => a + b, 0) === players.length) {
+      let idx = 0;
+      rowSizes.forEach((count, r) => {
+        for (let c = 0; c < count; c++) {
+          players[idx].grid = `${r + 1}:${c + 1}`;
+          idx++;
+        }
+      });
+    }
+    // No/invalid formation → grid stays null and the renderer falls back
+    // to position buckets (imperfect shape, but never broken).
+    return players;
+  };
+
   const sides = usePredicted
     ? (['home', 'away'] as const).map((side) => ({
         side,
         formation: detail.predicted![side].formation,
         coach: null as string | null,
-        startXI: detail.predicted![side].players.map((p, i) => ({
-          apiId: i, // synthetic key — predicted players aren't API entities
-          name: p.name,
-          number: p.number ?? 0,
-          pos: p.pos,
-          grid: null,
-          photoUrl: p.photoUrl,
-        })),
+        startXI: predictedXI(side),
         subs: [] as LineupPlayer[],
       }))
     : detail.lineups;
