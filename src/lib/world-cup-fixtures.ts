@@ -144,16 +144,17 @@ export const WORLD_CUP_FIXTURES: WorldCupFixture[] = [
   { id: '13', group: 'C', home: 'BRA', away: 'MAR', date: '2026-06-13', time: '18:00', stadium: 'metlife', stage: 'Group C' },
   { id: '14', group: 'C', home: 'HAI', away: 'SCO', date: '2026-06-13', time: '21:00', stadium: 'gillette', stage: 'Group C' },
   { id: '15', group: 'C', home: 'SCO', away: 'MAR', date: '2026-06-19', time: '18:00', stadium: 'gillette', stage: 'Group C' },
-  { id: '16', group: 'C', home: 'BRA', away: 'HAI', date: '2026-06-19', time: '21:00', stadium: 'lincoln', stage: 'Group C' },
+  { id: '16', group: 'C', home: 'BRA', away: 'HAI', date: '2026-06-19', time: '20:30', stadium: 'lincoln', stage: 'Group C' },
   { id: '17', group: 'C', home: 'SCO', away: 'BRA', date: '2026-06-24', time: '18:00', stadium: 'hard_rock', stage: 'Group C' },
   { id: '18', group: 'C', home: 'MAR', away: 'HAI', date: '2026-06-24', time: '18:00', stadium: 'mercedes', stage: 'Group C' },
 
   // --- Group D: USA, Paraguay, Australia, Türkiye ---
   { id: '19', group: 'D', home: 'USA', away: 'PAR', date: '2026-06-12', time: '21:00', stadium: 'sofi', stage: 'Group D' },
-  // AUS-TUR kicks off Friday Jun 12 21:00 PT in Vancouver = 00:00 ET Jun 13.
-  { id: '20', group: 'D', home: 'AUS', away: 'TUR', date: '2026-06-13', time: '00:00', stadium: 'bc_place', stage: 'Group D' },
+  // AUS-TUR: Sat Jun 13 21:00 PT in Vancouver = 00:00 ET Jun 14 (midnight ET
+  // belongs to the NEXT calendar day — verified vs API-Football fixture).
+  { id: '20', group: 'D', home: 'AUS', away: 'TUR', date: '2026-06-14', time: '00:00', stadium: 'bc_place', stage: 'Group D' },
   { id: '21', group: 'D', home: 'USA', away: 'AUS', date: '2026-06-19', time: '15:00', stadium: 'lumen', stage: 'Group D' },
-  { id: '22', group: 'D', home: 'TUR', away: 'PAR', date: '2026-06-19', time: '00:00', stadium: 'levis', stage: 'Group D' }, // PT evening = "midnight ET"
+  { id: '22', group: 'D', home: 'TUR', away: 'PAR', date: '2026-06-19', time: '23:00', stadium: 'levis', stage: 'Group D' }, // 20:00 PT = 23:00 ET (verified vs API-Football)
   { id: '23', group: 'D', home: 'TUR', away: 'USA', date: '2026-06-25', time: '22:00', stadium: 'sofi', stage: 'Group D' },
   { id: '24', group: 'D', home: 'PAR', away: 'AUS', date: '2026-06-25', time: '22:00', stadium: 'levis', stage: 'Group D' },
 
@@ -169,7 +170,8 @@ export const WORLD_CUP_FIXTURES: WorldCupFixture[] = [
   { id: '31', group: 'F', home: 'NED', away: 'JPN', date: '2026-06-14', time: '16:00', stadium: 'att', stage: 'Group F' },
   { id: '32', group: 'F', home: 'SWE', away: 'TUN', date: '2026-06-14', time: '22:00', stadium: 'bbva', stage: 'Group F' },
   { id: '33', group: 'F', home: 'NED', away: 'SWE', date: '2026-06-20', time: '13:00', stadium: 'nrg', stage: 'Group F' },
-  { id: '34', group: 'F', home: 'TUN', away: 'JPN', date: '2026-06-20', time: '00:00', stadium: 'bbva', stage: 'Group F' },
+  // TUN-JPN: 21:00 PT Jun 20 = 00:00 ET Jun 21 (verified vs API-Football).
+  { id: '34', group: 'F', home: 'TUN', away: 'JPN', date: '2026-06-21', time: '00:00', stadium: 'bbva', stage: 'Group F' },
   { id: '35', group: 'F', home: 'JPN', away: 'SWE', date: '2026-06-25', time: '19:00', stadium: 'att', stage: 'Group F' },
   { id: '36', group: 'F', home: 'TUN', away: 'NED', date: '2026-06-25', time: '19:00', stadium: 'arrowhead', stage: 'Group F' },
 
@@ -199,8 +201,9 @@ export const WORLD_CUP_FIXTURES: WorldCupFixture[] = [
 
   // --- Group J: Argentina, Algeria, Jordan, Austria ---
   { id: '55', group: 'J', home: 'ARG', away: 'ALG', date: '2026-06-16', time: '21:00', stadium: 'arrowhead', stage: 'Group J' },
-  // Austria–Jordan: "Tue Jun 16 12:00 AM ET" → 00:00 on Jun 16 (PT evening Jun 15).
-  { id: '56', group: 'J', home: 'AUT', away: 'JOR', date: '2026-06-16', time: '00:00', stadium: 'levis', stage: 'Group J' },
+  // AUT-JOR: 21:00 PT Jun 16 at Levi's = 00:00 ET Jun 17 (midnight ET is the
+  // NEXT calendar day — verified vs API-Football fixture).
+  { id: '56', group: 'J', home: 'AUT', away: 'JOR', date: '2026-06-17', time: '00:00', stadium: 'levis', stage: 'Group J' },
   { id: '57', group: 'J', home: 'ARG', away: 'AUT', date: '2026-06-22', time: '13:00', stadium: 'att', stage: 'Group J' },
   { id: '58', group: 'J', home: 'JOR', away: 'ALG', date: '2026-06-22', time: '23:00', stadium: 'levis', stage: 'Group J' },
   { id: '59', group: 'J', home: 'ALG', away: 'AUT', date: '2026-06-27', time: '22:00', stadium: 'arrowhead', stage: 'Group J' },
