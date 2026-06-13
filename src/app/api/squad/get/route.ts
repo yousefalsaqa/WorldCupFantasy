@@ -255,6 +255,10 @@ export async function GET(request: NextRequest) {
     // Same gate as /api/squad/update: isStarted OR kickoff in the past —
     // empty when the stage isn't locked yet (pre-deadline, anything goes).
     const startedNationCodes: string[] = [];
+    // Subset of startedNationCodes whose match is CURRENTLY in progress
+    // (started, not finished). Lets the squad page word the sub-off warning
+    // differently for "in play now" vs "already played" (finished).
+    const liveNationCodes: string[] = [];
     const activeStageRow = await prisma.stage.findFirst({
       where: { isActive: true },
       select: { id: true, deadlineTime: true },
@@ -264,6 +268,7 @@ export async function GET(request: NextRequest) {
         where: { stageId: activeStageRow.id },
         select: {
           isStarted: true,
+          isFinished: true,
           kickoffTime: true,
           homeNation: { select: { code: true } },
           awayNation: { select: { code: true } },
@@ -271,19 +276,26 @@ export async function GET(request: NextRequest) {
       });
       const now = new Date();
       const codes = new Set<string>();
+      const liveCodes = new Set<string>();
       for (const m of stageMatches) {
         if (m.isStarted || m.kickoffTime <= now) {
           codes.add(m.homeNation.code);
           codes.add(m.awayNation.code);
+          if (m.isStarted && !m.isFinished) {
+            liveCodes.add(m.homeNation.code);
+            liveCodes.add(m.awayNation.code);
+          }
         }
       }
       startedNationCodes.push(...Array.from(codes));
+      liveNationCodes.push(...Array.from(liveCodes));
     }
 
     return NextResponse.json({
       squad,
       teamId: team.id,
       startedNationCodes,
+      liveNationCodes,
       bankBalance: refreshedTeam?.bankBalance ?? team.bankBalance,
       teamValue: refreshedTeam?.teamValue ?? team.teamValue,
       // Surface the transfer-budget fields so the squad page can drive the

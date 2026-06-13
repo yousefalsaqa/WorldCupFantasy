@@ -273,6 +273,9 @@ export default function SquadPage() {
   // move bench slots — this drives the client-side grey-out so users don't
   // build an illegal sub and only find out on save.
   const [startedNations, setStartedNations] = useState<Set<string>>(new Set());
+  // Subset of startedNations whose match is currently in progress (live), so
+  // the sub-off warning can say "in play now" vs "already played" (finished).
+  const [liveNations, setLiveNations] = useState<Set<string>>(new Set());
 
   // isAdmin drives the "Undo" button visibility on per-player adjustment
   // rows inside the shared PlayerDetailModal. We fetch it once on mount;
@@ -491,6 +494,7 @@ export default function SquadPage() {
             setAnyMatchLive(Boolean(squadData.anyMatchLive));
             setQueuedTransfers(squadData.queuedTransfers || []);
             setStartedNations(new Set<string>(squadData.startedNationCodes || []));
+            setLiveNations(new Set<string>(squadData.liveNationCodes || []));
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const players: Player[] = squadData.squad.map((sp: any) => ({
@@ -2823,6 +2827,7 @@ export default function SquadPage() {
           bringing him back into the XI until next round. */}
       {subOffWarning && (() => {
         const playerOut = subOffWarning.p1.isStarting ? subOffWarning.p1 : subOffWarning.p2;
+        const isLiveNow = liveNations.has(playerOut.nation?.code || '');
         return (
           <div
             className="fixed inset-0 bg-black/80 z-[9999] backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
@@ -2838,24 +2843,40 @@ export default function SquadPage() {
               {/* Header */}
               <div className="px-4 pt-4 pb-3 flex items-center gap-3 bg-gradient-to-br from-amber-500/15 via-orange-500/5 to-transparent">
                 <div className="relative shrink-0">
-                  <div className="absolute inset-0 rounded-xl bg-amber-500/40 blur-md" />
-                  <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-amber-950 flex items-center justify-center shadow-lg">
-                    <AlertTriangle className="w-5 h-5" strokeWidth={2.5} />
+                  <div className={`absolute inset-0 rounded-xl blur-md ${isLiveNow ? 'bg-emerald-500/40' : 'bg-amber-500/40'}`} />
+                  <div className="relative drop-shadow-lg">
+                    <PlayerFace
+                      photoUrl={playerOut.photoUrl}
+                      primaryColor={playerOut.nation?.kitColor1 || '#FFF'}
+                      secondaryColor={playerOut.nation?.kitColor2 || '#000'}
+                      number={playerOut.shirtNumber}
+                      nationCode={playerOut.nation?.code || ''}
+                      size="xs"
+                    />
                   </div>
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-base font-black text-white leading-tight">Sub off {playerOut.displayName}?</h3>
-                  <span className="inline-flex items-center gap-1.5 mt-0.5 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                    Already played
-                  </span>
+                  {isLiveNow ? (
+                    <span className="inline-flex items-center gap-1.5 mt-0.5 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Match live now
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 mt-0.5 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30">
+                      Already played
+                    </span>
+                  )}
                 </div>
               </div>
 
               {/* Consequences */}
               <div className="px-4 pt-1 pb-4">
                 <p className="text-white/65 text-xs leading-relaxed mb-2.5">
-                  He&apos;s already played this round. Bench him and <span className="text-white font-bold">save</span> and you&apos;ll:
+                  {isLiveNow
+                    ? 'His match has already kicked off and is in play.'
+                    : "He's already played this round."}{' '}
+                  Bench him and <span className="text-white font-bold">save</span> and you&apos;ll:
                 </p>
                 <div className="space-y-1.5">
                   <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-amber-500/10 ring-1 ring-amber-500/25">
