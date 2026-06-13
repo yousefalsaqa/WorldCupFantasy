@@ -19,7 +19,7 @@ import {
   deadlineFor,
   parseFixtureDateTime,
 } from '@/lib/format-time';
-import { Trophy, Wallet, Coins, Sparkles, Zap, RefreshCw, Crown, Users, Save, X, Search, Wand2 } from 'lucide-react';
+import { Trophy, Wallet, Coins, Sparkles, Zap, RefreshCw, Crown, Users, Save, X, Search, Wand2, AlertTriangle, Lock } from 'lucide-react';
 import {
   ALL_WC_FIXTURES,
   NATION_NAMES as WC_NATION_NAMES,
@@ -264,6 +264,10 @@ export default function SquadPage() {
   // opens the shared modal read-only without committing the swap/buy.
   const [pickerInfoPlayer, setPickerInfoPlayer] = useState<Player | null>(null);
   const [playerToSub, setPlayerToSub] = useState<Player | null>(null);
+  // A starter→bench swap that needs a one-way-forfeit confirmation because
+  // the outgoing player's match has already kicked off. Holds the pending
+  // swap pair until the user confirms (then performSwap runs with confirmed).
+  const [subOffWarning, setSubOffWarning] = useState<{ p1: Player; p2: Player } | null>(null);
   // Nations whose match in the active stage has kicked off (server-derived,
   // same gate as /api/squad/update). Played players can't enter the XI or
   // move bench slots — this drives the client-side grey-out so users don't
@@ -1125,8 +1129,9 @@ export default function SquadPage() {
   // Drag-and-drop ref (sync with state for HTML5 DnD)
   const draggingRef = useRef<Player | null>(null);
 
-  // Core swap routine used by both tap-to-sub and drag-and-drop
-  const performSwap = (p1: Player, p2: Player) => {
+  // Core swap routine used by both tap-to-sub and drag-and-drop. `confirmed`
+  // bypasses the sub-off-forfeit warning once the user has accepted it.
+  const performSwap = (p1: Player, p2: Player, confirmed = false) => {
     const lockMsg = playedLockReason(p1, p2);
     if (lockMsg) {
       alert(lockMsg);
@@ -1157,6 +1162,18 @@ export default function SquadPage() {
 
     const playerOut = p1.isStarting ? p1 : p2;
     const playerIn = p1.isStarting ? p2 : p1;
+
+    // Subbing OFF a player whose match has already kicked off is one-way:
+    // saving forfeits the round points he's banked, and the played-lock then
+    // prevents bringing him back into the XI this round. Warn before it's
+    // committed — tap-to-sub, drag-and-drop and the modal Sub button all
+    // funnel through here, so this one guard covers every entry point.
+    if (!confirmed && nationStarted(playerOut)) {
+      setSubOffWarning({ p1, p2 });
+      setPlayerToSub(null);
+      setSelectedPlayer(null);
+      return;
+    }
 
     const nextStarting = startingXI.map(p => p.id === playerOut.id ? { ...playerIn, isStarting: true } : p);
     const nextBench = bench.map(p => p.id === playerIn.id ? { ...playerOut, isStarting: false } : p);
@@ -2799,6 +2816,89 @@ export default function SquadPage() {
           onClose={() => setPickerInfoPlayer(null)}
         />
       )}
+
+      {/* Sub-off forfeit warning — fires when moving a player to the bench
+          whose match has already kicked off this round. It's a one-way move:
+          saving forfeits his banked round points and the played-lock blocks
+          bringing him back into the XI until next round. */}
+      {subOffWarning && (() => {
+        const playerOut = subOffWarning.p1.isStarting ? subOffWarning.p1 : subOffWarning.p2;
+        return (
+          <div
+            className="fixed inset-0 bg-black/80 z-[9999] backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
+            onClick={() => setSubOffWarning(null)}
+          >
+            <div
+              className="relative bg-gradient-to-b from-slate-900 to-slate-950 border border-amber-500/20 rounded-2xl w-full max-w-xs overflow-hidden shadow-[0_24px_70px_-15px_rgba(0,0,0,0.85)] animate-scale-in"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Top accent bar */}
+              <div className="h-1 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-400" />
+
+              {/* Header */}
+              <div className="px-4 pt-4 pb-3 flex items-center gap-3 bg-gradient-to-br from-amber-500/15 via-orange-500/5 to-transparent">
+                <div className="relative shrink-0">
+                  <div className="absolute inset-0 rounded-xl bg-amber-500/40 blur-md" />
+                  <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-amber-950 flex items-center justify-center shadow-lg">
+                    <AlertTriangle className="w-5 h-5" strokeWidth={2.5} />
+                  </div>
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-base font-black text-white leading-tight">Sub off {playerOut.displayName}?</h3>
+                  <span className="inline-flex items-center gap-1.5 mt-0.5 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                    Already played
+                  </span>
+                </div>
+              </div>
+
+              {/* Consequences */}
+              <div className="px-4 pt-1 pb-4">
+                <p className="text-white/65 text-xs leading-relaxed mb-2.5">
+                  He&apos;s already played this round. Bench him and <span className="text-white font-bold">save</span> and you&apos;ll:
+                </p>
+                <div className="space-y-1.5">
+                  <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-amber-500/10 ring-1 ring-amber-500/25">
+                    <Coins className="w-3.5 h-3.5 text-amber-300 shrink-0 mt-0.5" strokeWidth={2.5} />
+                    <p className="text-amber-100/90 text-[11px] leading-snug">
+                      <span className="font-black text-amber-200">Forfeit his round points</span> — everything banked this round stops counting.
+                    </p>
+                  </div>
+                  <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-amber-500/10 ring-1 ring-amber-500/25">
+                    <Lock className="w-3.5 h-3.5 text-amber-300 shrink-0 mt-0.5" strokeWidth={2.5} />
+                    <p className="text-amber-100/90 text-[11px] leading-snug">
+                      <span className="font-black text-amber-200">Lock him out</span> — no bringing him back into your XI until next round.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="px-4 pb-4 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSubOffWarning(null)}
+                  className="flex-1 px-3 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 ring-1 ring-white/15 text-white font-bold text-sm shadow-lg active:scale-95 transition-all"
+                >
+                  Keep him
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const { p1, p2 } = subOffWarning;
+                    setSubOffWarning(null);
+                    performSwap(p1, p2, true);
+                  }}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-gradient-to-r from-amber-400 to-orange-500 text-amber-950 font-black text-sm shadow-[0_4px_16px_rgba(245,158,11,0.4)] hover:from-amber-300 hover:to-orange-400 hover:shadow-[0_6px_22px_rgba(245,158,11,0.55)] active:scale-95 transition-all"
+                >
+                  <ArrowLeftRight className="w-4 h-4" strokeWidth={2.5} />
+                  Sub off
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
