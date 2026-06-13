@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { apiFootball } from '@/lib/api-football';
 import { LiveScoringCalculator } from '@/lib/live-scoring';
 import { requireAdmin } from '@/lib/auth';
+import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,6 +65,19 @@ export async function GET(request: NextRequest) {
     // a confused empty table.
     const totalPlayerRows = teamsData.reduce((n, t) => n + t.players.length, 0);
 
+    // Match production: score by fantasy (DB) position, not API match role.
+    const apiPlayerIds = teamsData.flatMap((t) => t.players.map((p) => p.player.id));
+    const dbPlayers = await prisma.player.findMany({
+      where: { apiFootballId: { in: apiPlayerIds } },
+      select: { apiFootballId: true, position: true },
+    });
+    const positionOverrides = new Map<number, 'GK' | 'DEF' | 'MID' | 'FWD'>();
+    for (const p of dbPlayers) {
+      if (p.apiFootballId != null) {
+        positionOverrides.set(p.apiFootballId, p.position as 'GK' | 'DEF' | 'MID' | 'FWD');
+      }
+    }
+
     const calculator = new LiveScoringCalculator(stageIdRaw);
     const playerPoints = calculator.processFixtureData(
       teamsData,
@@ -72,6 +86,7 @@ export async function GET(request: NextRequest) {
       fixture.goals.away ?? 0,
       fixture.teams.home.id,
       fixture.teams.away.id,
+      positionOverrides,
     );
 
     // Sort top-scoring first for the UI default.

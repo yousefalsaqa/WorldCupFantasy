@@ -183,6 +183,23 @@ async function handleUpdate(request: NextRequest) {
           apiFootball.getFixtureEvents(fixtureId),
         ]);
 
+        // Score players at their FANTASY (DB) position, not API-Football's
+        // per-match role. Pre-load every player in this fixture so we can
+        // map apiFootballId -> our position and pass it to the calculator.
+        const apiPlayerIds = teamsData.flatMap((t) =>
+          t.players.map((p) => p.player.id),
+        );
+        const dbPlayers = await prisma.player.findMany({
+          where: { apiFootballId: { in: apiPlayerIds } },
+          select: { apiFootballId: true, position: true },
+        });
+        const positionOverrides = new Map<number, 'GK' | 'DEF' | 'MID' | 'FWD'>();
+        for (const p of dbPlayers) {
+          if (p.apiFootballId != null) {
+            positionOverrides.set(p.apiFootballId, p.position as 'GK' | 'DEF' | 'MID' | 'FWD');
+          }
+        }
+
         // Calculate points using our scoring system
         const calculator = new LiveScoringCalculator(match.stage.stageId);
         const playerPerformances = calculator.processFixtureData(
@@ -191,7 +208,8 @@ async function handleUpdate(request: NextRequest) {
           fixture.goals.home || 0,
           fixture.goals.away || 0,
           match.homeNation.apiFootballId!,
-          match.awayNation.apiFootballId!
+          match.awayNation.apiFootballId!,
+          positionOverrides,
         );
 
         let playersUpdated = 0;

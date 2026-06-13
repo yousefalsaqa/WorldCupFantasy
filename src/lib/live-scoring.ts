@@ -98,9 +98,17 @@ export interface MatchPerformanceResult {
 //     - `player`  is the player going OFF
 //     - `assist`  is the player coming ON
 //   Goal events follow the obvious convention (player = scorer,
-//   assist = assister or null). For an own goal, `team` is the team
-//   that scored on themselves (i.e. the LOSING team for that goal),
-//   so the goal credit goes to their opponent.
+//   assist = assister or null). For an OWN goal, `event.team` is the
+//   team CREDITED with the goal on the scoreboard — i.e. the
+//   BENEFICIARY (the scorer's opponent), NOT the scorer's own team.
+//   Verified against production WC fixture USA 4-1 PAR (2026-06): the
+//   7' D. Bobadilla (PAR) own goal carried `team = USA`. So for both
+//   normal and own goals, `event.team` already names the conceding
+//   team's opponent — we trust it directly and must NOT flip own
+//   goals. (An earlier flip, mis-derived from an Ecuadorian-league test
+//   fixture, credited OGs to the scorer's team and wrongly denied the
+//   beneficiary's defenders/keeper their clean sheet while hitting them
+//   with the conceded penalty.)
 
 export interface OnPitchWindow {
   /** Inclusive: minute the player came onto the pitch. 0 for starters. */
@@ -171,9 +179,15 @@ export function getOnPitchWindow(
  *   - Missed penalties (these are encoded as Goal/Missed Penalty in
  *     events but obviously aren't actual conceded goals)
  *
- * Own goals are tricky: the API records the scorer's TEAM, which is
- * the team scoring on themselves. The goal counts toward the
- * opponent's scoreboard, so we flip the credit here.
+ * Own goals: API-Football credits `event.team` to the team whose
+ * scoreboard tally goes up — for a normal goal that's the scorer's
+ * team, and for an own goal that's the BENEFICIARY (the scorer's
+ * opponent). So `event.team` already names the team the goal counts
+ * FOR; we count it against `playerTeam` iff that team is the opponent.
+ * No own-goal flip — see the CONVENTION note at the top of this file.
+ *
+ * `playerTeamId` is retained for signature stability / readability even
+ * though only `opponentTeamId` is now consulted.
  */
 export function countOpponentGoalsInWindow(
   events: APIEvent[],
@@ -181,20 +195,14 @@ export function countOpponentGoalsInWindow(
   playerTeamId: number,
   opponentTeamId: number,
 ): number {
+  void playerTeamId;
   let count = 0;
   for (const event of events) {
     if (event.type !== 'Goal') continue;
     if (isPenaltyShootout(event)) continue;
     if (event.detail === 'Missed Penalty') continue;
 
-    const isOwnGoal = event.detail === 'Own Goal';
-    const goalCreditedTo = isOwnGoal
-      ? event.team.id === playerTeamId
-        ? opponentTeamId
-        : playerTeamId
-      : event.team.id;
-
-    if (goalCreditedTo !== opponentTeamId) continue;
+    if (event.team.id !== opponentTeamId) continue;
 
     const minute = event.time.elapsed + (event.time.extra ?? 0);
     if (minute >= window.start && minute <= window.end) {
@@ -387,7 +395,17 @@ export class LiveScoringCalculator {
   }
 
   /**
-   * Process all players from a fixture
+   * Process all players from a fixture.
+   *
+   * `positionOverrides` maps API-Football player id -> the player's FANTASY
+   * (DB) position. When supplied we score the player at his drafted
+   * position rather than API-Football's per-match `games.position`. This
+   * matters because the API reclassifies players by the role they played
+   * that match (e.g. a fullback fielded as a wing-back is tagged 'M'),
+   * which would otherwise pay clean-sheet/goal/conceded points at the
+   * wrong rate vs the slot the manager actually drafted him into. Falls
+   * back to the API position when a player isn't in the map (and tests
+   * omit the map entirely to exercise the raw API-position path).
    */
   processFixtureData(
     teamsData: APITeamPlayersResponse[],
@@ -395,7 +413,8 @@ export class LiveScoringCalculator {
     homeScore: number,
     awayScore: number,
     homeTeamId: number,
-    awayTeamId: number
+    awayTeamId: number,
+    positionOverrides?: Map<number, PlayerPerformanceData['position']>,
   ): PlayerPerformanceData[] {
     const results: PlayerPerformanceData[] = [];
 
@@ -408,7 +427,9 @@ export class LiveScoringCalculator {
         if (!playerData.statistics[0]) continue;
 
         const stats = playerData.statistics[0];
-        const position = convertPosition(stats.games.position);
+        const position =
+          positionOverrides?.get(playerData.player.id) ??
+          convertPosition(stats.games.position);
         const minutes = stats.games.minutes || 0;
 
         // Skip players who didn't play

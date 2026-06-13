@@ -276,14 +276,30 @@ console.log('\n=== countOpponentGoalsInWindow ===\n');
 }
 
 {
-  // Own goal by player on team 1 counts as opponent (team 2) goal.
+  // Own goal counts against the team that conceded it. API-Football tags
+  // the OG's `team` as the BENEFICIARY (team 2 here), so from team 1's
+  // perspective it's an opponent goal.
   const events = [
-    ev({ minute: 50, teamId: 1, playerId: 5, type: 'Goal', detail: 'Own Goal' }),
+    ev({ minute: 50, teamId: 2, playerId: 5, type: 'Goal', detail: 'Own Goal' }),
   ];
   check(
-    'Own goal scored against us still counts toward opponent → 1',
+    'Own goal (team=beneficiary) counts against the conceding team → 1',
     countOpponentGoalsInWindow(events, { start: 0, end: Number.POSITIVE_INFINITY }, 1, 2),
     1,
+  );
+}
+
+{
+  // Mirror of the above: an own goal that BENEFITS team 1 (team=1) must
+  // NOT count against team 1's defenders. This is the USA 4-1 PAR bug:
+  // PAR's own goal carried team=USA and was wrongly counted vs USA.
+  const events = [
+    ev({ minute: 7, teamId: 1, playerId: 9, type: 'Goal', detail: 'Own Goal' }),
+  ];
+  check(
+    'Own goal that benefits us does NOT count against us → 0',
+    countOpponentGoalsInWindow(events, { start: 0, end: Number.POSITIVE_INFINITY }, 1, 2),
+    0,
   );
 }
 
@@ -506,10 +522,11 @@ function runOne(args: {
     ],
     awayPlayers: [],
     events: [
-      // Own goal: event.team is the SCORER's team (team 1, the one
-      // scoring on themselves) — goal credited to team 2 on the
-      // scoreboard.
-      ev({ minute: 50, teamId: 1, playerId: 10, type: 'Goal', detail: 'Own Goal' }),
+      // Own goal: API-Football tags `team` as the BENEFICIARY (team 2,
+      // the side the goal is credited to on the scoreboard). Player 10
+      // on team 1 is the scorer (eats -2 via player.id match) and team 1
+      // concedes it.
+      ev({ minute: 50, teamId: 2, playerId: 10, type: 'Goal', detail: 'Own Goal' }),
     ],
   });
   const og = results.find((r) => r.apiPlayerId === 10);
