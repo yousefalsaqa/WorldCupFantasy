@@ -167,8 +167,74 @@ export async function GET(request: NextRequest) {
       where: { isStarted: true, isFinished: false },
     });
 
+    // --- Late-joiner "provisional points" -----------------------------------
+    // A team is "late" for the active stage when its first complete squad save
+    // landed at/after that stage's deadline (realistically: brand-new joiners).
+    // Their points DON'T count toward the team total or league rank this stage,
+    // but we still SHOW the per-player points on their OWN squad page so they
+    // can follow along. We derive those provisional points here from the active
+    // stage's PlayerPerformance rows (live + finished) rather than banking them,
+    // so the scoring engine and standings stay untouched. This keys off each
+    // stage's own deadline, so it works for a late joiner at ANY stage.
+    const activeStage = await prisma.stage.findFirst({
+      where: { isActive: true },
+      select: { id: true, name: true, order: true, deadlineTime: true },
+    });
+    const effectiveTeam = refreshedTeam ?? team;
+    const isLate = !!(
+      activeStage?.deadlineTime &&
+      (effectiveTeam.firstSquadSavedAt ?? effectiveTeam.createdAt) >= activeStage.deadlineTime
+    );
+
+    // Matches in the active stage — ids/flags reused by the nation-gate below
+    // and the provisional perf sums above.
+    const activeStageMatches = activeStage
+      ? await prisma.match.findMany({
+          where: { stageId: activeStage.id },
+          select: {
+            id: true,
+            isStarted: true,
+            isFinished: true,
+            kickoffTime: true,
+            homeNation: { select: { code: true } },
+            awayNation: { select: { code: true } },
+          },
+        })
+      : [];
+
+    // Provisional per-player points for a late team: every perf row (live or
+    // finished) the player has in the active stage. Empty for eligible teams.
+    const provisionalByPlayer = new Map<string, number>();
+    let nextCountingStageName: string | null = null;
+    if (isLate && activeStage) {
+      const stageMatchIds = activeStageMatches.map((m) => m.id);
+      if (stageMatchIds.length > 0 && playerIds.length > 0) {
+        const perfs = await prisma.playerPerformance.findMany({
+          where: { playerId: { in: playerIds }, matchId: { in: stageMatchIds } },
+          select: { playerId: true, totalPoints: true },
+        });
+        for (const p of perfs) {
+          provisionalByPlayer.set(
+            p.playerId,
+            (provisionalByPlayer.get(p.playerId) ?? 0) + p.totalPoints,
+          );
+        }
+      }
+      // The stage they DO start counting from = the next stage by order.
+      const next = await prisma.stage.findFirst({
+        where: { order: { gt: activeStage.order } },
+        orderBy: { order: 'asc' },
+        select: { name: true },
+      });
+      nextCountingStageName = next?.name ?? null;
+    }
+
     const squad = squadPlayers.map(sp => {
-      const liveAdd = livePointsByPlayer.get(sp.playerId) ?? 0;
+      // Late teams see the active stage's provisional points (never banked);
+      // eligible teams see the normal live overlay (banked + in-progress).
+      const liveAdd = isLate
+        ? (provisionalByPlayer.get(sp.playerId) ?? 0)
+        : (livePointsByPlayer.get(sp.playerId) ?? 0);
       return {
         id: sp.id,
         playerId: sp.playerId,
@@ -259,25 +325,11 @@ export async function GET(request: NextRequest) {
     // (started, not finished). Lets the squad page word the sub-off warning
     // differently for "in play now" vs "already played" (finished).
     const liveNationCodes: string[] = [];
-    const activeStageRow = await prisma.stage.findFirst({
-      where: { isActive: true },
-      select: { id: true, deadlineTime: true },
-    });
-    if (activeStageRow?.deadlineTime && activeStageRow.deadlineTime <= new Date()) {
-      const stageMatches = await prisma.match.findMany({
-        where: { stageId: activeStageRow.id },
-        select: {
-          isStarted: true,
-          isFinished: true,
-          kickoffTime: true,
-          homeNation: { select: { code: true } },
-          awayNation: { select: { code: true } },
-        },
-      });
+    if (activeStage?.deadlineTime && activeStage.deadlineTime <= new Date()) {
       const now = new Date();
       const codes = new Set<string>();
       const liveCodes = new Set<string>();
-      for (const m of stageMatches) {
+      for (const m of activeStageMatches) {
         if (m.isStarted || m.kickoffTime <= now) {
           codes.add(m.homeNation.code);
           codes.add(m.awayNation.code);
@@ -296,6 +348,17 @@ export async function GET(request: NextRequest) {
       teamId: team.id,
       startedNationCodes,
       liveNationCodes,
+      // Late-joiner provisional-points state. When isLate, the per-player
+      // `livePoints` above are this stage's PROVISIONAL points (shown but not
+      // counted); the team total/rank stay frozen. The page uses this to gate
+      // its header total and show an explainer banner naming the round.
+      isLate,
+      lockedStageName: isLate ? (activeStage?.name ?? null) : null,
+      nextCountingStageName,
+      // Authoritative banked total (rank number). Late teams get the frozen
+      // value here so the page header can show it instead of summing the
+      // provisional pills.
+      teamTotalPoints: effectiveTeam.totalPoints,
       bankBalance: refreshedTeam?.bankBalance ?? team.bankBalance,
       teamValue: refreshedTeam?.teamValue ?? team.teamValue,
       // Surface the transfer-budget fields so the squad page can drive the

@@ -19,7 +19,7 @@ import {
   deadlineFor,
   parseFixtureDateTime,
 } from '@/lib/format-time';
-import { Trophy, Wallet, Coins, Sparkles, Zap, RefreshCw, Crown, Users, Save, X, Search, Wand2, AlertTriangle, Lock } from 'lucide-react';
+import { Trophy, Wallet, Coins, Sparkles, Zap, RefreshCw, Crown, Users, Save, X, Search, Wand2, Lock } from 'lucide-react';
 import {
   ALL_WC_FIXTURES,
   NATION_NAMES as WC_NATION_NAMES,
@@ -276,6 +276,13 @@ export default function SquadPage() {
   // Subset of startedNations whose match is currently in progress (live), so
   // the sub-off warning can say "in play now" vs "already played" (finished).
   const [liveNations, setLiveNations] = useState<Set<string>>(new Set());
+  // Late-joiner state: this team first saved after the active stage's deadline,
+  // so its players' points show but don't count toward the total/rank until the
+  // next stage. Drives the explainer banner + a frozen header total.
+  const [isLate, setIsLate] = useState(false);
+  const [lockedStageName, setLockedStageName] = useState<string | null>(null);
+  const [nextCountingStageName, setNextCountingStageName] = useState<string | null>(null);
+  const [teamTotalPoints, setTeamTotalPoints] = useState(0);
 
   // isAdmin drives the "Undo" button visibility on per-player adjustment
   // rows inside the shared PlayerDetailModal. We fetch it once on mount;
@@ -495,6 +502,10 @@ export default function SquadPage() {
             setQueuedTransfers(squadData.queuedTransfers || []);
             setStartedNations(new Set<string>(squadData.startedNationCodes || []));
             setLiveNations(new Set<string>(squadData.liveNationCodes || []));
+            setIsLate(Boolean(squadData.isLate));
+            setLockedStageName(squadData.lockedStageName ?? null);
+            setNextCountingStageName(squadData.nextCountingStageName ?? null);
+            setTeamTotalPoints(squadData.teamTotalPoints ?? 0);
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const players: Player[] = squadData.squad.map((sp: any) => ({
@@ -1797,8 +1808,11 @@ export default function SquadPage() {
     );
   };
 
-  // Total points across squad
+  // Total points across squad. For a late team the per-player pills show
+  // PROVISIONAL points that don't count, so the header must show the frozen
+  // authoritative total (teamTotalPoints) instead of summing the pills.
   const totalPoints = allSquadPlayers.reduce((sum, p) => sum + (p.points || 0), 0);
+  const displayTotalPoints = isLate ? teamTotalPoints : totalPoints;
 
   // Next gameweek countdown – first upcoming fixture across whole tournament.
   // parseFixtureDateTime anchors the schedule to Eastern Time so the cutoff
@@ -2352,7 +2366,7 @@ export default function SquadPage() {
 
         {/* Stats strip */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <StatCard icon={<Trophy className="w-4 h-4" />} label="Total Pts" value={`${totalPoints}`} accent="text-emerald-400" highlight />
+          <StatCard icon={<Trophy className="w-4 h-4" />} label="Total Pts" value={`${displayTotalPoints}`} accent="text-emerald-400" highlight />
           <StatCard icon={<Coins className="w-4 h-4" />} label="Value" value={`£${teamValue.toFixed(1)}m`} accent="text-white" />
           <StatCard icon={<Wallet className="w-4 h-4" />} label="Bank" value={`£${bankBalance.toFixed(1)}m`} accent="text-emerald-300" />
           <StatCard
@@ -2364,6 +2378,29 @@ export default function SquadPage() {
           />
         </div>
       </div>
+
+      {/* Late-joiner banner — this team first saved after the active stage's
+          deadline, so its players' points show but don't count toward the
+          total/rank until the next round. Names the round dynamically. */}
+      {isLate && (
+        <div className="px-3 sm:px-0 mb-3">
+          <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-transparent p-3 sm:p-4 flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+              <Lock className="w-5 h-5 text-amber-300" strokeWidth={2.5} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-amber-200 font-black text-sm leading-tight">
+                {lockedStageName ? `You joined after the ${lockedStageName} deadline` : 'You joined after the deadline'}
+              </p>
+              <p className="text-amber-100/70 text-xs leading-snug mt-0.5">
+                Your players&apos; points are shown so you can follow along, but they
+                don&apos;t count toward your total or league rank this round
+                {nextCountingStageName ? <> — your score starts counting from <span className="font-bold text-amber-200">{nextCountingStageName}</span>.</> : '.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Free Hit live banner – shown when the chip is currently active so the
           user is reminded their squad will revert at end of stage. */}
@@ -2770,7 +2807,7 @@ export default function SquadPage() {
         <div className="flex items-center gap-3">
           <div className="text-center">
             <p className="text-[9px] text-white/40 uppercase font-bold leading-none">Pts</p>
-            <p className="text-emerald-400 font-black text-sm leading-tight">{totalPoints}</p>
+            <p className="text-emerald-400 font-black text-sm leading-tight">{displayTotalPoints}</p>
           </div>
           <div className="text-center">
             <p className="text-[9px] text-white/40 uppercase font-bold leading-none">Bank</p>
