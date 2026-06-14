@@ -2371,11 +2371,52 @@ export default function SquadPage() {
           <StatCard icon={<Wallet className="w-4 h-4" />} label="Bank" value={`£${bankBalance.toFixed(1)}m`} accent="text-emerald-300" />
           <StatCard
             icon={<Zap className="w-4 h-4" />}
-            label="Deadline"
+            label="Lineup locks"
             value={deadlineDateShort}
             hint={deadlineHint}
             accent="text-amber-300"
           />
+        </div>
+      </div>
+
+      {/* Transfers status — the TRANSFER deadline is the stage deadline (before
+          the round's first match), distinct from the per-match lineup lock in
+          the stat card above. Two states: open (locks at chipDeadline) vs
+          locked (round in play → changes queue for next round). */}
+      <div className="px-3 sm:px-0 mb-3">
+        <div className={`rounded-2xl border p-3 sm:p-4 flex items-start gap-3 ${
+          stageLocked
+            ? 'border-white/10 bg-white/5'
+            : 'border-sky-500/30 bg-gradient-to-r from-sky-500/15 via-sky-500/10 to-transparent'
+        }`}>
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+            stageLocked ? 'bg-white/10 text-white/60' : 'bg-sky-500/20 text-sky-300'
+          }`}>
+            <ArrowLeftRight className="w-5 h-5" strokeWidth={2.5} />
+          </div>
+          <div className="min-w-0">
+            {stageLocked ? (
+              <>
+                <p className="text-white font-black text-sm leading-tight">Transfers locked — round in play</p>
+                <p className="text-white/60 text-xs leading-snug mt-0.5">
+                  Buying &amp; selling is closed for this round. Any transfer you make now is
+                  <span className="font-bold text-white/80"> queued for the next round</span> and applies when it starts.
+                  (Your lineup can still change for players whose match hasn&apos;t kicked off.)
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sky-200 font-black text-sm leading-tight">
+                  Transfers lock {chipDeadline ? `${formatDateShort(new Date(chipDeadline), timezone)} · ${formatTime(new Date(chipDeadline), timezone)}` : 'at the round deadline'}
+                </p>
+                <p className="text-sky-100/70 text-xs leading-snug mt-0.5">
+                  {chipDeadline && <><span className="font-bold text-sky-200">{formatCountdown(chipDeadline, now)}</span> left to buy &amp; sell. </>}
+                  This is the transfer deadline — before the round&apos;s first match. After it, changes queue for the next round.
+                  Your <span className="font-bold text-sky-100">lineup</span> locks separately, per match.
+                </p>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
