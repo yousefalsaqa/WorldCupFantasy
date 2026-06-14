@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import Link from 'next/link';
-import { Copy, Check, Trash2, Globe, Users } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Copy, Check, Trash2, Globe, Users, Trophy } from 'lucide-react';
 import { CreateLeagueModal } from '@/components/create-league-modal';
 import { JoinLeagueModal } from '@/components/join-league-modal';
 
@@ -13,6 +13,9 @@ interface Standing {
   managerName: string;
   /** Banked + in-progress (server computes the live overlay). */
   totalPoints: number;
+  /** Points for the active round only (banked + live). Banks into total when
+   * the round ends; column then recomputes for the next round. */
+  roundPoints?: number;
   /** In-progress portion of totalPoints; > 0 marks a row earning live. */
   liveDelta?: number;
   teamValue: number;
@@ -30,6 +33,7 @@ interface MyLeague {
 
 export default function LeaguesPage() {
   const [standings, setStandings] = useState<Standing[]>([]);
+  const [roundLabel, setRoundLabel] = useState<string | null>(null);
   const [leagueName, setLeagueName] = useState('');
   const [loading, setLoading] = useState(true);
   const [currentUserTeamId, setCurrentUserTeamId] = useState<string | null>(null);
@@ -52,6 +56,8 @@ export default function LeaguesPage() {
   const [copied, setCopied] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [motwOpen, setMotwOpen] = useState(false);
+  const router = useRouter();
 
   const fetchMyLeagues = useCallback(async () => {
     try {
@@ -77,6 +83,7 @@ export default function LeaguesPage() {
       if (res.ok) {
         const data = await res.json();
         setStandings(data.standings ?? []);
+        setRoundLabel(data.roundLabel ?? null);
         setLeagueName(data.leagueName || 'Global League');
         setAnyMatchLive(!!data.anyMatchLive);
         setSelectedMeta({
@@ -175,6 +182,13 @@ export default function LeaguesPage() {
     );
   }
 
+  // Manager of the (current) round = top round-points scorer, if any > 0.
+  // Used for the trophy marker + its explainer popup. Scales per round.
+  const bestRoundPts = Math.max(0, ...standings.map((t) => t.roundPoints ?? 0));
+  const managerOfWeek = bestRoundPts > 0
+    ? standings.find((t) => (t.roundPoints ?? 0) === bestRoundPts) ?? null
+    : null;
+
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-6">
       {/* League switcher + actions */}
@@ -266,11 +280,12 @@ export default function LeaguesPage() {
 
       {/* Standings Table */}
       <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl overflow-hidden border border-white/10">
-        {/* Table Header */}
-        <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-white/5 text-xs uppercase tracking-wider text-white/40 font-medium">
+        {/* Table Header — three data columns: this round / total / value */}
+        <div className="grid grid-cols-12 gap-2 sm:gap-3 pl-3 pr-6 sm:pl-4 sm:pr-10 py-3 bg-white/5 text-[10px] sm:text-xs uppercase tracking-wider text-white/40 font-medium">
           <div className="col-span-1 text-center">#</div>
-          <div className="col-span-5">Team & Manager</div>
-          <div className="col-span-3 text-right">Points</div>
+          <div className="col-span-4">Team &amp; Manager</div>
+          <div className="col-span-2 text-right" title={roundLabel ? `${roundLabel} points` : 'This round'}>{roundLabel ?? 'Round'}</div>
+          <div className="col-span-2 text-right pr-4 sm:pr-7">Total</div>
           <div className="col-span-3 text-right">Value</div>
         </div>
 
@@ -283,16 +298,21 @@ export default function LeaguesPage() {
           ) : (
             standings.map((team, index) => {
               const isYou = team.teamId === currentUserTeamId;
+              const isMotw = managerOfWeek?.teamId === team.teamId;
+              const earningLive = (team.liveDelta ?? 0) > 0;
               return (
-                <Link
+                <div
                   key={team.teamId}
-                  href={`/leagues/team/${team.teamId}`}
-                  className={`grid grid-cols-12 gap-2 px-4 py-4 hover:bg-white/5 transition-colors cursor-pointer group ${isYou ? 'bg-emerald-500/10 border-l-4 border-emerald-500' : ''}`}
+                  role="link"
+                  tabIndex={0}
+                  onClick={() => router.push(`/leagues/team/${team.teamId}`)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/leagues/team/${team.teamId}`); }}
+                  className={`grid grid-cols-12 gap-2 sm:gap-3 pl-3 pr-6 sm:pl-4 sm:pr-10 py-3.5 hover:bg-white/5 transition-colors cursor-pointer group ${isYou ? 'bg-emerald-500/10 border-l-4 border-emerald-500' : ''}`}
                 >
                   {/* Rank */}
                   <div className="col-span-1 flex items-center justify-center">
                     <span className={`
-                      w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm
+                      w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm
                       ${index === 0 ? 'bg-yellow-500/20 text-yellow-400' : ''}
                       ${index === 1 ? 'bg-gray-400/20 text-gray-300' : ''}
                       ${index === 2 ? 'bg-amber-600/20 text-amber-500' : ''}
@@ -305,37 +325,54 @@ export default function LeaguesPage() {
                   {/* Team & Manager — min-w-0 at each level so truncate can
                       actually shrink inside the grid cell (long team names
                       were overflowing and getting clipped). */}
-                  <div className="col-span-5 flex flex-col justify-center min-w-0">
-                    <div className="flex items-center gap-2 min-w-0">
+                  <div className="col-span-4 flex flex-col justify-center min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {isMotw && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setMotwOpen(true); }}
+                          className="shrink-0 -m-2 p-2 rounded-md hover:bg-amber-400/15 transition-colors relative z-10"
+                          aria-label="Manager of the week"
+                        >
+                          <Trophy className="w-4 h-4 text-amber-400" fill="currentColor" />
+                        </button>
+                      )}
                       <span className={`font-semibold text-sm sm:text-base truncate min-w-0 group-hover:text-emerald-400 transition-colors ${isYou ? 'text-emerald-400' : 'text-white'}`}>
                         {team.teamName}
                       </span>
                       {isYou && (
-                        <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-500 text-white flex-shrink-0">
+                        <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-emerald-500 text-white flex-shrink-0">
                           You
                         </span>
                       )}
                     </div>
-                    <span className="text-sm text-white/40 truncate">{team.managerName}</span>
+                    <span className="text-xs sm:text-sm text-white/40 truncate">{team.managerName}</span>
                   </div>
 
-                  {/* Points — pulsing dot + green tint while this team is
-                      earning from an in-progress match */}
-                  <div className="col-span-3 flex items-center justify-end gap-1.5">
-                    {(team.liveDelta ?? 0) > 0 && (
+                  {/* This round — the ONLY live signal (pulsing dot + green) */}
+                  <div className="col-span-2 flex items-center justify-end gap-1">
+                    {earningLive && (
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                     )}
-                    <span className={`text-xl font-bold ${
-                      isYou || (team.liveDelta ?? 0) > 0 ? 'text-emerald-400' : 'text-white'
-                    }`}>{team.totalPoints}</span>
-                    <span className="text-xs text-white/40">pts</span>
+                    <span className={`text-base sm:text-lg font-bold tabular-nums ${earningLive ? 'text-emerald-400' : 'text-white/80'}`}>
+                      {team.roundPoints ?? 0}
+                    </span>
+                  </div>
+
+                  {/* Total — nudged left so it isn't crammed against Value */}
+                  <div className="col-span-2 flex items-center justify-end pr-4 sm:pr-7">
+                    <span className={`text-base sm:text-lg font-bold tabular-nums ${isYou ? 'text-emerald-400' : 'text-white'}`}>
+                      {team.totalPoints}
+                    </span>
                   </div>
 
                   {/* Value */}
                   <div className="col-span-3 flex items-center justify-end">
-                    <span className="text-white/60">£{team.teamValue.toFixed(1)}m</span>
+                    <span className="text-base sm:text-lg font-bold tabular-nums text-white/55">
+                      £{team.teamValue.toFixed(1)}m
+                    </span>
                   </div>
-                </Link>
+                </div>
               );
             })
           )}
@@ -361,6 +398,54 @@ export default function LeaguesPage() {
           <div className="text-xs text-white/40 uppercase">Average</div>
         </div>
       </div>
+
+      {/* Manager of the Week explainer — opened by tapping the trophy */}
+      {motwOpen && managerOfWeek && (
+        <div
+          className="fixed inset-0 bg-black/80 z-[9999] backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => setMotwOpen(false)}
+        >
+          <div
+            className="bg-slate-900 border border-amber-500/25 rounded-2xl w-full max-w-[17rem] overflow-hidden shadow-2xl animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-4 pt-4 pb-3 flex items-center gap-2.5 bg-gradient-to-r from-amber-500/20 to-transparent">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-amber-950 flex items-center justify-center shadow-lg shrink-0">
+                <Trophy className="w-5 h-5" fill="currentColor" />
+              </div>
+              <h3 className="text-base font-black text-white leading-tight">Manager of the Week</h3>
+            </div>
+
+            <div className="px-4 py-3">
+              <div className="flex items-center justify-between gap-2 mb-2.5">
+                <div className="min-w-0">
+                  <p className="text-white font-bold text-sm truncate">{managerOfWeek.managerName}</p>
+                  <p className="text-white/40 text-xs truncate">{managerOfWeek.teamName}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="text-amber-300 font-black text-lg leading-none tabular-nums">{managerOfWeek.roundPoints ?? 0}</span>
+                  <span className="text-white/40 text-[10px] uppercase tracking-wider ml-0.5">{roundLabel ?? 'pts'}</span>
+                </div>
+              </div>
+              <p className="text-amber-100/80 text-xs leading-snug">
+                {anyMatchLive
+                  ? `${managerOfWeek.managerName} is currently winning ${roundLabel ?? 'this round'} — still being played, so it can change.`
+                  : `${managerOfWeek.managerName} is Manager of the Week for ${roundLabel ?? 'this round'}. A new winner is crowned each round.`}
+              </p>
+            </div>
+
+            <div className="px-4 pb-4">
+              <button
+                type="button"
+                onClick={() => setMotwOpen(false)}
+                className="w-full px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 ring-1 ring-white/15 text-white font-bold text-sm transition-colors"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete-league confirmation */}
       {deleteConfirm && (

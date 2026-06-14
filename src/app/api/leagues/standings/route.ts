@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { liveTeamDeltas } from '@/lib/live-team-totals';
+import { liveTeamDeltas, stageTeamTotals } from '@/lib/live-team-totals';
 
 // This route is dynamic to ensure fresh data
 export const dynamic = 'force-dynamic';
@@ -70,7 +70,20 @@ export async function GET(request: NextRequest) {
     // first place moves in real time. `liveDelta` lets the UI mark which
     // rows are currently earning. At FT banking absorbs the delta, so the
     // displayed number never jumps.
-    const deltas = await liveTeamDeltas(memberTeams.map((m) => m.team!.id));
+    const teamIds = memberTeams.map((m) => m.team!.id);
+    const deltas = await liveTeamDeltas(teamIds);
+
+    // "This round" points column: each team's points for the ACTIVE stage
+    // (banked + live, late-gated). Prior rounds are already in Team.totalPoints
+    // via banking, so the Total column never double-counts. Scalable — auto
+    // becomes GR2/GR3 as the active stage advances.
+    const activeStage = await prisma.stage.findFirst({
+      where: { isActive: true },
+      select: { id: true, stageId: true, name: true },
+    });
+    const roundTotals = activeStage
+      ? await stageTeamTotals(teamIds, activeStage.id)
+      : new Map<string, number>();
 
     const standings = memberTeams
       .map((m) => {
@@ -81,6 +94,7 @@ export async function GET(request: NextRequest) {
           teamName: m.team!.name,
           managerName: m.team!.user.username,
           totalPoints: m.team!.totalPoints + liveDelta,
+          roundPoints: roundTotals.get(m.team!.id) ?? 0,
           liveDelta,
           teamValue: m.team!.teamValue,
         };
@@ -107,6 +121,10 @@ export async function GET(request: NextRequest) {
       code: league.isGlobal ? null : league.code,
       isOwner: !!session && league.ownerId === session.userId,
       standings,
+      // Short label for the "this round" column header (e.g. "GR1"), and the
+      // full name for tooltips. Null before any stage is active.
+      roundLabel: activeStage?.stageId ?? null,
+      roundName: activeStage?.name ?? null,
       anyMatchLive: liveMatchCount > 0,
     });
   } catch (error) {

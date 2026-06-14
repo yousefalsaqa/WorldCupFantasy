@@ -104,3 +104,76 @@ export async function liveTeamDeltas(teamIds: string[]): Promise<Map<string, num
   }
   return deltas;
 }
+
+/**
+ * Each team's TOTAL points for a single stage (banked + in-progress), used for
+ * the "this round" column in league standings. Same rules as banking /
+ * liveTeamDeltas (starters only unless Bench Boost, captain x2/x3, late-gated
+ * teams earn 0), but summed over EVERY PlayerPerformance in the stage's
+ * matches rather than only the live ones. Scalable: pass the active stage and
+ * it computes that round; prior rounds are already folded into Team.totalPoints
+ * by banking, so this never double-counts the cumulative total.
+ *
+ * READ-ONLY: display layer only.
+ */
+export async function stageTeamTotals(teamIds: string[], stageId: string): Promise<Map<string, number>> {
+  const totals = new Map<string, number>();
+  if (teamIds.length === 0) return totals;
+
+  const matches = await prisma.match.findMany({ where: { stageId }, select: { id: true } });
+  const matchIds = matches.map((m) => m.id);
+  if (matchIds.length === 0) return totals;
+
+  const perfs = await prisma.playerPerformance.findMany({
+    where: { matchId: { in: matchIds } },
+    select: { playerId: true, totalPoints: true },
+  });
+  if (perfs.length === 0) return totals;
+  const byPlayer = new Map<string, number>();
+  for (const p of perfs) byPlayer.set(p.playerId, (byPlayer.get(p.playerId) ?? 0) + p.totalPoints);
+
+  const stage = await prisma.stage.findUnique({ where: { id: stageId }, select: { deadlineTime: true } });
+
+  const squadRows = await prisma.squadPlayer.findMany({
+    where: { teamId: { in: teamIds }, playerId: { in: Array.from(byPlayer.keys()) } },
+    select: { teamId: true, playerId: true, isStarting: true, isCaptain: true },
+  });
+  if (squadRows.length === 0) return totals;
+
+  let lateTeams = new Set<string>();
+  if (stage?.deadlineTime) {
+    const late = await prisma.team.findMany({
+      where: {
+        id: { in: teamIds },
+        OR: [
+          { firstSquadSavedAt: { gte: stage.deadlineTime } },
+          { firstSquadSavedAt: null, createdAt: { gte: stage.deadlineTime } },
+        ],
+      },
+      select: { id: true },
+    });
+    lateTeams = new Set(late.map((t) => t.id));
+  }
+
+  const chipsByTeam = new Map<string, ChipType[]>();
+  const teamStages = await prisma.teamStage.findMany({
+    where: { stageId, teamId: { in: teamIds } },
+    select: { teamId: true, chipsUsed: true, chipUsed: true },
+  });
+  for (const ts of teamStages) {
+    let chips = parseActiveChips(ts.chipsUsed);
+    if (chips.length === 0 && ts.chipUsed) chips = [ts.chipUsed as ChipType];
+    chipsByTeam.set(ts.teamId, chips);
+  }
+
+  for (const row of squadRows) {
+    if (lateTeams.has(row.teamId)) continue;
+    const chips = chipsByTeam.get(row.teamId) ?? [];
+    let pts = byPlayer.get(row.playerId) ?? 0;
+    if (row.isCaptain) pts *= hasTripleCaptain(chips) ? 3 : 2;
+    if (row.isStarting || hasBenchBoost(chips)) {
+      totals.set(row.teamId, (totals.get(row.teamId) ?? 0) + pts);
+    }
+  }
+  return totals;
+}
