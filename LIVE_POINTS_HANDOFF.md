@@ -1,8 +1,118 @@
 # Live Points Feature — Handoff
 
-Last updated: 2026-06-12 (**LIVE** — day-2 feature blitz: live fixtures
-tab + match-detail modal + predicted lineups + selection chips; see
-Session 2026-06-12)
+Last updated: 2026-06-14 (**LIVE** — GR1 ongoing; scoring/UX hardening +
+league standings revamp + PLAYER PRICING re-do staged for GR2; see
+Session 2026-06-14)
+
+---
+
+## Session 2026-06-14 — SCORING FIXES + STANDINGS REVAMP + PRICING PLAN
+
+All shipped to prod EXCEPT the player reprice (designed + simulated, to
+APPLY before the GR2 deadline). Pushed commits this session:
+`0ef871d` `c447f7e` (sub-off warning), `328f682` (fixture dates),
+`55c6270` `f935eae` (late-joiner provisional + deadline clarity),
+`261e175` `a833700` (penalty/assist scoring), `a5c7c3c` `9c5915c`
+(standings 3-col + Manager of the Week + captain/bench-boost display).
+
+### ⚠⚠ NEXT TIME: PLAYER REPRICE — APPLY BEFORE GR2 (deadline ~Jun 18)
+
+**Decision locked: reprice the whole pool cheaper + finer, keep premiums,
+keep £100m budget.** Everything below is SIMULATED only — nothing written
+to the DB yet. The reprice must be applied (with bank rebase) in ONE shot
+right before the GR2 transfer window opens.
+
+- **Why**: prices were crushed onto 17 round 0.5-steps (246 players at
+  exactly 6.0); FIFA's own fantasy uses 54 points / 0.1 steps and is ~0.6
+  cheaper. Our June-10 sync stretched FIFA's 3.5–10.5 onto 3.5–14 AND
+  rounded to 0.5, inflating + clustering the mid.
+- **Chosen curve = avg £4.70** (median 4.1, max kept 13.5, 53 distinct
+  points). Maps FIFA price → new price via piecewise-linear ANCHORS in
+  `scripts/price-sim.ts` (keep premium top, lower+spread the mid, round
+  0.1, floor 3.0). The FIFA price (fine 0.1 signal) de-clusters the 246.
+- **Hard constraint — every existing squad must stay ≤ £100m** (rebasing
+  can't save a squad >100; its bank would go negative). At avg 4.7 ALL 22
+  squads fit (priciest Charbel £98.8). At avg ~4.9, 2 premium-heavy squads
+  break — so 4.7 is about the ceiling. (avg 4.4 was even safer if wanted.)
+- **On APPLY: rebase banks** — set each owned player's purchasePrice = new
+  price and bank = 100 − new squad cost (everyone gets the cheaper market,
+  no sell-at-old-price arbitrage). Keep budget £100m. Standings/scoring
+  unaffected (display reprice only changes Player.currentPrice + rebased
+  squad rows).
+- **Scripts (read-only sims, no DB writes; in `scripts/`, untracked):**
+  - `price-sim.ts` — THE tuner. Edit `ANCHORS`, run, prints distribution +
+    cheapest XV + per-team budget check. Reads `fifa-match-map.json`.
+  - `fifa-match-map.json` — our-player→FIFA-price map (1238/1245 matched),
+    produced by temporarily pointing `cross-check-fifa-prices.ts` at the
+    fresh files + dumping `diffs`. Regenerate if rosters change.
+  - `fifa-players-fresh.json` / `fifa-squads-fresh.json` — refetched
+    Jun-14 from play.fifa.com (FIFA moves prices between rounds — refetch).
+  - `fifa-price-compare.ts` — FIFA vs our distribution (read-only).
+  - No apply script written yet — needs: set currentPrice from the curve,
+    then rebase every team's purchasePrice + bankBalance, in one txn.
+
+### Scoring fixes (live, prod)
+
+- **Penalty goals were dropped.** API-Football's per-player stats feed
+  sometimes returns `goals.total: null` for PENALTY scorers (seen: Havertz
+  GER-CUW) while normal-goal scorers are fine. We read goals only from that
+  feed → missed. Fix (`live-scoring.ts`): goals = `max(stats.goals.total,
+  countGoalsFromEvents)`; assists likewise. Events reliably carry penalties
+  (`detail:"Penalty"`). Cards/pen-misses deliberately NOT max'd (negative —
+  would over-penalise). 77+27 tests pass. Live cron re-upserts in-progress
+  rows so players self-correct; already-banked FINISHED matches won't
+  retro-fix (auditor `scripts/backfill-check-penalty-goals.ts` found only
+  Khoukhi QAT-SUI, owned by 0 teams → no action).
+
+### Captain/points display consistency
+
+- **Squad page showed RAW points (captain not doubled)** → header read 22
+  vs the captain-doubled Team.totalPoints (32) on dashboard/admin. Now the
+  captain pill shows ×2 (×3 Triple Captain) and the header uses the server
+  `teamLivePoints` (Team.totalPoints + late-gated live delta) from
+  `/api/squad/get` — captain, bench boost AND transfer hits all included,
+  so squad == dashboard == league == admin. Display-only (scoring was
+  always right). The dashboard `/api/team` reads flat Team.totalPoints and
+  was correct; do NOT "fix" it.
+
+### Late-joiner "provisional points" (live)
+
+- A team whose FIRST squad save is after a stage deadline (new joiners
+  only — established managers are NEVER re-flagged) is locked OUT of that
+  stage: players SHOW points but they don't count; total/rank frozen until
+  next stage. Keys off `(firstSquadSavedAt ?? createdAt) >= stage.deadline`
+  per stage, so it scales to any GRx/knockout. Provisional points computed
+  at read time from the active stage's perf rows (NOT banked) in
+  `/api/squad/get` + `/api/team/[teamId]/squad`; amber banner on /squad and
+  league team-view names the round. Standings stay 0 (liveTeamDeltas is
+  late-gated). Omars (Safarjlani to glory) is the live test case.
+
+### League standings revamp (live)
+
+- Three columns now: **<round> / Total / Value** (was points + value).
+  "This round" = active-stage points via new `live-team-totals.ts
+  #stageTeamTotals` (banked+live, captain/bench-boost/late-gated); banks
+  into Total at round end, recomputes next round (scales GR1→GR2→…).
+- **Manager of the Week**: trophy on the top round-scorer; tap it for an
+  explainer (adapts live vs settled, names the MANAGER not the team).
+  Works global + private. Row is a `div` (router.push) not `<Link>` so the
+  trophy button is tappable on touch.
+
+### Other UX (live)
+
+- **Sub-off warning**: benching a player whose match kicked off is one-way
+  (forfeits round pts, can't re-add) → amber confirm modal w/ his face,
+  "Match live now" vs "Already played" wording. Funnels through the single
+  `performSwap` chokepoint.
+- **Transfer vs lineup deadlines** split on /squad: "Lineup locks" card
+  (per-match, rolling) + a Transfers banner (stage deadline before the
+  round's first match; "queued for next round" once locked).
+- **5 fixture kickoffs corrected** vs API-Football DB (AUS-TUR, TUN-JPN,
+  AUT-JOR a day early; TUR-PAR 23:00; BRA-HAI 20:30). Auditor:
+  `scripts/audit-fixture-dates.ts` — re-run after knockout fixtures sync.
+- **Bench Boost** now visually highlights the bench (violet border + badge)
+  on /squad and league team-view. Use `border`, NOT `ring` (the page's
+  scroll container clips ring box-shadows at the top).
 
 ---
 
