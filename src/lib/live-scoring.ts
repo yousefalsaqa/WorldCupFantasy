@@ -355,11 +355,15 @@ export class LiveScoringCalculator {
        *  `stats.goals.total`, which API-Football sometimes fails to populate
        *  for penalty scorers (see countGoalsFromEvents). */
       goalsOverride?: number;
+      /** Assist count derived from the events feed. Same rationale as
+       *  goalsOverride — guards against the stats feed lagging on a late
+       *  assist (see countAssistsFromEvents). */
+      assistsOverride?: number;
     },
   ): PointsBreakdown {
     const minutes = stats.games.minutes || 0;
     const goals = context.goalsOverride ?? (stats.goals.total || 0);
-    const assists = stats.goals.assists || 0;
+    const assists = context.assistsOverride ?? (stats.goals.assists || 0);
     const saves = stats.goals.saves || 0;
     const yellowCards = stats.cards.yellow || 0;
     const redCards = stats.cards.red || 0;
@@ -412,6 +416,24 @@ export class LiveScoringCalculator {
     return events.filter(
       event =>
         event.player?.id === playerId &&
+        event.type === 'Goal' &&
+        event.detail !== 'Own Goal' &&
+        event.detail !== 'Missed Penalty' &&
+        !isPenaltyShootout(event)
+    ).length;
+  }
+
+  /**
+   * Count a player's assists from the events feed. Same rationale as
+   * countGoalsFromEvents: the player-stats feed can lag on a late assist, so
+   * we use the events feed (the assisting player is the `assist` field on the
+   * scored Goal event) as a floor. Excludes own goals, missed penalties and
+   * shootout kicks.
+   */
+  countAssistsFromEvents(events: APIEvent[], playerId: number): number {
+    return events.filter(
+      event =>
+        event.assist?.id === playerId &&
         event.type === 'Goal' &&
         event.detail !== 'Own Goal' &&
         event.detail !== 'Missed Penalty' &&
@@ -485,12 +507,15 @@ export class LiveScoringCalculator {
         // stats feed credits but events momentarily lacks isn't either.
         const eventGoals = this.countGoalsFromEvents(events, playerData.player.id);
         const effectiveGoals = Math.max(stats.goals.total || 0, eventGoals);
+        const eventAssists = this.countAssistsFromEvents(events, playerData.player.id);
+        const effectiveAssists = Math.max(stats.goals.assists || 0, eventAssists);
 
         // Base scoring with on-pitch context
         const points = this.calculatePlayerPoints(stats, position, {
           inWindowConceded,
           isCleanSheet,
           goalsOverride: effectiveGoals,
+          assistsOverride: effectiveAssists,
         });
 
         // Add own goals from events
@@ -519,7 +544,7 @@ export class LiveScoringCalculator {
           position,
           minutesPlayed: minutes,
           goals: effectiveGoals,
-          assists: stats.goals.assists || 0,
+          assists: effectiveAssists,
           ownGoals,
           yellowCards: stats.cards.yellow || 0,
           redCards: stats.cards.red || 0,
