@@ -351,10 +351,14 @@ export class LiveScoringCalculator {
       inWindowConceded: number;
       /** True if the on-pitch window had zero opponent goals AND the player played 60+ minutes. */
       isCleanSheet: boolean;
+      /** Goal count derived from the events feed. When supplied it overrides
+       *  `stats.goals.total`, which API-Football sometimes fails to populate
+       *  for penalty scorers (see countGoalsFromEvents). */
+      goalsOverride?: number;
     },
   ): PointsBreakdown {
     const minutes = stats.games.minutes || 0;
-    const goals = stats.goals.total || 0;
+    const goals = context.goalsOverride ?? (stats.goals.total || 0);
     const assists = stats.goals.assists || 0;
     const saves = stats.goals.saves || 0;
     const yellowCards = stats.cards.yellow || 0;
@@ -386,10 +390,31 @@ export class LiveScoringCalculator {
    */
   countOwnGoalsFromEvents(events: APIEvent[], playerId: number): number {
     return events.filter(
-      event => 
-        event.player.id === playerId && 
-        event.type === 'Goal' && 
+      event =>
+        event.player.id === playerId &&
+        event.type === 'Goal' &&
         event.detail === 'Own Goal' &&
+        !isPenaltyShootout(event)
+    ).length;
+  }
+
+  /**
+   * Count a player's SCORED goals (normal + penalty) from the events feed.
+   *
+   * Why this exists: API-Football's per-player statistics sometimes fail to
+   * credit PENALTY goals in `goals.total`. Observed live in GER 3-1 CUW —
+   * Havertz's 45' penalty showed `goals.total: null` / `penalty.scored: 0`
+   * while every normal-goal scorer was correct. The events feed records the
+   * penalty reliably (`detail: "Penalty"`), so we use it as a floor for the
+   * goal count. Excludes own goals, missed penalties and shootout kicks.
+   */
+  countGoalsFromEvents(events: APIEvent[], playerId: number): number {
+    return events.filter(
+      event =>
+        event.player?.id === playerId &&
+        event.type === 'Goal' &&
+        event.detail !== 'Own Goal' &&
+        event.detail !== 'Missed Penalty' &&
         !isPenaltyShootout(event)
     ).length;
   }
@@ -454,10 +479,18 @@ export class LiveScoringCalculator {
         const wasSentOff = (stats.cards.red ?? 0) > 0;
         const isCleanSheet = inWindowConceded === 0 && minutes >= 60 && !wasSentOff;
 
+        // Goals from the events feed are authoritative for penalties (the
+        // stats feed drops some — see countGoalsFromEvents). Take whichever
+        // source reports more so a penalty goal is never lost, and a goal the
+        // stats feed credits but events momentarily lacks isn't either.
+        const eventGoals = this.countGoalsFromEvents(events, playerData.player.id);
+        const effectiveGoals = Math.max(stats.goals.total || 0, eventGoals);
+
         // Base scoring with on-pitch context
         const points = this.calculatePlayerPoints(stats, position, {
           inWindowConceded,
           isCleanSheet,
+          goalsOverride: effectiveGoals,
         });
 
         // Add own goals from events
@@ -485,7 +518,7 @@ export class LiveScoringCalculator {
           playerName: playerData.player.name,
           position,
           minutesPlayed: minutes,
-          goals: stats.goals.total || 0,
+          goals: effectiveGoals,
           assists: stats.goals.assists || 0,
           ownGoals,
           yellowCards: stats.cards.yellow || 0,
