@@ -21,7 +21,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Lock } from 'lucide-react';
 import { PlayerCard } from '@/components/kit';
 import PlayerDetailModal, { type ModalPlayer } from '@/components/player-detail-modal';
 import { getFixtureDifficulty, type FDR } from '@/lib/fdr';
@@ -65,6 +65,11 @@ interface TeamData {
   tripleCaptainActive?: boolean;
   benchBoostActive?: boolean;
   anyMatchLive?: boolean;
+  /** Joined after the active stage's deadline: player points show but the
+   * total/rank are frozen this stage. */
+  isLate?: boolean;
+  lockedStageName?: string | null;
+  nextCountingStageName?: string | null;
 }
 
 // Convert the API row → the shape PlayerCard expects. Centralized so
@@ -308,6 +313,21 @@ export default function LeagueTeamViewPage({
           )}
         </div>
       </div>
+
+      {/* Late-joiner note — explains why a team with scoring players still
+          shows a 0 total this round (player points are provisional). */}
+      {team.isLate && (
+        <div className="bg-amber-500/10 border-x border-amber-500/30 px-3 py-2 flex items-start gap-2">
+          <Lock className="w-3.5 h-3.5 text-amber-300 shrink-0 mt-0.5" strokeWidth={2.5} />
+          <p className="text-amber-100/80 text-[11px] leading-snug">
+            <span className="font-bold text-amber-200">
+              Joined late{team.lockedStageName ? ` — after the ${team.lockedStageName} deadline` : ''}.
+            </span>{' '}
+            Player points are shown but don&apos;t count toward the total or league rank this round
+            {team.nextCountingStageName ? ` — they start counting from ${team.nextCountingStageName}` : ''}.
+          </p>
+        </div>
+      )}
 
       {/* Pitch — single scroll container at the outer wrapper. We
           intentionally DO NOT put `overflow-x-auto` on each row: when

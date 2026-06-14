@@ -78,7 +78,7 @@ export async function GET(
     // page not knowing whether TC was active.
     const activeStage = await prisma.stage.findFirst({
       where: { isActive: true },
-      select: { id: true },
+      select: { id: true, name: true, order: true, deadlineTime: true },
     });
     let activeChips: ChipType[] = [];
     if (activeStage) {
@@ -94,8 +94,46 @@ export async function GET(
     const tripleCaptainActive = hasTripleCaptain(activeChips);
     const benchBoostActive = hasBenchBoost(activeChips);
 
+    // Late-joiner provisional points: mirror /api/squad/get so a team that
+    // first saved after the active stage's deadline shows its players' points
+    // (not 0) here too, while its total/rank stay frozen (liveTeamDeltas
+    // already gates the header). Derived from the active stage's perf rows
+    // (live + finished) rather than banked.
+    const isLate = !!(
+      activeStage?.deadlineTime &&
+      (team.firstSquadSavedAt ?? team.createdAt) >= activeStage.deadlineTime
+    );
+    const provisionalByPlayer = new Map<string, number>();
+    let lockedStageName: string | null = null;
+    let nextCountingStageName: string | null = null;
+    if (isLate && activeStage) {
+      lockedStageName = activeStage.name;
+      const stageMatches = await prisma.match.findMany({
+        where: { stageId: activeStage.id },
+        select: { id: true },
+      });
+      const ids = stageMatches.map((m) => m.id);
+      if (ids.length > 0 && playerIds.length > 0) {
+        const perfs = await prisma.playerPerformance.findMany({
+          where: { playerId: { in: playerIds }, matchId: { in: ids } },
+          select: { playerId: true, totalPoints: true },
+        });
+        for (const p of perfs) {
+          provisionalByPlayer.set(p.playerId, (provisionalByPlayer.get(p.playerId) ?? 0) + p.totalPoints);
+        }
+      }
+      const next = await prisma.stage.findFirst({
+        where: { order: { gt: activeStage.order } },
+        orderBy: { order: 'asc' },
+        select: { name: true },
+      });
+      nextCountingStageName = next?.name ?? null;
+    }
+
     const transformed = team.squadPlayers.map((sp) => {
-      const liveAdd = livePointsByPlayer.get(sp.playerId) ?? 0;
+      const liveAdd = isLate
+        ? (provisionalByPlayer.get(sp.playerId) ?? 0)
+        : (livePointsByPlayer.get(sp.playerId) ?? 0);
       return {
         id: sp.player.id,
         playerId: sp.player.id,
@@ -156,6 +194,11 @@ export async function GET(
       tripleCaptainActive,
       benchBoostActive,
       anyMatchLive: liveMatchCount > 0,
+      // Late-joiner: players show provisional points but the total/rank are
+      // frozen this stage. Lets the team-view page explain the zero total.
+      isLate,
+      lockedStageName,
+      nextCountingStageName,
     });
   } catch (error) {
     console.error('Error fetching team squad:', error);
