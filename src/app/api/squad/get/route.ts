@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 import { computeUnlimitedTransfers } from '@/lib/unlimited-transfers';
 import { parsePendingTransfers } from '@/lib/pending-transfers';
+import { liveTeamDeltas } from '@/lib/live-team-totals';
 
 export const dynamic = 'force-dynamic';
 
@@ -359,6 +360,12 @@ export async function GET(request: NextRequest) {
       // value here so the page header can show it instead of summing the
       // provisional pills.
       teamTotalPoints: effectiveTeam.totalPoints,
+      // Live-inclusive authoritative total = banked + in-progress delta. This
+      // is the exact number the league/standings show (captain x mult, bench
+      // boost, AND transfer hits all handled by the canonical banking math),
+      // so the squad header can match it instead of summing raw pills. Late
+      // teams resolve to 0 (delta is late-gated, totalPoints frozen).
+      teamLivePoints: effectiveTeam.totalPoints + ((await liveTeamDeltas([team.id])).get(team.id) ?? 0),
       bankBalance: refreshedTeam?.bankBalance ?? team.bankBalance,
       teamValue: refreshedTeam?.teamValue ?? team.teamValue,
       // Surface the transfer-budget fields so the squad page can drive the

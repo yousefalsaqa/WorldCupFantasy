@@ -356,8 +356,19 @@ export default function LeagueTeamViewPage({
       {/* Bench — uses the shared PlayerCard at xs size for visual parity
           with the pitch but laid out in a 2-col grid like the legacy
           BenchCard. Tapping a bench card opens the same read-only modal. */}
-      <div className="bg-slate-900/50 border border-white/10 p-3 sm:p-4 rounded-b-2xl">
-        <h3 className="text-white/80 text-sm font-semibold mb-3">Substitutes</h3>
+      <div className={`p-3 sm:p-4 ${
+        team.benchBoostActive
+          ? 'bg-violet-500/10 border-2 border-violet-400/60 rounded-2xl mt-2 shadow-[0_0_22px_-6px_rgba(167,139,250,0.55)]'
+          : 'bg-slate-900/50 border border-white/10 rounded-b-2xl'
+      }`}>
+        <h3 className="text-white/80 text-sm font-semibold mb-3 flex items-center gap-2">
+          Substitutes
+          {team.benchBoostActive && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-200 text-[9px] font-black ring-1 ring-violet-400/40">
+              BENCH BOOST ON
+            </span>
+          )}
+        </h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
           {team.bench.map((p, i) => {
             const rawPoints = p.livePoints ?? p.points;

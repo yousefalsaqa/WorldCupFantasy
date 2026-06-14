@@ -283,6 +283,10 @@ export default function SquadPage() {
   const [lockedStageName, setLockedStageName] = useState<string | null>(null);
   const [nextCountingStageName, setNextCountingStageName] = useState<string | null>(null);
   const [teamTotalPoints, setTeamTotalPoints] = useState(0);
+  // Authoritative live total (banked + delta): captain x mult, bench boost AND
+  // transfer hits all baked in by the canonical math. The header shows this so
+  // it always matches the league/dashboard instead of summing raw pills.
+  const [teamLivePoints, setTeamLivePoints] = useState(0);
 
   // isAdmin drives the "Undo" button visibility on per-player adjustment
   // rows inside the shared PlayerDetailModal. We fetch it once on mount;
@@ -506,6 +510,7 @@ export default function SquadPage() {
             setLockedStageName(squadData.lockedStageName ?? null);
             setNextCountingStageName(squadData.nextCountingStageName ?? null);
             setTeamTotalPoints(squadData.teamTotalPoints ?? 0);
+            setTeamLivePoints(squadData.teamLivePoints ?? squadData.teamTotalPoints ?? 0);
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const players: Player[] = squadData.squad.map((sp: any) => ({
@@ -659,6 +664,7 @@ export default function SquadPage() {
         setSquad((prev) => applyLive(prev));
         setStartingXI((prev) => applyLive(prev));
         setBench((prev) => applyLive(prev));
+        if (data.teamLivePoints !== undefined) setTeamLivePoints(data.teamLivePoints);
       } catch {
         // Network blips are non-fatal during polling — try again next tick.
       }
@@ -1255,6 +1261,8 @@ export default function SquadPage() {
       setSquad((prev) => apply(prev));
       setStartingXI((prev) => apply(prev));
       setBench((prev) => apply(prev));
+      if (sdata.teamLivePoints !== undefined) setTeamLivePoints(sdata.teamLivePoints);
+      if (sdata.teamTotalPoints !== undefined) setTeamTotalPoints(sdata.teamTotalPoints);
     } catch { /* non-fatal */ }
   }, []);
 
@@ -1824,8 +1832,15 @@ export default function SquadPage() {
   // total (teamTotalPoints) instead.
   const startersPoints = startingXI.reduce((sum, p) => sum + displayPointsFor(p), 0);
   const benchPointsSum = bench.reduce((sum, p) => sum + (p.points || 0), 0);
-  const totalPoints = startersPoints + (benchBoostActive ? benchPointsSum : 0);
-  const displayTotalPoints = isLate ? teamTotalPoints : totalPoints;
+  // Client estimate (live, captain-doubled) — used only as a fallback before
+  // the authoritative server total arrives; it omits transfer hits.
+  const clientTotalEstimate = startersPoints + (benchBoostActive ? benchPointsSum : 0);
+  // Header shows the server's authoritative live total (includes transfer
+  // hits + captain + bench boost), matching dashboard/league. Late teams are
+  // frozen at their banked total (0 this stage); the client estimate is only a
+  // pre-load fallback for eligible teams (never for late — it'd leak the
+  // provisional pill sum).
+  const displayTotalPoints = isLate ? teamTotalPoints : (teamLivePoints || clientTotalEstimate);
 
   // Next gameweek countdown – first upcoming fixture across whole tournament.
   // parseFixtureDateTime anchors the schedule to Eastern Time so the cutoff
@@ -2764,16 +2779,26 @@ export default function SquadPage() {
 
       {/* Bench / Dugout */}
       <div className="px-3 sm:px-0 mb-5">
-        <div className="relative rounded-2xl overflow-hidden ring-1 ring-white/10 shadow-xl">
+        <div className={`relative rounded-2xl overflow-hidden shadow-xl ${
+          benchBoostActive
+            ? 'border-2 border-violet-400/70 shadow-[0_0_25px_-4px_rgba(167,139,250,0.55)]'
+            : 'ring-1 ring-white/10'
+        }`}>
           {/* Dugout roof */}
-          <div className="h-2 bg-gradient-to-b from-slate-700 to-slate-900" />
+          <div className={`h-2 bg-gradient-to-b ${benchBoostActive ? 'from-violet-500 to-violet-800' : 'from-slate-700 to-slate-900'}`} />
           <div className="bg-gradient-to-b from-slate-900 via-slate-950 to-black p-3 sm:p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-xs sm:text-sm font-black text-white/70 uppercase tracking-widest flex items-center gap-2">
-                <Users className="w-3.5 h-3.5" />
-                Substitutes Bench
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <h2 className="text-xs sm:text-sm font-black text-white/70 uppercase tracking-widest flex items-center gap-2 min-w-0">
+                <Users className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Substitutes Bench</span>
+                {benchBoostActive && (
+                  <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-200 text-[9px] font-black ring-1 ring-violet-400/40 normal-case tracking-normal">
+                    <Sparkles className="w-2.5 h-2.5" />
+                    Bench Boost on
+                  </span>
+                )}
               </h2>
-              <span className="text-[10px] text-white/30 uppercase tracking-wider">1 comes on first · hold + tap to reorder</span>
+              <span className="text-[10px] text-white/30 uppercase tracking-wider shrink-0 hidden sm:inline">1 comes on first · hold + tap to reorder</span>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
