@@ -9,7 +9,7 @@ import FormationPicker from '@/components/formation-picker';
 import { getFlagUrl } from '@/lib/flags';
 import { getFixtureDifficulty } from '@/lib/fdr';
 import { useUnsavedChanges } from '@/contexts/unsaved-changes';
-import { ArrowLeftRight, RotateCcw } from 'lucide-react';
+import { ArrowLeftRight, RotateCcw, ArrowLeft } from 'lucide-react';
 import { useUserTimezone, useNow } from '@/hooks/useTimezone';
 import {
   formatDateShort,
@@ -1791,7 +1791,7 @@ export default function SquadPage() {
           }}
           showOpponent={opponent}
           difficulty={difficulty}
-          livePoints={p.points}
+          livePoints={displayPointsFor(p)}
           isCaptain={captainId === p.id}
           isViceCaptain={viceCaptainId === p.id}
           selectedForSub={isSelected}
@@ -1808,10 +1808,23 @@ export default function SquadPage() {
     );
   };
 
-  // Total points across squad. For a late team the per-player pills show
-  // PROVISIONAL points that don't count, so the header must show the frozen
-  // authoritative total (teamTotalPoints) instead of summing the pills.
-  const totalPoints = allSquadPlayers.reduce((sum, p) => sum + (p.points || 0), 0);
+  // Captain multiplier (×2, or ×3 with Triple Captain) + Bench Boost — drives
+  // BOTH the per-card pill and the header total so the squad page matches the
+  // captain-doubled Team.totalPoints shown on the dashboard / admin / league.
+  const tripleCaptainActive = chips.some((c) => c.id === 'TRIPLE_CAPTAIN' && c.active);
+  const benchBoostActive = chips.some((c) => c.id === 'BENCH_BOOST' && c.active);
+  const captainMultiplier = tripleCaptainActive ? 3 : 2;
+  // Display points for a card: captain's pill shows his doubled (×2/×3) total.
+  const displayPointsFor = (p: Player) =>
+    (p.points || 0) * (p.id === captainId ? captainMultiplier : 1);
+
+  // Total points across squad. Mirrors banking: starters (captain ×mult) plus
+  // bench only when Bench Boost is active. For a late team the pills are
+  // PROVISIONAL (don't count), so the header shows the frozen authoritative
+  // total (teamTotalPoints) instead.
+  const startersPoints = startingXI.reduce((sum, p) => sum + displayPointsFor(p), 0);
+  const benchPointsSum = bench.reduce((sum, p) => sum + (p.points || 0), 0);
+  const totalPoints = startersPoints + (benchBoostActive ? benchPointsSum : 0);
   const displayTotalPoints = isLate ? teamTotalPoints : totalPoints;
 
   // Next gameweek countdown – first upcoming fixture across whole tournament.
@@ -1968,8 +1981,8 @@ export default function SquadPage() {
             short viewports. The sticky-position keeps it pinned during the
             "scroll the picker" interaction. */}
         <div className="sticky top-0 z-30 bg-[#0a0e17]/95 backdrop-blur-md border-b border-white/10 -mx-0 sm:-mx-4 px-3 sm:px-4 py-3 mb-4">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2 mb-2">
+            <div className="flex items-center gap-2 min-w-0">
               <button
                 type="button"
                 onClick={() => {
@@ -1979,13 +1992,14 @@ export default function SquadPage() {
                     exitTransferMode();
                   }
                 }}
-                className="text-white/60 hover:text-white text-xs sm:text-sm font-medium px-2 py-1.5 rounded-lg hover:bg-white/5"
+                className="inline-flex items-center gap-1 text-white/70 hover:text-white text-xs sm:text-sm font-semibold pl-1.5 pr-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors shrink-0"
               >
-                ← Back
+                <ArrowLeft className="w-3.5 h-3.5" strokeWidth={2.5} />
+                Back
               </button>
-              <h1 className="text-lg sm:text-xl font-black text-white tracking-tight">TRANSFERS</h1>
+              <h1 className="text-base sm:text-xl font-black text-white tracking-tight">TRANSFERS</h1>
             </div>
-            <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs">
+            <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2 text-[10px] sm:text-xs min-w-0">
               <div className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                 <span className="text-white/50 mr-1">Bank</span>
                 <span className={`font-black ${projectedBank < 0 ? 'text-red-400' : 'text-emerald-300'}`}>
