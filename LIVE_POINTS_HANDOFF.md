@@ -1,8 +1,72 @@
 # Live Points Feature — Handoff
 
 Last updated: 2026-06-14 (**LIVE** — GR1 ongoing; scoring/UX hardening +
-league standings revamp + PLAYER PRICING re-do staged for GR2; see
-Session 2026-06-14)
+league standings revamp + PLAYER PRICING re-do staged for GR2 +
+self-healing delayed re-score for API-Football's lagging FT stats; see
+Sessions 2026-06-14 №2 and 2026-06-14)
+
+---
+
+## Session 2026-06-14 №2 — SELF-HEALING DELAYED RE-SCORE (shipped to prod)
+
+Shipped + deployed: commit `ee10dcd` (Vercel Production ● Ready, verified).
+
+### The bug it fixes
+
+API-Football marks a fixture **FT on the scoreline/events feed before its
+per-player `games.minutes` snapshot is finalized** — their own docs say
+player stats settle "in the minutes/hours following the match, up to 48h"
+depending on competition. Our live cron banks the instant a match flips FT,
+so a match can **bank against a half-finished snapshot**.
+
+- **Live case — CIV-ECU (GR1, fixture 1489375)**: at FT every starter was
+  frozen at `games.minutes = 50` (both teams), every sub `minutes = null`.
+  Proven NOT our bug: a raw `curl` to `/fixtures/players?fixture=1489375`
+  (bypassing our client entirely) returned the identical frozen-50 data,
+  `errors:[]`. Goals/assists were CORRECT (those come from the events feed,
+  which is reliable — same feed the penalty-goal fix uses); only the
+  **minutes field** stalled. Impact of banking it: **CIV's clean sheet
+  denied** (1-0 win, but defenders read 50' < the 60' CS gate) and any
+  **subs scored 0** (null minutes).
+
+### What shipped
+
+- **`src/lib/rescore-pending.ts # rescorePendingFinishedMatches()`** — sweeps
+  matches `isFinished` within the last **18h** whose stored max
+  `minutesPlayed` looks **non-final (< 85')**, re-pulls fixture+players+events,
+  and **rebanks ONLY when the fresh snapshot looks final (max ≥ 85')** and
+  differs from what's banked (rollback → re-upsert perfs → `updateSquadPoints`).
+  Writes a `MATCH_RESCORED` `AuditLog` row. Idempotent.
+- **Finality guard is the safety property**: a normally-completed 90' match
+  always has several players at ~90', so stored max ≥ 85 → marked
+  `already-final` → **skipped with ZERO re-pull / ZERO writes**. It therefore
+  **never disturbs a correctly-banked finished game**, and never touches
+  anything older than 18h. A frozen partial (max 50) is the only thing it
+  re-checks, and it won't rebank that partial either — only the real final.
+- **Wired into `/api/live/update`** (both return paths) via a `try/catch`-
+  wrapped `runRescoreSweep()` helper, so the sweep **can never break live
+  scoring**; per-match outcomes surface in the response under `rescored`.
+  **Piggybacks the existing 1-min cron — NO new schedule** (this is the whole
+  "no timer needed" point).
+- **`scripts/run-rescore-sweep.ts`** — manual trigger / safe checker (untracked
+  scratch). `scripts/backfill-rescore.ts` (pre-existing) rescore ALL finished
+  matches if ever needed.
+
+### Verified
+
+- Local + **prod** (hit prod `/api/live/update` with `CRON_SECRET` → response
+  carries `rescored`): GER-CUW (90') + NED-JPN (94') → `already-final`, 0 calls;
+  **CIV-ECU → `still-pending`, no write** (guard holding). Typecheck clean.
+
+### ⚠ LIVE STATE / carryover
+
+- **CIV-ECU is currently banked WRONG** (CIV clean sheet denied, subs 0),
+  pending API-Football finalizing fixture 1489375's minutes. **It auto-rebanks
+  within ~1 min of their feed settling** — no action needed. ONLY if their feed
+  stays broken past the 18h window does the sweep stop trying; then run
+  `scripts/run-rescore-sweep.ts` (or `backfill-rescore.ts`) manually.
+- Tunables in `rescore-pending.ts`: `FINALITY_MIN_MINUTES = 85`,
+  `RECENT_WINDOW_HOURS = 18`.
 
 ---
 
