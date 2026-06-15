@@ -11,6 +11,7 @@ import { API_ID_TO_NATION } from '@/lib/team-mappings';
 import { getSession } from '@/lib/auth';
 import { updateSquadPoints } from '@/lib/squad-points';
 import { maybeAdvanceStage, type AdvanceResult } from '@/lib/stage-advance';
+import { rescorePendingFinishedMatches, type RescoreOutcome } from '@/lib/rescore-pending';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,6 +52,26 @@ async function isAuthorized(request: NextRequest): Promise<boolean> {
   }
   const session = await getSession();
   return !!session?.isAdmin;
+}
+
+/**
+ * Run the delayed re-score sweep, swallowing any error. This must never
+ * break live scoring — it's a best-effort catch-up for matches whose
+ * API-Football stats finalized after we first banked them. Returns the
+ * per-match outcomes (empty array on failure) for observability.
+ */
+async function runRescoreSweep(): Promise<RescoreOutcome[]> {
+  try {
+    const outcomes = await rescorePendingFinishedMatches();
+    const acted = outcomes.filter((o) => o.status !== 'already-final');
+    if (acted.length > 0) {
+      console.log('[Live Update] rescore sweep:', JSON.stringify(acted));
+    }
+    return outcomes;
+  } catch (err) {
+    console.error('[Live Update] rescore sweep failed:', err);
+    return [];
+  }
 }
 
 async function handleUpdate(request: NextRequest) {
@@ -115,11 +136,16 @@ async function handleUpdate(request: NextRequest) {
         console.error('[Live Update] maybeAdvanceStage failed:', err);
       }
 
+      // Delayed re-score: rebank any recently-finished match whose
+      // API-Football final stats have settled since we first banked it.
+      const rescored = await runRescoreSweep();
+
       return NextResponse.json({
         message: 'No live matches to update',
         matchesStarted: recentlyStarted.length,
         results: [],
         stageAdvance,
+        rescored,
       });
     }
 
@@ -319,6 +345,10 @@ async function handleUpdate(request: NextRequest) {
       console.error('[Live Update] maybeAdvanceStage failed:', err);
     }
 
+    // Delayed re-score: rebank any recently-finished match whose
+    // API-Football final stats have settled since we first banked it.
+    const rescored = await runRescoreSweep();
+
     return NextResponse.json({
       message: 'Live update completed',
       matchesProcessed: liveMatches.length,
@@ -326,6 +356,7 @@ async function handleUpdate(request: NextRequest) {
       rateLimit: apiFootball.getRateLimitRemaining(),
       lastUpdated: new Date().toISOString(),
       stageAdvance,
+      rescored,
     });
   } catch (error) {
     console.error('[Live Update] Error:', error);
