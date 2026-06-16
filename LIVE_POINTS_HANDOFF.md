@@ -1,9 +1,70 @@
 # Live Points Feature — Handoff
 
-Last updated: 2026-06-14 (**LIVE** — GR1 ongoing; scoring/UX hardening +
-league standings revamp + PLAYER PRICING re-do staged for GR2 +
-self-healing delayed re-score for API-Football's lagging FT stats; see
-Sessions 2026-06-14 №2 and 2026-06-14)
+Last updated: 2026-06-16 (**LIVE** — GR1 ongoing; fixture-detail modal
+self-healing + null-id crash fix; PLAYER PRICING re-do still staged for GR2;
+see Session 2026-06-16 below, then 2026-06-14 №2 and 2026-06-14)
+
+---
+
+## Session 2026-06-16 — FIXTURE-DETAIL SELF-HEALING + null-id crash fix
+
+User reported KSA-URU and IRN-NZL had "no data" in the fixtures modal hours
+after FT. The scoring/perf rows were fine and banked — this was the
+**fixture detail modal** (Stats/Lineups/Timeline), which reads a SEPARATE
+`Match.detailCache`, not perf rows. Two distinct causes:
+
+- **IRN-NZL — a hard crash (the real culprit).** API-Football's lineup feed
+  for fixture 1489378 contained a lineup slot with a **null player id**. The
+  detail route fed every lineup id into one `prisma.player.findMany({ where:
+  { apiFootballId: { in: [...] } } })` photo lookup; a `null` in that `in`
+  array makes Prisma throw, so the **entire detail fetch 500'd every time** —
+  nothing to do with lag, and it would never have populated. (A missing
+  photo alone is harmless — `PlayerFace` falls back to the kit SVG.)
+- **KSA-URU — the post-FT publishing lag.** API-Football flips FT on the
+  scoreline feed before publishing the stats/lineups/events bundle; the one
+  fetch attempt landed in that window and wrote nothing. (It self-healed
+  on its own once a real user re-opened the modal — `already-cached` by the
+  time we swept.)
+
+### What shipped (chose "both" — guard + cron heal sweep)
+
+- **`src/lib/fixture-detail.ts`** (new) — extracted the route's
+  `transform` + fetch/cache-write into ONE shared path so the on-demand
+  route AND the cron use identical logic (mirrors `rescore-pending.ts`).
+  - **null-id filter** on lineup ids (`.filter((id): id is number => ...)`)
+    — fixes the IRN-NZL crash class for good.
+  - **Freeze-empty guard**: `final` (= cache served forever, no TTL) is set
+    only when `payloadHasContent()` is true. An empty post-FT snapshot now
+    caches `final:false` and re-fetches on the live TTL instead of freezing
+    empty permanently. This was a latent bug in the old route (it served any
+    `final` cache forever, even an empty one).
+  - **`healFixtureDetailCache()`** — re-warms missing/content-empty caches
+    for matches finished within `RECENT_WINDOW_HOURS = 18`. Idempotent
+    (`cacheNeedsHeal` skips content-bearing caches at zero API cost), ~1
+    API call per unhealed match per run, collapses to zero once the bundle
+    publishes.
+- **`src/app/api/fixtures/[id]/detail/route.ts`** — refactored onto the lib;
+  behavior identical minus the freeze bug. Predicted-XI still read fresh
+  per request, outside the cache.
+- **`src/app/api/live/update/route.ts`** — `runDetailHealSweep()` wired into
+  BOTH return paths next to `runRescoreSweep`, try/catch-wrapped (can never
+  break live scoring), surfaced as `detailHealed` in the response.
+  Piggybacks the existing 1-min cron — NO new schedule.
+- **`scripts/run-detail-heal.ts`** — manual trigger / checker (parallels
+  `run-rescore-sweep.ts`). `scripts/check-detail-cache.ts` inspects the
+  stored envelope for given fixtures.
+
+### Verified
+
+- Typecheck clean. Ran the sweep against live prod data: IRN-NZL → `healed`
+  (10 stats / 2 lineups / 14 events, `final:true`), KSA-URU →
+  `already-cached`. Confirmed both caches now carry full content.
+
+### Carryover note
+
+- CIV-ECU's cache is stale at `2H/live` (went stale pre-FT, now >18h old so
+  the sweep skips it). Harmless: `final:false` → it re-fetches and
+  self-corrects the moment anyone opens that modal.
 
 ---
 

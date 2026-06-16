@@ -12,6 +12,7 @@ import { getSession } from '@/lib/auth';
 import { updateSquadPoints } from '@/lib/squad-points';
 import { maybeAdvanceStage, type AdvanceResult } from '@/lib/stage-advance';
 import { rescorePendingFinishedMatches, type RescoreOutcome } from '@/lib/rescore-pending';
+import { healFixtureDetailCache, type DetailHealOutcome } from '@/lib/fixture-detail';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,6 +71,26 @@ async function runRescoreSweep(): Promise<RescoreOutcome[]> {
     return outcomes;
   } catch (err) {
     console.error('[Live Update] rescore sweep failed:', err);
+    return [];
+  }
+}
+
+/**
+ * Re-warm the fixture-detail cache (Stats/Lineups/Timeline modal) for any
+ * recently-finished match whose cache is missing or empty — the same
+ * post-FT lag that the re-score sweep handles, but for the detail payload.
+ * Best-effort and swallowed: it must never break live scoring.
+ */
+async function runDetailHealSweep(): Promise<DetailHealOutcome[]> {
+  try {
+    const outcomes = await healFixtureDetailCache();
+    const acted = outcomes.filter((o) => o.status !== 'already-cached');
+    if (acted.length > 0) {
+      console.log('[Live Update] detail heal sweep:', JSON.stringify(acted));
+    }
+    return outcomes;
+  } catch (err) {
+    console.error('[Live Update] detail heal sweep failed:', err);
     return [];
   }
 }
@@ -139,6 +160,8 @@ async function handleUpdate(request: NextRequest) {
       // Delayed re-score: rebank any recently-finished match whose
       // API-Football final stats have settled since we first banked it.
       const rescored = await runRescoreSweep();
+      // Re-warm fixture-detail caches that landed empty in the post-FT lag.
+      const detailHealed = await runDetailHealSweep();
 
       return NextResponse.json({
         message: 'No live matches to update',
@@ -146,6 +169,7 @@ async function handleUpdate(request: NextRequest) {
         results: [],
         stageAdvance,
         rescored,
+        detailHealed,
       });
     }
 
@@ -348,6 +372,8 @@ async function handleUpdate(request: NextRequest) {
     // Delayed re-score: rebank any recently-finished match whose
     // API-Football final stats have settled since we first banked it.
     const rescored = await runRescoreSweep();
+    // Re-warm fixture-detail caches that landed empty in the post-FT lag.
+    const detailHealed = await runDetailHealSweep();
 
     return NextResponse.json({
       message: 'Live update completed',
@@ -357,6 +383,7 @@ async function handleUpdate(request: NextRequest) {
       lastUpdated: new Date().toISOString(),
       stageAdvance,
       rescored,
+      detailHealed,
     });
   } catch (error) {
     console.error('[Live Update] Error:', error);
