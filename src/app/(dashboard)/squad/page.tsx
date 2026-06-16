@@ -35,6 +35,21 @@ interface ChipData {
   active: boolean;
   canCancel?: boolean;
   cancelBlockedReason?: string;
+  // When the active round is locked, a Wildcard can be armed for the NEXT
+  // round. The card for it is flagged so its copy reads "arm for <round>".
+  forNextRound?: boolean;
+  nextRoundName?: string;
+}
+
+interface NextRoundChip {
+  stageId: string;
+  name: string;
+  whichWildcard: string;
+  armed: boolean;
+  canArm: boolean;
+  used: boolean;
+  canCancel: boolean;
+  queuedWildcardTransfers: number;
 }
 
 // Types
@@ -344,13 +359,38 @@ export default function SquadPage() {
   const [chipLoading, setChipLoading] = useState(false);
   const [chipDeadline, setChipDeadline] = useState<string | null>(null);
   const [stageLocked, setStageLocked] = useState(false);
+  const [nextRound, setNextRound] = useState<NextRoundChip | null>(null);
 
   const fetchChips = useCallback(async () => {
     try {
       const res = await fetch('/api/chips', { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
-        setChips(data.chips || []);
+        const nr: NextRoundChip | null = data.nextRound ?? null;
+        let chipList: ChipData[] = data.chips || [];
+        // While locked, the wildcard card reflects NEXT-round arming state
+        // (the chips array itself describes the current, in-progress round).
+        if (nr) {
+          chipList = chipList.map((c) =>
+            c.id === nr.whichWildcard
+              ? {
+                  ...c,
+                  active: nr.armed,
+                  available: nr.canArm,
+                  used: nr.used,
+                  canCancel: nr.canCancel,
+                  cancelBlockedReason:
+                    nr.armed && !nr.canCancel && nr.queuedWildcardTransfers > 0
+                      ? 'Cancel your queued Wildcard transfers first, then you can disarm it.'
+                      : c.cancelBlockedReason,
+                  forNextRound: true,
+                  nextRoundName: nr.name,
+                }
+              : c,
+          );
+        }
+        setChips(chipList);
+        setNextRound(nr);
         setChipDeadline(data.deadlineTime ?? null);
         setStageLocked(Boolean(data.stageLocked));
       }
@@ -404,7 +444,7 @@ export default function SquadPage() {
     setChipLoading(true);
     const cancellingId = chipCancelConfirm?.id;
     try {
-      const res = await fetch('/api/chips', {
+      const res = await fetch(`/api/chips${cancellingId ? `?chipId=${cancellingId}` : ''}`, {
         method: 'DELETE',
         credentials: 'include',
       });
@@ -755,9 +795,14 @@ export default function SquadPage() {
     return extra * 4;
   }, [pendingTransfers.length, freeTransfers, unlimitedTransfers, stageLocked]);
 
+  // A Wildcard armed for the next round makes queued transfers unlimited and
+  // free — mirrors the server-side branch in /api/transfers.
+  const nextRoundWildcardArmed = !!nextRound?.armed;
+
   // Queue mode (round in progress): you can only queue up to your remaining
-  // free transfers. Mirrors the server-side cap in /api/transfers.
-  const overQueueLimit = stageLocked && pendingTransfers.length > freeTransfers;
+  // free transfers — unless a next-round Wildcard is armed (then unlimited).
+  // Mirrors the server-side cap in /api/transfers.
+  const overQueueLimit = stageLocked && !nextRoundWildcardArmed && pendingTransfers.length > freeTransfers;
 
   // Nation counts after applying pending transfers, used by the picker to
   // grey out players who would breach the 3-per-nation cap. We start from
@@ -2028,14 +2073,16 @@ export default function SquadPage() {
               <div className="px-2.5 py-1 rounded-lg bg-sky-500/10 border border-sky-500/20">
                 <span className="text-white/50 mr-1">Free</span>
                 <span className="font-black text-sky-300">
-                  {unlimitedTransfers
+                  {unlimitedTransfers || nextRoundWildcardArmed
                     ? '∞'
                     : Math.max(0, freeTransfers - pendingTransfers.length)}
                 </span>
               </div>
               {stageLocked ? (
-                <div className="px-2.5 py-1 rounded-lg bg-violet-500/15 border border-violet-500/30">
-                  <span className="font-black text-violet-300">Next round</span>
+                <div className={`px-2.5 py-1 rounded-lg border ${nextRoundWildcardArmed ? 'bg-emerald-500/15 border-emerald-500/40' : 'bg-violet-500/15 border-violet-500/30'}`}>
+                  <span className={`font-black ${nextRoundWildcardArmed ? 'text-emerald-300' : 'text-violet-300'}`}>
+                    {nextRoundWildcardArmed ? 'Wildcard · next round' : 'Next round'}
+                  </span>
                 </div>
               ) : (
                 !unlimitedTransfers && (
@@ -2068,6 +2115,12 @@ export default function SquadPage() {
               This round is being played, so your current squad is locked in.
               Transfers you confirm now are <span className="font-bold">queued</span> and
               applied automatically the moment the next round starts.
+              {nextRoundWildcardArmed && (
+                <span className="block mt-1 text-emerald-300 font-bold">
+                  Wildcard armed for {nextRound?.name ?? 'the next round'} — queue as many
+                  transfers as you like, all free.
+                </span>
+              )}
               {overQueueLimit && (
                 <span className="block mt-1 text-red-300 font-bold">
                   You only have {freeTransfers} free transfer{freeTransfers === 1 ? '' : 's'} to
@@ -2618,7 +2671,7 @@ export default function SquadPage() {
                       ? 'bg-sky-500/20 text-sky-300'
                       : 'bg-white/10 text-white/40'
                   }`}>
-                    {chip.active ? 'Active now' : chip.used ? 'Already used' : chip.available ? 'Ready to use' : 'Not available'}
+                    {chip.active ? (chip.forNextRound ? `Armed for ${chip.nextRoundName ?? 'next round'}` : 'Active now') : chip.used ? 'Already used' : chip.available ? (chip.forNextRound ? 'Arm for next round' : 'Ready to use') : 'Not available'}
                   </span>
                 </div>
               </div>
@@ -2646,7 +2699,13 @@ export default function SquadPage() {
                   </p>
                 )}
                 {chip.active && stageLocked && (
-                  <p className="text-white/40 text-[11px] font-semibold">Locked in. The stage has started.</p>
+                  chip.forNextRound ? (
+                    <p className="text-emerald-300/80 text-[11px] font-semibold">
+                      Armed for {chip.nextRoundName ?? 'the next round'} — queue unlimited free transfers now. Cancel any time before that round starts.
+                    </p>
+                  ) : (
+                    <p className="text-white/40 text-[11px] font-semibold">Locked in. The stage has started.</p>
+                  )
                 )}
                 {chip.active && !chip.canCancel && chip.cancelBlockedReason && (
                   <p className="text-amber-300/80 text-[11px] mt-1">{chip.cancelBlockedReason}</p>
@@ -2667,7 +2726,9 @@ export default function SquadPage() {
                     disabled={chipLoading}
                     className="flex-1 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl text-white font-bold hover:from-emerald-600 hover:to-emerald-700 disabled:opacity-50 transition-all"
                   >
-                    {chipLoading ? 'Activating...' : `Use ${chip.name}`}
+                    {chipLoading
+                      ? (chip.forNextRound ? 'Arming...' : 'Activating...')
+                      : (chip.forNextRound ? `Arm for ${chip.nextRoundName ?? 'next round'}` : `Use ${chip.name}`)}
                   </button>
                 )}
                 {chip.active && chip.canCancel && (

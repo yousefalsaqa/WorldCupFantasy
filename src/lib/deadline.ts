@@ -6,14 +6,14 @@ import { prisma } from './db';
 // transfers and (existing-squad) saves are frozen. When the next stage
 // activates, its deadline is in the future again and everything unlocks.
 export interface StageLock {
-  stage: { id: string; stageId: string; name: string; deadlineTime: Date | null } | null;
+  stage: { id: string; stageId: string; name: string; deadlineTime: Date | null; order: number } | null;
   locked: boolean;
 }
 
 export async function getStageLock(): Promise<StageLock> {
   const stage = await prisma.stage.findFirst({
     where: { isActive: true },
-    select: { id: true, stageId: true, name: true, deadlineTime: true },
+    select: { id: true, stageId: true, name: true, deadlineTime: true, order: true },
   });
   if (!stage?.deadlineTime) return { stage, locked: false };
   return { stage, locked: new Date() >= stage.deadlineTime };

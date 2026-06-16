@@ -10,6 +10,7 @@ import {
   legacyChipUsed,
   type ChipType,
 } from '@/lib/chips-active';
+import { parsePendingTransfers } from '@/lib/pending-transfers';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,6 +87,7 @@ export async function GET() {
         tripleCaptainUsed: true,
         benchBoostUsed: true,
         freeHitUsed: true,
+        pendingTransfers: true,
       },
     });
 
@@ -95,7 +97,7 @@ export async function GET() {
 
     const activeStage = await prisma.stage.findFirst({
       where: { isActive: true },
-      select: { id: true, stageId: true, name: true, deadlineTime: true },
+      select: { id: true, stageId: true, name: true, deadlineTime: true, order: true },
     });
 
     // Parse the multi-chip array. `activeChips` is canonical; `activeChip`
@@ -171,8 +173,50 @@ export async function GET() {
       buildChip('BENCH_BOOST', team.benchBoostUsed),
     ];
 
+    // Next-round Wildcard arming. Once the active round is locked, a Wildcard
+    // (and only a Wildcard) can be armed for the upcoming round so the user
+    // can queue unlimited free transfers now. We surface this as a separate
+    // section so the existing chips array keeps meaning "current round".
+    let nextRound: {
+      stageId: string; name: string;
+      whichWildcard: ChipType;
+      armed: boolean; canArm: boolean; used: boolean;
+      canCancel: boolean; queuedWildcardTransfers: number;
+    } | null = null;
+    if (locked && activeStage) {
+      const next = await prisma.stage.findFirst({
+        where: { order: { gt: activeStage.order }, isComplete: false },
+        orderBy: { order: 'asc' },
+        select: { id: true, stageId: true, name: true },
+      });
+      if (next) {
+        const ts = await prisma.teamStage.findUnique({
+          where: { teamId_stageId: { teamId: team.id, stageId: next.id } },
+          select: { chipsUsed: true, chipUsed: true },
+        });
+        let armed = parseActiveChips(ts?.chipsUsed);
+        if (armed.length === 0 && ts?.chipUsed) armed = [ts.chipUsed as ChipType];
+        // WC2 in knockouts, WC1 otherwise.
+        const which: ChipType = isKnockoutStage(next.stageId) ? 'WILDCARD_2' : 'WILDCARD_1';
+        const used = which === 'WILDCARD_2' ? team.wildcard2Used : team.wildcard1Used;
+        const isArmed = armed.includes(which);
+        const queued = parsePendingTransfers(team.pendingTransfers).filter((t) => t.isWildcard).length;
+        nextRound = {
+          stageId: next.stageId,
+          name: next.name,
+          whichWildcard: which,
+          armed: isArmed,
+          canArm: !used && !isArmed,
+          used,
+          canCancel: isArmed && queued === 0,
+          queuedWildcardTransfers: queued,
+        };
+      }
+    }
+
     return NextResponse.json({
       chips,
+      nextRound,
       // Legacy single-chip pointer for UIs that haven't been updated.
       activeChip: activeChips[0] ?? null,
       // Canonical multi-chip array. Surfaced as `activeChips` so consumers
@@ -229,24 +273,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No active stage' }, { status: 400 });
     }
 
-    // Hard deadline: chips lock with the squads. Without this a user could
-    // watch their captain score and THEN flip on Triple Captain.
-    if (stageIsLocked(activeStage.deadlineTime)) {
-      return NextResponse.json(
-        { error: 'Chips are locked while this round is being played. You can activate one for the next round once this one finishes.' },
-        { status: 403 },
-      );
+    // Which stage does this chip apply to? Normally the active stage. But
+    // once the active round has kicked off (locked), ONLY a Wildcard can
+    // still be armed — and it arms for the NEXT round, so the unlimited free
+    // transfers it grants can be queued now. Triple Captain / Bench Boost /
+    // Free Hit stay locked until the next round actually opens (their effect
+    // is purely in-round, so there's no planning benefit to pre-arming, and
+    // Free Hit's snapshot/revert can't be expressed as queued transfers).
+    const locked = stageIsLocked(activeStage.deadlineTime);
+    let targetStage = activeStage;
+    let armingNextRound = false;
+    if (locked) {
+      const isWildcard = chipId === 'WILDCARD_1' || chipId === 'WILDCARD_2';
+      if (!isWildcard) {
+        return NextResponse.json(
+          { error: 'Only Wildcard can be armed while a round is being played. Other chips unlock when the next round opens.' },
+          { status: 403 },
+        );
+      }
+      const next = await prisma.stage.findFirst({
+        where: { order: { gt: activeStage.order }, isComplete: false },
+        orderBy: { order: 'asc' },
+      });
+      if (!next) {
+        return NextResponse.json({ error: 'No upcoming round to arm a Wildcard for.' }, { status: 400 });
+      }
+      targetStage = next;
+      armingNextRound = true;
     }
 
     if (chipId === 'WILDCARD_2') {
       const knockoutStages = ['R32', 'R16', 'QF', 'SF', '3RD', 'F'];
-      if (!knockoutStages.includes(activeStage.stageId)) {
+      if (!knockoutStages.includes(targetStage.stageId)) {
         return NextResponse.json({ error: 'Wildcard 2 is only available in knockout stages' }, { status: 400 });
       }
     }
 
     const existingTeamStage = await prisma.teamStage.findUnique({
-      where: { teamId_stageId: { teamId: team.id, stageId: activeStage.id } },
+      where: { teamId_stageId: { teamId: team.id, stageId: targetStage.id } },
       select: { chipsUsed: true, chipUsed: true },
     });
 
@@ -315,10 +379,10 @@ export async function POST(request: NextRequest) {
       });
 
       await tx.teamStage.upsert({
-        where: { teamId_stageId: { teamId: team.id, stageId: activeStage.id } },
+        where: { teamId_stageId: { teamId: team.id, stageId: targetStage.id } },
         create: {
           teamId: team.id,
-          stageId: activeStage.id,
+          stageId: targetStage.id,
           chipUsed: nextLegacyChip,
           chipsUsed: nextChipsUsed,
         },
@@ -334,8 +398,9 @@ export async function POST(request: NextRequest) {
           action: 'CHIP_ACTIVATED',
           details: JSON.stringify({
             chipId,
-            stageName: activeStage.name,
+            stageName: targetStage.name,
             stackedWith: currentChips,
+            armedForNextRound: armingNextRound,
           }),
         },
       });
@@ -343,8 +408,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `${CHIP_META[chipId].name} activated!`,
+      message: armingNextRound
+        ? `${CHIP_META[chipId].name} armed for ${targetStage.name} — queue unlimited free transfers now.`
+        : `${CHIP_META[chipId].name} activated!`,
       chipId,
+      armedForNextRound: armingNextRound,
       activeChips: nextChips,
     });
   } catch (error) {
@@ -386,12 +454,24 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'No active stage' }, { status: 400 });
     }
 
-    if (stageIsLocked(activeStage.deadlineTime)) {
-      return NextResponse.json({ error: 'Stage has started \u2013 chips can no longer be cancelled' }, { status: 400 });
+    // While the active round is locked, the only cancellable chip is a
+    // Wildcard armed for the NEXT round (mirrors the POST arming path).
+    // Everything else stays locked until that round opens.
+    const locked = stageIsLocked(activeStage.deadlineTime);
+    let targetStage = activeStage;
+    if (locked) {
+      const next = await prisma.stage.findFirst({
+        where: { order: { gt: activeStage.order }, isComplete: false },
+        orderBy: { order: 'asc' },
+      });
+      if (!next) {
+        return NextResponse.json({ error: 'Stage has started \u2013 chips can no longer be cancelled' }, { status: 400 });
+      }
+      targetStage = next;
     }
 
     const teamStage = await prisma.teamStage.findUnique({
-      where: { teamId_stageId: { teamId: team.id, stageId: activeStage.id } },
+      where: { teamId_stageId: { teamId: team.id, stageId: targetStage.id } },
     });
 
     const currentChips = parseActiveChips(teamStage?.chipsUsed);
@@ -436,16 +516,24 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: `${chipId} is not active for this stage` }, { status: 400 });
     }
 
-    // Wildcard cancel safety: refuse if transfers were already made under it
+    // While arming the next round, only a Wildcard can be cancelled.
+    if (locked && chipId !== 'WILDCARD_1' && chipId !== 'WILDCARD_2') {
+      return NextResponse.json({ error: 'Only a next-round Wildcard can be cancelled while a round is being played.' }, { status: 400 });
+    }
+
+    // Wildcard cancel safety: refuse if transfers were already made under it.
+    // A live wildcard records Transfer rows; a next-round wildcard records
+    // queued entries on Team.pendingTransfers (no Transfer rows until apply).
     if (chipId === 'WILDCARD_1' || chipId === 'WILDCARD_2') {
-      const wildcardTransferCount = await prisma.transfer.count({
-        where: {
-          teamId: team.id,
-          stageId: activeStage.id,
-          isWildcard: true,
-        },
-      });
-      if (wildcardTransferCount > 0) {
+      let wildcardTransfers = 0;
+      if (locked) {
+        wildcardTransfers = parsePendingTransfers(team.pendingTransfers).filter((t) => t.isWildcard).length;
+      } else {
+        wildcardTransfers = await prisma.transfer.count({
+          where: { teamId: team.id, stageId: targetStage.id, isWildcard: true },
+        });
+      }
+      if (wildcardTransfers > 0) {
         return NextResponse.json({
           error: `You\u2019ve already made transfers under your Wildcard. Cancel those transfers first, then you can deactivate the chip.`,
         }, { status: 400 });
@@ -508,7 +596,7 @@ export async function DELETE(request: NextRequest) {
       });
 
       await tx.teamStage.update({
-        where: { teamId_stageId: { teamId: team.id, stageId: activeStage.id } },
+        where: { teamId_stageId: { teamId: team.id, stageId: targetStage.id } },
         data: {
           chipUsed: nextLegacyChip,
           chipsUsed: nextChipsUsed,
@@ -521,7 +609,7 @@ export async function DELETE(request: NextRequest) {
           action: 'CHIP_CANCELLED',
           details: JSON.stringify({
             chipId,
-            stageName: activeStage.name,
+            stageName: targetStage.name,
             remainingChips: nextChips,
           }),
         },

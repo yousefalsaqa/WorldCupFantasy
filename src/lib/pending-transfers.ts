@@ -28,6 +28,9 @@ export interface PendingTransfer {
   priceIn: number;
   priceOut: number;
   queuedAt: string; // ISO timestamp, informational
+  // Queued under a next-round Wildcard: doesn't consume a free transfer and
+  // never incurs a hit. Absent/false = a normal free queued transfer.
+  isWildcard?: boolean;
 }
 
 export function parsePendingTransfers(json: string | null | undefined): PendingTransfer[] {
@@ -139,7 +142,7 @@ export async function applyPendingTransfers(
           priceIn: t.priceIn,
           priceOut: t.priceOut,
           isFreeTransfer: true,
-          isWildcard: false,
+          isWildcard: !!t.isWildcard,
         },
       });
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyToken, JWTPayload } from '@/lib/auth';
 import { getStageLock } from '@/lib/deadline';
-import { parseActiveChips, hasTripleCaptain, type ChipType } from '@/lib/chips-active';
+import { parseActiveChips, hasTripleCaptain, hasBenchBoost, type ChipType } from '@/lib/chips-active';
 import { cookies } from 'next/headers';
 
 // This route is dynamic because it reads cookies for authentication
@@ -102,6 +102,10 @@ export async function PUT(request: NextRequest) {
       let chips = parseActiveChips(ts?.chipsUsed);
       if (chips.length === 0 && ts?.chipUsed) chips = [ts.chipUsed as ChipType];
       const mult = hasTripleCaptain(chips) ? 3 : 2;
+      // Under Bench Boost every owned player scores regardless of starting
+      // status, so moving a played starter to the bench forfeits NOTHING —
+      // he keeps counting. Only the armband-removal forfeit still applies.
+      const benchBoost = hasBenchBoost(chips);
 
       const startingSet = new Set<string>(startingXI);
       const benchIndex = new Map<string, number>(bench.map((id: string, i: number) => [id, i + 1]));
@@ -135,8 +139,9 @@ export async function PUT(request: NextRequest) {
           );
         }
         // Forfeits: leaving the XI loses his banked points; losing the
-        // armband loses the multiplier bonus on top.
-        if (sp.isStarting && !willStart) {
+        // armband loses the multiplier bonus on top. Under Bench Boost the
+        // "leaving XI" case forfeits nothing — bench players still score.
+        if (sp.isStarting && !willStart && !benchBoost) {
           const pts = await stagePtsFor(sp.playerId);
           const lost = pts * (sp.isCaptain ? mult : 1);
           if (lost !== 0) {
