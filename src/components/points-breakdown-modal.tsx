@@ -22,6 +22,7 @@ interface GwPlayer {
   isStarting: boolean;
   isCaptain: boolean;
   isViceCaptain: boolean;
+  benchOrder: number | null;
   totalPoints: number;
   shirtNumber: number | null;
   photoUrl: string | null;
@@ -29,6 +30,15 @@ interface GwPlayer {
 }
 
 const ROWS = ['FWD', 'MID', 'DEF', 'GK'] as const;
+
+// Short chip labels for the per-round badges (compact for the tight row).
+const CHIP_BADGE: Record<string, { label: string; cls: string }> = {
+  TRIPLE_CAPTAIN: { label: '3×C', cls: 'bg-amber-500/20 text-amber-300 ring-amber-400/40' },
+  BENCH_BOOST: { label: 'BB', cls: 'bg-violet-500/20 text-violet-200 ring-violet-400/40' },
+  WILDCARD_1: { label: 'WC', cls: 'bg-emerald-500/20 text-emerald-200 ring-emerald-400/40' },
+  WILDCARD_2: { label: 'WC2', cls: 'bg-emerald-500/20 text-emerald-200 ring-emerald-400/40' },
+  FREE_HIT: { label: 'FH', cls: 'bg-sky-500/20 text-sky-200 ring-sky-400/40' },
+};
 
 // One read-only mini player chip: kit face + name + points pill + armband.
 function MiniChip({ p }: { p: GwPlayer }) {
@@ -68,6 +78,9 @@ export default function PointsBreakdownModal({ onClose }: { onClose: () => void 
   const [loading, setLoading] = useState(true);
   const [openStage, setOpenStage] = useState<string | null>(null);
   const [teamByStage, setTeamByStage] = useState<Record<string, GwPlayer[] | 'loading' | 'empty'>>({});
+  // True for rounds whose lineup was estimated from the settled points (no
+  // stored snapshot existed — pre-GR3). Drives the "best guess" note.
+  const [inferredByStage, setInferredByStage] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -94,6 +107,7 @@ export default function PointsBreakdownModal({ onClose }: { onClose: () => void 
         .then((d) => {
           const players: GwPlayer[] = d?.players ?? [];
           setTeamByStage((p) => ({ ...p, [stageId]: players.length ? players : 'empty' }));
+          if (d?.lineupInferred) setInferredByStage((p) => ({ ...p, [stageId]: true }));
         })
         .catch(() => setTeamByStage((p) => ({ ...p, [stageId]: 'empty' })));
       return { ...prev, [stageId]: 'loading' };
@@ -152,7 +166,19 @@ export default function PointsBreakdownModal({ onClose }: { onClose: () => void 
                   } ${s.isActive ? 'bg-emerald-500/5' : ''}`}
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold text-white truncate">{s.name}</p>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <p className="text-sm font-bold text-white truncate">{s.name}</p>
+                      {/* Chips played this round (Triple Captain / Bench Boost /
+                          Wildcard / Free Hit). */}
+                      {s.chips?.map((c) => {
+                        const b = CHIP_BADGE[c];
+                        return b ? (
+                          <span key={c} className={`shrink-0 px-1 py-[1px] rounded text-[8px] font-black ring-1 ${b.cls}`}>
+                            {b.label}
+                          </span>
+                        ) : null;
+                      })}
+                    </div>
                     <p className="text-[11px] text-white/40">
                       {s.isActive ? 'In progress' : s.points ? `${s.points.rawPoints} pts + ${s.points.captainPoints} (C)${s.points.transferHits ? ` − ${s.points.transferHits} hits` : ''}` : 'Upcoming'}
                     </p>
@@ -173,9 +199,16 @@ export default function PointsBreakdownModal({ onClose }: { onClose: () => void 
                     {team === 'empty' && <p className="py-3 text-center text-white/40 text-xs">No lineup data for this round.</p>}
                     {Array.isArray(team) && (() => {
                       const starters = team.filter((p) => p.isStarting);
-                      const bench = team.filter((p) => !p.isStarting);
+                      const bench = team
+                        .filter((p) => !p.isStarting)
+                        .sort((a, b) => (a.benchOrder ?? 99) - (b.benchOrder ?? 99));
                       return (
                         <div>
+                          {inferredByStage[s.stageId] && (
+                            <p className="text-[9px] text-amber-300/70 text-center mb-1.5 leading-tight">
+                              Estimated lineup — this round predates lineup history, so the starting XI is inferred from the points.
+                            </p>
+                          )}
                           {/* Read-only mini pitch */}
                           <div className="rounded-xl bg-gradient-to-b from-emerald-800/30 to-emerald-950/40 ring-1 ring-emerald-500/10 p-2 space-y-2.5 overflow-x-auto">
                             {ROWS.map((pos) => {

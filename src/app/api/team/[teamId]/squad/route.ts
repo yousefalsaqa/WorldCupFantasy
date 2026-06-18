@@ -51,25 +51,12 @@ export async function GET(
       return NextResponse.json({ error: 'Team not found' }, { status: 404 });
     }
 
-    // Live points overlay — mirror the logic in /api/squad/get so the
-    // pill on each player card ticks up while a match is in progress.
-    // We DO NOT apply the captain multiplier here; raw per-player
-    // points are what the pill shows, and the captain armband + the
-    // shared visual ×2/×3 badge handle the multiplication client-side.
+    // Per-player pill = ACTIVE-STAGE points (this round only), mirroring
+    // /api/squad/get. We deliberately do NOT read the cumulative
+    // SquadPlayer.points column (it accumulates from when a player joined the
+    // team, so held vs transferred-in players were on different bases). No
+    // captain multiplier here — the armband communicates ×2/×3 visually.
     const playerIds = team.squadPlayers.map((sp) => sp.playerId);
-    const livePerfs = playerIds.length > 0
-      ? await prisma.playerPerformance.findMany({
-          where: { playerId: { in: playerIds }, isLive: true },
-          select: { playerId: true, totalPoints: true },
-        })
-      : [];
-    const livePointsByPlayer = new Map<string, number>();
-    for (const perf of livePerfs) {
-      livePointsByPlayer.set(
-        perf.playerId,
-        (livePointsByPlayer.get(perf.playerId) ?? 0) + perf.totalPoints,
-      );
-    }
 
     // Active chips on THIS team in the currently-active stage. We need
     // this so the team-view page can correctly visualize ×3 (Triple
@@ -94,6 +81,32 @@ export async function GET(
     const tripleCaptainActive = hasTripleCaptain(activeChips);
     const benchBoostActive = hasBenchBoost(activeChips);
 
+    // This stage's per-player points (live + banked), computed from the active
+    // stage's PlayerPerformance rows so the pill resets each round. `live` =
+    // all perf rows this stage; `banked` = finished matches only.
+    const activeStageLiveByPlayer = new Map<string, number>();
+    const activeStageBankedByPlayer = new Map<string, number>();
+    if (activeStage && playerIds.length > 0) {
+      const stageMatches = await prisma.match.findMany({
+        where: { stageId: activeStage.id },
+        select: { id: true, isFinished: true },
+      });
+      const finishedIds = new Set(stageMatches.filter((m) => m.isFinished).map((m) => m.id));
+      const ids = stageMatches.map((m) => m.id);
+      if (ids.length > 0) {
+        const perfs = await prisma.playerPerformance.findMany({
+          where: { playerId: { in: playerIds }, matchId: { in: ids } },
+          select: { playerId: true, matchId: true, totalPoints: true },
+        });
+        for (const p of perfs) {
+          activeStageLiveByPlayer.set(p.playerId, (activeStageLiveByPlayer.get(p.playerId) ?? 0) + p.totalPoints);
+          if (finishedIds.has(p.matchId)) {
+            activeStageBankedByPlayer.set(p.playerId, (activeStageBankedByPlayer.get(p.playerId) ?? 0) + p.totalPoints);
+          }
+        }
+      }
+    }
+
     // Late-joiner provisional points: mirror /api/squad/get so a team that
     // first saved after the active stage's deadline shows its players' points
     // (not 0) here too, while its total/rank stay frozen (liveTeamDeltas
@@ -103,25 +116,10 @@ export async function GET(
       activeStage?.deadlineTime &&
       (team.firstSquadSavedAt ?? team.createdAt) >= activeStage.deadlineTime
     );
-    const provisionalByPlayer = new Map<string, number>();
     let lockedStageName: string | null = null;
     let nextCountingStageName: string | null = null;
     if (isLate && activeStage) {
       lockedStageName = activeStage.name;
-      const stageMatches = await prisma.match.findMany({
-        where: { stageId: activeStage.id },
-        select: { id: true },
-      });
-      const ids = stageMatches.map((m) => m.id);
-      if (ids.length > 0 && playerIds.length > 0) {
-        const perfs = await prisma.playerPerformance.findMany({
-          where: { playerId: { in: playerIds }, matchId: { in: ids } },
-          select: { playerId: true, totalPoints: true },
-        });
-        for (const p of perfs) {
-          provisionalByPlayer.set(p.playerId, (provisionalByPlayer.get(p.playerId) ?? 0) + p.totalPoints);
-        }
-      }
       const next = await prisma.stage.findFirst({
         where: { order: { gt: activeStage.order } },
         orderBy: { order: 'asc' },
@@ -131,9 +129,6 @@ export async function GET(
     }
 
     const transformed = team.squadPlayers.map((sp) => {
-      const liveAdd = isLate
-        ? (provisionalByPlayer.get(sp.playerId) ?? 0)
-        : (livePointsByPlayer.get(sp.playerId) ?? 0);
       return {
         id: sp.player.id,
         playerId: sp.player.id,
@@ -142,11 +137,11 @@ export async function GET(
         position: sp.player.position,
         shirtNumber: sp.player.shirtNumber,
         photoUrl: sp.player.photoUrl,
-        // `points` is the finalized total written at FT; `livePoints`
-        // adds in-progress PlayerPerformance.totalPoints on top. Both
-        // are surfaced so different views can choose their preference.
-        points: sp.points,
-        livePoints: sp.points + liveAdd,
+        // This-round points: `points` = banked (finished matches this stage);
+        // `livePoints` = banked + in-progress this stage. Same basis as
+        // /api/squad/get so the league view matches the owner's squad page.
+        points: activeStageBankedByPlayer.get(sp.playerId) ?? 0,
+        livePoints: activeStageLiveByPlayer.get(sp.playerId) ?? 0,
         isStarting: sp.isStarting,
         isCaptain: sp.isCaptain,
         isViceCaptain: sp.isViceCaptain,
