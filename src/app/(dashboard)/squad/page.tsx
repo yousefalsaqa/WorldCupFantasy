@@ -363,6 +363,9 @@ export default function SquadPage() {
       queuedAt: string;
     }>
   >([]);
+  // Pending points hit (-pts) from over-allotment queued transfers, applied
+  // next round. Drives the "losing points" indicator.
+  const [queuedHit, setQueuedHit] = useState(0);
   const [queueCancelling, setQueueCancelling] = useState<string | null>(null);
   // The squad player the user just tapped Replace on. Drives the picker
   // modal's position filter and refund math. Distinct from `selectedPlayer`
@@ -565,6 +568,7 @@ export default function SquadPage() {
             setUnlimitedTransfers(Boolean(squadData.unlimitedTransfers));
             setAnyMatchLive(Boolean(squadData.anyMatchLive));
             setQueuedTransfers(squadData.queuedTransfers || []);
+            setQueuedHit(squadData.queuedHit || 0);
             setSavedPlannedLineupRaw(squadData.plannedLineup ?? null);
             setStartedNations(new Set<string>(squadData.startedNationCodes || []));
             setLiveNations(new Set<string>(squadData.liveNationCodes || []));
@@ -2708,7 +2712,7 @@ export default function SquadPage() {
 
         {/* Stats strip */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <StatCard icon={<Trophy className="w-4 h-4" />} label="Total Pts" value={`${displayTotalPoints}`} accent="text-emerald-400" highlight />
+          <StatCard icon={<Trophy className="w-4 h-4" />} label="Total Pts" value={`${displayTotalPoints}`} accent="text-emerald-400" highlight hint={queuedHit > 0 ? `−${queuedHit} pts next round` : undefined} />
           <StatCard icon={<Coins className="w-4 h-4" />} label="Value" value={`£${teamValue.toFixed(1)}m`} accent="text-white" />
           <StatCard icon={<Wallet className="w-4 h-4" />} label="Bank" value={`£${bankBalance.toFixed(1)}m`} accent="text-emerald-300" />
           <StatCard
@@ -2843,7 +2847,7 @@ export default function SquadPage() {
               <div className="w-8 h-8 rounded-full bg-violet-500/20 flex items-center justify-center flex-shrink-0">
                 <ArrowLeftRight className="w-4 h-4 text-violet-300" />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-violet-200 font-black text-sm">
                   Queued for next round
                 </p>
@@ -2851,6 +2855,11 @@ export default function SquadPage() {
                   These swaps happen automatically when the next round starts.
                 </p>
               </div>
+              {queuedHit > 0 && (
+                <span className="shrink-0 self-start inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-red-500/15 ring-1 ring-red-500/40 text-red-300 text-[11px] font-black">
+                  −{queuedHit} pts
+                </span>
+              )}
             </div>
             <ul className="space-y-1.5">
               {queuedTransfers.map((t) => (
