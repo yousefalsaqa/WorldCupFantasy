@@ -6,6 +6,7 @@ import { PlayerCard, EmptySlot, PlayerFace } from '@/components/kit';
 import PlayerDetailModal from '@/components/player-detail-modal';
 import PitchBg from '@/components/pitch-bg';
 import FormationPicker from '@/components/formation-picker';
+import PointsBreakdownModal from '@/components/points-breakdown-modal';
 import { getFlagUrl } from '@/lib/flags';
 import { getFixtureDifficulty } from '@/lib/fdr';
 import { useUnsavedChanges } from '@/contexts/unsaved-changes';
@@ -278,6 +279,31 @@ export default function SquadPage() {
   // Player being INSPECTED from a picker row (the little info button) —
   // opens the shared modal read-only without committing the swap/buy.
   const [pickerInfoPlayer, setPickerInfoPlayer] = useState<Player | null>(null);
+  // Squad view toggle: "live" shows the team scoring right now; "planned"
+  // overlays the already-queued (server-side) transfers onto the pitch so the
+  // user can arrange formation/captain around the players coming in next
+  // round. Only meaningful when there are queued transfers; default "live".
+  const [planView, setPlanView] = useState(false);
+  const [showPoints, setShowPoints] = useState(false);
+  // Current-round (this gameweek) points + stage label for the inline pill —
+  // the tappable popup shows the cumulative total + per-week breakdown.
+  const [roundPoints, setRoundPoints] = useState<{ points: number; stageId: string | null }>({ points: 0, stageId: null });
+  // The next-round lineup the user has saved (raw JSON from the server), and
+  // the live, editable Planned-view lineup state. The Planned view edits these
+  // — fully independent of the live startingXI/bench so rearranging next round
+  // never touches (or corrupts) the current locked lineup. Saved via the
+  // forNextRound path and applied at the stage boundary.
+  const [savedPlannedLineupRaw, setSavedPlannedLineupRaw] = useState<string | null>(null);
+  const [plannedStartingXI, setPlannedStartingXI] = useState<Player[]>([]);
+  const [plannedBench, setPlannedBench] = useState<Player[]>([]);
+  const [plannedCaptainId, setPlannedCaptainId] = useState<string | null>(null);
+  const [plannedViceCaptainId, setPlannedViceCaptainId] = useState<string | null>(null);
+  const [plannedToSub, setPlannedToSub] = useState<Player | null>(null);
+  const [plannedDirty, setPlannedDirty] = useState(false);
+  const [plannedSaving, setPlannedSaving] = useState(false);
+  const [plannedSavedMsg, setPlannedSavedMsg] = useState(false);
+  // Inline "Saved ✓" flash for the live squad save (replaces the old alert()).
+  const [savedMsg, setSavedMsg] = useState(false);
   const [playerToSub, setPlayerToSub] = useState<Player | null>(null);
   // A starter→bench swap that needs a one-way-forfeit confirmation because
   // the outgoing player's match has already kicked off. Holds the pending
@@ -342,6 +368,9 @@ export default function SquadPage() {
       queuedAt: string;
     }>
   >([]);
+  // Pending points hit (-pts) from over-allotment queued transfers, applied
+  // next round. Drives the "losing points" indicator.
+  const [queuedHit, setQueuedHit] = useState(0);
   const [queueCancelling, setQueueCancelling] = useState<string | null>(null);
   // The squad player the user just tapped Replace on. Drives the picker
   // modal's position filter and refund math. Distinct from `selectedPlayer`
@@ -544,6 +573,8 @@ export default function SquadPage() {
             setUnlimitedTransfers(Boolean(squadData.unlimitedTransfers));
             setAnyMatchLive(Boolean(squadData.anyMatchLive));
             setQueuedTransfers(squadData.queuedTransfers || []);
+            setQueuedHit(squadData.queuedHit || 0);
+            setSavedPlannedLineupRaw(squadData.plannedLineup ?? null);
             setStartedNations(new Set<string>(squadData.startedNationCodes || []));
             setLiveNations(new Set<string>(squadData.liveNationCodes || []));
             setIsLate(Boolean(squadData.isLate));
@@ -783,26 +814,24 @@ export default function SquadPage() {
 
   const projectedBank = bankBalance + transferBudgetImpact;
 
-  // Points hit cost = (transfers beyond freeTransfers) × 4. Matches the
-  // server-side rule in /api/transfers. Forced to 0 when transfers are
-  // unlimited (pre-tournament, wildcard, free hit) so the UI doesn't show
-  // a deduction the API won't actually apply.
-  const transferHitCost = useMemo(() => {
-    // While the round is locked, transfers are QUEUED for next round and
-    // hits aren't available — the count is capped at freeTransfers instead.
-    if (unlimitedTransfers || stageLocked) return 0;
-    const extra = Math.max(0, pendingTransfers.length - freeTransfers);
-    return extra * 4;
-  }, [pendingTransfers.length, freeTransfers, unlimitedTransfers, stageLocked]);
-
   // A Wildcard armed for the next round makes queued transfers unlimited and
   // free — mirrors the server-side branch in /api/transfers.
   const nextRoundWildcardArmed = !!nextRound?.armed;
 
-  // Queue mode (round in progress): you can only queue up to your remaining
-  // free transfers — unless a next-round Wildcard is armed (then unlimited).
-  // Mirrors the server-side cap in /api/transfers.
-  const overQueueLimit = stageLocked && !nextRoundWildcardArmed && pendingTransfers.length > freeTransfers;
+  // Points hit cost = (transfers beyond freeTransfers) × 4. Matches the
+  // server-side rule in /api/transfers. Applies BOTH at an open deadline
+  // (immediate) and while the round is locked (queued for next round) — the
+  // only free-pass is unlimited transfers (pre-tournament / wildcard / free
+  // hit / next-round wildcard armed).
+  const transferHitCost = useMemo(() => {
+    if (unlimitedTransfers || nextRoundWildcardArmed) return 0;
+    const extra = Math.max(0, pendingTransfers.length - freeTransfers);
+    return extra * 4;
+  }, [pendingTransfers.length, freeTransfers, unlimitedTransfers, nextRoundWildcardArmed]);
+
+  // Over-allotment queued transfers are now allowed (they cost a hit), so this
+  // is no longer a blocker — kept false for compatibility with existing refs.
+  const overQueueLimit = false;
 
   // Nation counts after applying pending transfers, used by the picker to
   // grey out players who would breach the 3-per-nation cap. We start from
@@ -915,8 +944,13 @@ export default function SquadPage() {
         body: JSON.stringify({ playerInId }),
       });
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
         setQueuedTransfers((prev) => prev.filter((t) => t.playerIn?.id !== playerInId));
-        setFreeTransfers((prev) => prev + 1);
+        // Trust the server's recomputed counters so a cancelled transfer
+        // clears any now-unneeded -4 hit (the free/paid split is recomputed).
+        if (typeof data.freeTransfers === 'number') setFreeTransfers(data.freeTransfers);
+        else setFreeTransfers((prev) => prev + 1);
+        if (typeof data.queuedHit === 'number') setQueuedHit(data.queuedHit);
       }
     } catch (err) {
       console.error('Cancel queued transfer failed:', err);
@@ -1338,7 +1372,8 @@ export default function SquadPage() {
       longPress.current.fired = false;
       longPress.current.timer = setTimeout(() => {
         longPress.current.fired = true;
-        setPlayerToSub(player);
+        // Planned view drives its own independent sub state.
+        (planView ? setPlannedToSub : setPlayerToSub)(player);
         // Light haptic tick where supported (Android Chrome; no-op on iOS)
         try { navigator.vibrate?.(15); } catch { /* unsupported */ }
       }, 300);
@@ -1425,12 +1460,215 @@ export default function SquadPage() {
       }
 
       markClean();
-      alert('Squad saved!');
+      // Smooth inline confirmation instead of a blocking browser alert.
+      setSavedMsg(true);
+      setTimeout(() => setSavedMsg(false), 2500);
     } catch (error) {
       console.error('Save error:', error);
       alert('Failed to save');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // ── Planned-view hooks ──────────────────────────────────────────────
+  // These MUST live above the early returns below (loading / builder /
+  // transfer mode) so the hook order is identical on every render.
+
+  // Map of outgoing-player-id → incoming player for transfers ALREADY queued
+  // on the server (made while a round was locked; applied next round). Drives
+  // the "Planned" view overlay.
+  const plannedInById = useMemo(() => {
+    const m = new Map<string, { id: string; displayName: string }>();
+    for (const t of queuedTransfers) {
+      if (t.playerOut?.id && t.playerIn) m.set(t.playerOut.id, t.playerIn);
+    }
+    return m;
+  }, [queuedTransfers]);
+
+  const hasPlannedTransfers = plannedInById.size > 0;
+
+  // In "Planned" view, resolve a slot to the INCOMING player coming in next
+  // round so the card/detail show his real identity, fixtures and stats. This
+  // is used for DISPLAY ONLY — every interaction (sub, captain, drag, save)
+  // binds to the real current squad player, which the incoming inherits when
+  // the round flips (see applyPendingTransfers). So arranging the planned team
+  // is just arranging the current lineup, and nothing here can leak the
+  // incoming identity into the Live view or the saved lineup.
+  // Falls back to the current player if the full incoming record hasn't loaded
+  // yet, so a card never renders broken.
+  const mapToPlanned = useCallback(
+    (p: Player): Player => {
+      const inc = plannedInById.get(p.id);
+      if (!inc) return p;
+      return allPlayers.find((ap) => ap.id === inc.id) ?? p;
+    },
+    [plannedInById, allPlayers],
+  );
+
+  // Set of incoming (queued-in) player ids — used to badge them in Planned view.
+  const incomingIdSet = useMemo(
+    () => new Set(Array.from(plannedInById.values()).map((v) => v.id)),
+    [plannedInById],
+  );
+
+  // (Re)initialise the editable Planned lineup when we enter the view (or the
+  // squad / saved next-round lineup changes) — but never clobber unsaved edits.
+  // Prefers the saved next-round lineup; otherwise derives from the current
+  // lineup with each queued-in player inheriting his outgoing player's slot.
+  useEffect(() => {
+    if (!planView || plannedDirty) return;
+    const planned15 = [...startingXI, ...bench].map(mapToPlanned);
+    const byId = new Map(planned15.map((p) => [p.id, p]));
+    let saved: { startingXI: string[]; bench: string[]; captainId: string; viceCaptainId: string } | null = null;
+    if (savedPlannedLineupRaw) {
+      try {
+        const j = JSON.parse(savedPlannedLineupRaw);
+        if (Array.isArray(j.startingXI) && j.startingXI.length === 11 && Array.isArray(j.bench) && j.bench.length === 4) saved = j;
+      } catch { /* ignore malformed */ }
+    }
+    const savedUsable =
+      !!saved &&
+      [...saved.startingXI, ...saved.bench].every((id) => byId.has(id)) &&
+      new Set([...saved.startingXI, ...saved.bench]).size === 15;
+    if (saved && savedUsable) {
+      setPlannedStartingXI(saved.startingXI.map((id) => byId.get(id)!));
+      setPlannedBench(saved.bench.map((id) => byId.get(id)!));
+      setPlannedCaptainId(saved.captainId);
+      setPlannedViceCaptainId(saved.viceCaptainId);
+    } else {
+      setPlannedStartingXI(startingXI.map(mapToPlanned));
+      setPlannedBench(bench.map(mapToPlanned));
+      setPlannedCaptainId(captainId ? (plannedInById.get(captainId)?.id ?? captainId) : null);
+      setPlannedViceCaptainId(viceCaptainId ? (plannedInById.get(viceCaptainId)?.id ?? viceCaptainId) : null);
+    }
+  }, [planView, plannedDirty, startingXI, bench, captainId, viceCaptainId, savedPlannedLineupRaw, mapToPlanned, plannedInById]);
+
+  // Load the current-round points for the inline pill (cheap summary call).
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/team/stages-summary', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d) setRoundPoints({ points: d.currentRoundPoints ?? 0, stageId: d.currentStageId ?? null });
+      })
+      .catch(() => { /* non-fatal */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Formation-only swap validity for the Planned lineup — NO current-round
+  // played-locks, because next round hasn't kicked off.
+  const plannedIsSwapValid = (p1: Player, p2: Player): boolean => {
+    if (p1.id === p2.id) return false;
+    const s = new Set(plannedStartingXI.map((p) => p.id));
+    const p1Start = s.has(p1.id);
+    const p2Start = s.has(p2.id);
+    if (p1Start === p2Start) return !p1Start; // two bench → reorder; two starters → no-op
+    const playerOut = p1Start ? p1 : p2;
+    const playerIn = p1Start ? p2 : p1;
+    const nextStarting = plannedStartingXI.map((p) => (p.id === playerOut.id ? playerIn : p));
+    const counts: Record<Position, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+    nextStarting.forEach((p) => counts[p.position as Position]++);
+    return counts.GK === 1 && counts.DEF >= 3 && counts.DEF <= 5 && counts.MID >= 2 && counts.MID <= 5 && counts.FWD >= 1 && counts.FWD <= 3;
+  };
+
+  const plannedValidSwapTargets = useMemo(() => {
+    if (!plannedToSub) return new Set<string>();
+    const out = new Set<string>();
+    [...plannedStartingXI, ...plannedBench].forEach((p) => {
+      if (plannedIsSwapValid(plannedToSub, p)) out.add(p.id);
+    });
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plannedToSub, plannedStartingXI, plannedBench]);
+
+  const plannedPerformSwap = (p1: Player, p2: Player) => {
+    if (!plannedIsSwapValid(p1, p2)) {
+      if (p1.id !== p2.id) alert('Invalid formation!\n\n• 1 Goalkeeper\n• 3–5 Defenders\n• 2–5 Midfielders\n• 1–3 Forwards');
+      setPlannedToSub(null);
+      return;
+    }
+    const s = new Set(plannedStartingXI.map((p) => p.id));
+    const p1Start = s.has(p1.id);
+    const p2Start = s.has(p2.id);
+    if (!p1Start && !p2Start) {
+      const a = plannedBench.findIndex((p) => p.id === p1.id);
+      const b = plannedBench.findIndex((p) => p.id === p2.id);
+      if (a !== -1 && b !== -1) {
+        const next = [...plannedBench];
+        [next[a], next[b]] = [next[b], next[a]];
+        setPlannedBench(next);
+        setPlannedDirty(true);
+      }
+      setPlannedToSub(null);
+      setSelectedPlayer(null);
+      return;
+    }
+    const playerOut = p1Start ? p1 : p2;
+    const playerIn = p1Start ? p2 : p1;
+    setPlannedStartingXI(plannedStartingXI.map((p) => (p.id === playerOut.id ? playerIn : p)));
+    setPlannedBench(plannedBench.map((p) => (p.id === playerIn.id ? playerOut : p)));
+    // Armband stays with the starting slot — the incoming starter inherits it.
+    if (plannedCaptainId === playerOut.id) setPlannedCaptainId(playerIn.id);
+    if (plannedViceCaptainId === playerOut.id) setPlannedViceCaptainId(playerIn.id);
+    setPlannedDirty(true);
+    setPlannedToSub(null);
+    setSelectedPlayer(null);
+  };
+
+  const plannedSwapPlayer = (player: Player) => {
+    if (!plannedToSub) { setPlannedToSub(player); return; }
+    if (plannedToSub.id === player.id) { setPlannedToSub(null); return; }
+    const s = new Set(plannedStartingXI.map((p) => p.id));
+    if (s.has(plannedToSub.id) && s.has(player.id)) { setPlannedToSub(player); return; } // two starters → switch focus
+    plannedPerformSwap(plannedToSub, player);
+  };
+
+  const plannedSetCaptain = (playerId: string) => {
+    if (plannedViceCaptainId === playerId) setPlannedViceCaptainId(null);
+    setPlannedCaptainId(playerId);
+    setPlannedDirty(true);
+  };
+  const plannedSetViceCaptain = (playerId: string) => {
+    if (plannedCaptainId === playerId) setPlannedCaptainId(null);
+    setPlannedViceCaptainId(playerId);
+    setPlannedDirty(true);
+  };
+
+  // Save the Planned lineup for next round (stored on Team.plannedLineup,
+  // applied at the stage boundary). Does NOT touch the live lineup.
+  const savePlanned = async () => {
+    if (plannedStartingXI.length !== 11 || plannedBench.length !== 4 || !plannedCaptainId || !plannedViceCaptainId) {
+      alert('Set a full XI (11), bench (4), captain and vice-captain first.');
+      return;
+    }
+    setPlannedSaving(true);
+    try {
+      const payload = {
+        startingXI: plannedStartingXI.map((p) => p.id),
+        bench: plannedBench.map((p) => p.id),
+        captainId: plannedCaptainId,
+        viceCaptainId: plannedViceCaptainId,
+      };
+      const res = await fetch('/api/squad/update', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ forNextRound: true, ...payload }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Failed to save planned lineup');
+        return;
+      }
+      setSavedPlannedLineupRaw(JSON.stringify(payload));
+      setPlannedDirty(false);
+      setPlannedSavedMsg(true);
+      setTimeout(() => setPlannedSavedMsg(false), 2500);
+    } catch {
+      alert('Could not reach the server. Try again.');
+    } finally {
+      setPlannedSaving(false);
     }
   };
 
@@ -1814,34 +2052,65 @@ export default function SquadPage() {
     markDirty('You changed your formation but haven\u2019t saved.');
   };
   
-  // Current players on pitch by position
-  const gks = startingXI.filter(p => p.position === 'GK');
-  const defs = startingXI.filter(p => p.position === 'DEF');
-  const mids = startingXI.filter(p => p.position === 'MID');
-  const fwds = startingXI.filter(p => p.position === 'FWD');
+  // Active lineup source. Planned view edits its OWN independent lineup
+  // (plannedStartingXI/Bench/captain) — Live view uses the real one. Switching
+  // here keeps both render paths identical apart from the data + handlers, so
+  // the live scoring view is byte-for-byte unchanged when planView is false.
+  const activeStartingXI = planView ? plannedStartingXI : startingXI;
+  const activeBench = planView ? plannedBench : bench;
+  const activeCaptainId = planView ? plannedCaptainId : captainId;
+  const activeViceId = planView ? plannedViceCaptainId : viceCaptainId;
+  const activeToSub = planView ? plannedToSub : playerToSub;
+  const activeValidTargets = planView ? plannedValidSwapTargets : validSwapTargets;
 
-  // Render helper for pitch player cards (DRY) – includes drag/drop + highlight logic
+  // Projected money after the queued transfers apply (for the Planned view
+  // strip). Bank drops by what you net-spend; team value rises by the same.
+  const plannedMoneyDelta = queuedTransfers.reduce(
+    (sum, t) => sum + ((t.priceIn ?? 0) - (t.priceOut ?? 0)),
+    0,
+  );
+  const projectedTeamValue = teamValue + plannedMoneyDelta;
+  const projectedBankView = bankBalance - plannedMoneyDelta;
+
+  // Current players on pitch by position (active source)
+  const gks = activeStartingXI.filter(p => p.position === 'GK');
+  const defs = activeStartingXI.filter(p => p.position === 'DEF');
+  const mids = activeStartingXI.filter(p => p.position === 'MID');
+  const fwds = activeStartingXI.filter(p => p.position === 'FWD');
+
+  // Render helper for pitch player cards (DRY) – includes drag/drop + highlight
+  // logic. In Planned view the card IS the incoming player (the planned lineup
+  // carries real incoming Player objects); subs/captain go through the planned
+  // handlers and never touch the live lineup. Drag is disabled in Planned view
+  // (tap-to-sub only) so it can't fall through to the live swap machinery.
   const renderPitchPlayer = (p: Player) => {
     const opponent = getNextOpponent(p.nation?.code || '');
     const difficulty = getFixtureDifficulty(p.nation?.code || '', opponent);
-    const isSelected = playerToSub?.id === p.id;
-    const isValid = !!playerToSub && !isSelected && validSwapTargets.has(p.id);
-    const isDimmed = !!playerToSub && !isSelected && !validSwapTargets.has(p.id);
+    const isSelected = activeToSub?.id === p.id;
+    const isValid = !!activeToSub && !isSelected && activeValidTargets.has(p.id);
+    const isDimmed = !!activeToSub && !isSelected && !activeValidTargets.has(p.id);
+    const isPlannedIn = planView && incomingIdSet.has(p.id);
     return (
       <div
         key={p.id}
-        className="flex-shrink-0 select-none [-webkit-touch-callout:none]"
+        className={`relative flex-shrink-0 select-none [-webkit-touch-callout:none] ${
+          isPlannedIn ? 'rounded-2xl ring-2 ring-violet-400 shadow-[0_0_18px_rgba(167,139,250,0.45)]' : ''
+        }`}
         {...longPressHandlers(p)}
       >
+        {isPlannedIn && (
+          <span className="absolute top-1 right-1 z-20 px-1.5 py-0.5 rounded-full bg-violet-400 text-violet-950 text-[9px] font-black tracking-wider shadow pointer-events-none">
+            IN
+          </span>
+        )}
         <PlayerCard
           player={p}
           onClick={() => {
             if (consumeLongPress()) return;
-            if (playerToSub) {
+            if (activeToSub) {
               if (isValid || isSelected) {
-                swapPlayer(p);
+                (planView ? plannedSwapPlayer : swapPlayer)(p);
               } else {
-                // Just refocus to a same-side selection – or open detail
                 setSelectedPlayer(p);
               }
             } else {
@@ -1850,13 +2119,13 @@ export default function SquadPage() {
           }}
           showOpponent={opponent}
           difficulty={difficulty}
-          livePoints={displayPointsFor(p)}
-          isCaptain={captainId === p.id}
-          isViceCaptain={viceCaptainId === p.id}
+          livePoints={planView ? undefined : displayPointsFor(p)}
+          isCaptain={activeCaptainId === p.id}
+          isViceCaptain={activeViceId === p.id}
           selectedForSub={isSelected}
           validTarget={isValid}
           dimmed={isDimmed}
-          draggable={!isTouch}
+          draggable={!isTouch && !planView}
           onDragStart={handleDragStart(p)}
           onDragEnd={handleDragEnd}
           onDragOver={handleDragOver(p)}
@@ -2085,11 +2354,19 @@ export default function SquadPage() {
                 </span>
               </div>
               {stageLocked ? (
-                <div className={`px-2.5 py-1 rounded-lg border ${nextRoundWildcardArmed ? 'bg-emerald-500/15 border-emerald-500/40' : 'bg-violet-500/15 border-violet-500/30'}`}>
-                  <span className={`font-black ${nextRoundWildcardArmed ? 'text-emerald-300' : 'text-violet-300'}`}>
-                    {nextRoundWildcardArmed ? 'Wildcard · next round' : 'Next round'}
-                  </span>
-                </div>
+                <>
+                  <div className={`px-2.5 py-1 rounded-lg border ${nextRoundWildcardArmed ? 'bg-emerald-500/15 border-emerald-500/40' : 'bg-violet-500/15 border-violet-500/30'}`}>
+                    <span className={`font-black ${nextRoundWildcardArmed ? 'text-emerald-300' : 'text-violet-300'}`}>
+                      {nextRoundWildcardArmed ? 'Wildcard · next round' : 'Next round'}
+                    </span>
+                  </div>
+                  {!nextRoundWildcardArmed && transferHitCost > 0 && (
+                    <div className="px-2.5 py-1 rounded-lg border bg-red-500/15 border-red-500/30">
+                      <span className="text-white/50 mr-1">Hit</span>
+                      <span className="font-black text-red-300">-{transferHitCost}</span>
+                    </div>
+                  )}
+                </>
               ) : (
                 !unlimitedTransfers && (
                   <div
@@ -2121,16 +2398,17 @@ export default function SquadPage() {
               This round is being played, so your current squad is locked in.
               Transfers you confirm now are <span className="font-bold">queued</span> and
               applied automatically the moment the next round starts.
-              {nextRoundWildcardArmed && (
+              {nextRoundWildcardArmed ? (
                 <span className="block mt-1 text-emerald-300 font-bold">
                   Wildcard armed for {nextRound?.name ?? 'the next round'} — queue as many
                   transfers as you like, all free.
                 </span>
-              )}
-              {overQueueLimit && (
-                <span className="block mt-1 text-red-300 font-bold">
-                  You only have {freeTransfers} free transfer{freeTransfers === 1 ? '' : 's'} to
-                  queue — point hits aren&apos;t available mid-round.
+              ) : (
+                <span className="block mt-1 text-white/60">
+                  You have <span className="font-bold text-white">{freeTransfers}</span> free transfer{freeTransfers === 1 ? '' : 's'}.
+                  {transferHitCost > 0 && (
+                    <span className="text-red-300 font-bold"> Extra ones cost −4 pts each (−{transferHitCost} total) off next round.</span>
+                  )}
                 </span>
               )}
             </div>
@@ -2201,7 +2479,9 @@ export default function SquadPage() {
                 : pendingTransfers.length === 0
                 ? 'No transfers yet'
                 : stageLocked
-                ? `Queue ${pendingTransfers.length} transfer${pendingTransfers.length === 1 ? '' : 's'} for next round`
+                ? `Queue ${pendingTransfers.length} transfer${pendingTransfers.length === 1 ? '' : 's'} for next round${
+                    transferHitCost > 0 ? ` · -${transferHitCost} pts` : ''
+                  }`
                 : `Confirm ${pendingTransfers.length} transfer${pendingTransfers.length === 1 ? '' : 's'}${
                     !unlimitedTransfers && transferHitCost > 0
                       ? ` · -${transferHitCost} pts`
@@ -2426,7 +2706,20 @@ export default function SquadPage() {
               <Trophy className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">My Squad</h1>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">My Squad</h1>
+                <button
+                  type="button"
+                  onClick={() => setShowPoints(true)}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 hover:border-emerald-400/50 transition-all active:scale-95"
+                  title="Tap for your total + weekly breakdown"
+                >
+                  <Trophy className="w-3 h-3 text-emerald-300" />
+                  <span className="text-emerald-300/70 text-[10px] font-bold uppercase">Total</span>
+                  <span className="text-emerald-400 font-black text-sm leading-none tabular-nums">{displayTotalPoints}</span>
+                  <span className="text-emerald-300/50 text-[10px] font-bold">pts ›</span>
+                </button>
+              </div>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[10px] sm:text-xs uppercase tracking-wider text-white/40 font-bold">Next match in</span>
                 <span className="text-[11px] sm:text-xs text-amber-300 font-black">{countdownStr}</span>
@@ -2454,7 +2747,9 @@ export default function SquadPage() {
 
         {/* Stats strip */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <StatCard icon={<Trophy className="w-4 h-4" />} label="Total Pts" value={`${displayTotalPoints}`} accent="text-emerald-400" highlight />
+          <button type="button" onClick={() => setShowPoints(true)} className="w-full text-left active:scale-[0.98] transition-transform">
+            <StatCard icon={<Trophy className="w-4 h-4" />} label={`${roundPoints.stageId ?? 'Round'} Pts ›`} value={`${roundPoints.points}`} accent="text-emerald-400" highlight hint={queuedHit > 0 ? `−${queuedHit} pts next round` : 'Tap for total'} />
+          </button>
           <StatCard icon={<Coins className="w-4 h-4" />} label="Value" value={`£${teamValue.toFixed(1)}m`} accent="text-white" />
           <StatCard icon={<Wallet className="w-4 h-4" />} label="Bank" value={`£${bankBalance.toFixed(1)}m`} accent="text-emerald-300" />
           <StatCard
@@ -2465,48 +2760,71 @@ export default function SquadPage() {
             accent="text-amber-300"
           />
         </div>
+
+        {/* Live ↔ Planned view toggle. Always visible. "Planned" overlays any
+            transfers queued for next round onto the pitch so the user can
+            arrange formation/captain around the incomers; the arrangement saves
+            to the current lineup and they inherit it when the round flips. With
+            nothing queued the two views show the same team. */}
+        <div className="mt-3 inline-flex p-0.5 rounded-xl bg-white/5 ring-1 ring-white/10">
+          <button
+            type="button"
+            onClick={() => setPlanView(false)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-black transition-colors ${
+              !planView ? 'bg-emerald-500/90 text-emerald-950 shadow' : 'text-white/60 hover:text-white'
+            }`}
+          >
+            Live team
+          </button>
+          <button
+            type="button"
+            onClick={() => setPlanView(true)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-black transition-colors inline-flex items-center gap-1 ${
+              planView ? 'bg-violet-500/90 text-white shadow' : 'text-white/60 hover:text-white'
+            }`}
+          >
+            Planned
+            {hasPlannedTransfers && (
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${planView ? 'bg-white/20' : 'bg-violet-500/20 text-violet-200'}`}>
+                {plannedInById.size}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Transfers status — the TRANSFER deadline is the stage deadline (before
           the round's first match), distinct from the per-match lineup lock in
           the stat card above. Two states: open (locks at chipDeadline) vs
-          locked (round in play → changes queue for next round). */}
-      <div className="px-3 sm:px-0 mb-3">
-        <div className={`rounded-2xl border p-3 sm:p-4 flex items-start gap-3 ${
-          stageLocked
-            ? 'border-white/10 bg-white/5'
-            : 'border-sky-500/30 bg-gradient-to-r from-sky-500/15 via-sky-500/10 to-transparent'
-        }`}>
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-            stageLocked ? 'bg-white/10 text-white/60' : 'bg-sky-500/20 text-sky-300'
-          }`}>
-            <ArrowLeftRight className="w-5 h-5" strokeWidth={2.5} />
-          </div>
-          <div className="min-w-0">
-            {stageLocked ? (
-              <>
-                <p className="text-white font-black text-sm leading-tight">Transfers locked — round in play</p>
-                <p className="text-white/60 text-xs leading-snug mt-0.5">
-                  Buying &amp; selling is closed for this round. Any transfer you make now is
-                  <span className="font-bold text-white/80"> queued for the next round</span> and applies when it starts.
-                  (Your lineup can still change for players whose match hasn&apos;t kicked off.)
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="text-sky-200 font-black text-sm leading-tight">
-                  Transfers lock {chipDeadline ? `${formatDateShort(new Date(chipDeadline), timezone)} · ${formatTime(new Date(chipDeadline), timezone)}` : 'at the round deadline'}
-                </p>
-                <p className="text-sky-100/70 text-xs leading-snug mt-0.5">
-                  {chipDeadline && <><span className="font-bold text-sky-200">{formatCountdown(chipDeadline, now)}</span> left to buy &amp; sell. </>}
-                  This is the transfer deadline — before the round&apos;s first match. After it, changes queue for the next round.
-                  Your <span className="font-bold text-sky-100">lineup</span> locks separately, per match.
-                </p>
-              </>
-            )}
+          locked (round in play → changes queue for next round). The locked
+          state is a slim one-liner to save vertical space. */}
+      {stageLocked ? (
+        <div className="px-3 sm:px-0 mb-3">
+          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 flex items-center gap-2">
+            <Lock className="w-3.5 h-3.5 text-white/50 shrink-0" strokeWidth={2.5} />
+            <p className="text-white/70 text-xs leading-snug min-w-0">
+              <span className="font-bold text-white">Transfers locked</span> — round in play. Changes
+              <span className="font-bold text-white/80"> queue for next round</span>.
+            </p>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="px-3 sm:px-0 mb-3">
+          <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-2 flex items-center gap-2">
+            <ArrowLeftRight className="w-3.5 h-3.5 text-sky-300 shrink-0" strokeWidth={2.5} />
+            <p className="text-sky-100/80 text-xs leading-snug min-w-0">
+              {chipDeadline ? (
+                <>
+                  <span className="font-bold text-sky-200">{formatCountdown(chipDeadline, now)}</span> to transfer ·
+                  locks {formatDateShort(new Date(chipDeadline), timezone)} {formatTime(new Date(chipDeadline), timezone)}
+                </>
+              ) : (
+                <>Transfers lock at the round deadline.</>
+              )}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Late-joiner banner — this team first saved after the active stage's
           deadline, so its players' points show but don't count toward the
@@ -2564,7 +2882,7 @@ export default function SquadPage() {
               <div className="w-8 h-8 rounded-full bg-violet-500/20 flex items-center justify-center flex-shrink-0">
                 <ArrowLeftRight className="w-4 h-4 text-violet-300" />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-violet-200 font-black text-sm">
                   Queued for next round
                 </p>
@@ -2572,6 +2890,11 @@ export default function SquadPage() {
                   These swaps happen automatically when the next round starts.
                 </p>
               </div>
+              {queuedHit > 0 && (
+                <span className="shrink-0 self-start inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-red-500/15 ring-1 ring-red-500/40 text-red-300 text-[11px] font-black">
+                  −{queuedHit} pts
+                </span>
+              )}
             </div>
             <ul className="space-y-1.5">
               {queuedTransfers.map((t) => (
@@ -2799,6 +3122,19 @@ export default function SquadPage() {
         </div>
       )}
 
+      {/* Planned-view banner — slim one-liner reminding the pitch is a preview
+          of next round and that arranging it now carries over automatically. */}
+      {planView && (
+        <div className="px-3 sm:px-0 mb-3">
+          <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 px-3 py-2 flex items-center gap-2">
+            <ArrowLeftRight className="w-3.5 h-3.5 text-violet-300 shrink-0" strokeWidth={2.5} />
+            <p className="text-violet-200/80 text-xs leading-snug min-w-0">
+              <span className="font-bold text-violet-100">Planned team</span> — next round preview. Arrange it here; it applies when the round flips.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Mobile gesture hint — desktop gets the equivalent line under the pitch */}
       <p className="sm:hidden px-3 mb-2 text-center text-[10px] text-white/30 font-medium">
         Tap a player for details · hold to substitute
@@ -2830,12 +3166,12 @@ export default function SquadPage() {
         </div>
 
         {/* Sub-mode floating banner */}
-        {playerToSub && (
+        {activeToSub && (
           <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 px-3 py-1.5 rounded-full bg-amber-500/95 text-black text-[11px] sm:text-xs font-black shadow-lg flex items-center gap-2 backdrop-blur-sm">
             <RefreshCw className="w-3 h-3 animate-spin-slow" />
-            <span>Pick a player to swap with <span className="underline">{playerToSub.displayName}</span></span>
+            <span>Pick a player to swap with <span className="underline">{activeToSub.displayName}</span></span>
             <button
-              onClick={() => setPlayerToSub(null)}
+              onClick={() => (planView ? setPlannedToSub : setPlayerToSub)(null)}
               className="ml-1 w-4 h-4 rounded-full bg-black/20 flex items-center justify-center hover:bg-black/30"
             >
               <X className="w-2.5 h-2.5" />
@@ -2869,18 +3205,22 @@ export default function SquadPage() {
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-              {bench.map((p, i) => {
-                const isSelected = playerToSub?.id === p.id;
-                const isValid = !!playerToSub && !isSelected && validSwapTargets.has(p.id);
-                const isDimmed = !!playerToSub && !isSelected && !validSwapTargets.has(p.id);
+              {activeBench.map((p, i) => {
+                // Active source: Planned view carries the incoming players
+                // directly; subs go through the planned handlers. Drag disabled
+                // in Planned view so it can't reach the live swap machinery.
+                const isSelected = activeToSub?.id === p.id;
+                const isValid = !!activeToSub && !isSelected && activeValidTargets.has(p.id);
+                const isDimmed = !!activeToSub && !isSelected && !activeValidTargets.has(p.id);
+                const isPlannedIn = planView && incomingIdSet.has(p.id);
                 return (
                   <div
                     key={p.id}
                     onClick={() => {
                       if (consumeLongPress()) return;
-                      if (playerToSub) {
+                      if (activeToSub) {
                         if (isValid || isSelected) {
-                          swapPlayer(p);
+                          (planView ? plannedSwapPlayer : swapPlayer)(p);
                         } else {
                           setSelectedPlayer(p);
                         }
@@ -2889,7 +3229,7 @@ export default function SquadPage() {
                       }
                     }}
                     {...longPressHandlers(p)}
-                    draggable={!isTouch}
+                    draggable={!isTouch && !planView}
                     onDragStart={handleDragStart(p)}
                     onDragEnd={handleDragEnd}
                     onDragOver={handleDragOver(p)}
@@ -2901,6 +3241,8 @@ export default function SquadPage() {
                         ? 'bg-emerald-500/10 ring-2 ring-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.4)] animate-pulse'
                         : isDimmed
                         ? 'bg-white/[0.02] ring-1 ring-white/5 opacity-30 grayscale'
+                        : isPlannedIn
+                        ? 'bg-violet-500/10 ring-2 ring-violet-400 shadow-[0_0_15px_rgba(167,139,250,0.4)]'
                         : 'bg-white/[0.04] hover:bg-white/[0.08] ring-1 ring-white/5 hover:ring-white/15'
                     }`}
                   >
@@ -2918,14 +3260,21 @@ export default function SquadPage() {
                     />
                     <div className="flex-1 min-w-0">
                       <p className="text-white text-xs sm:text-sm font-bold truncate leading-tight">{p.displayName}</p>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <span className={`px-1 py-[1px] rounded-sm text-[8px] font-black ${
+                      <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                        <span className={`shrink-0 px-1 py-[1px] rounded-sm text-[8px] font-black ${
                           p.position === 'GK' ? 'bg-amber-500/20 text-amber-300' :
                           p.position === 'DEF' ? 'bg-sky-500/20 text-sky-300' :
                           p.position === 'MID' ? 'bg-emerald-500/20 text-emerald-300' :
                           'bg-rose-500/20 text-rose-300'
                         }`}>{p.position}</span>
-                        <span className="text-white/40 text-[10px]">{p.points || 0} pts</span>
+                        {isPlannedIn && (
+                          <span className="shrink-0 px-1 py-[1px] rounded-sm text-[8px] font-black bg-violet-500/30 text-violet-200 ring-1 ring-violet-400/50">IN</span>
+                        )}
+                        {planView ? (
+                          <span className="shrink-0 text-amber-300/70 text-[10px] font-bold">£{p.currentPrice.toFixed(1)}m</span>
+                        ) : (
+                          <span className="shrink-0 text-white/40 text-[10px]">{p.points || 0} pts</span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -2939,54 +3288,93 @@ export default function SquadPage() {
       {/* Desktop actions */}
       <div className="hidden sm:flex items-center justify-between px-3 sm:px-0">
         <p className="text-white/40 text-sm">Tap players to manage your team. Coloured badges show fixture difficulty.</p>
-        <button
-          onClick={saveChanges}
-          disabled={saving}
-          className="px-8 py-3 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-xl font-bold hover:from-pink-600 hover:to-rose-600 disabled:opacity-50 transition-all shadow-[0_10px_30px_-10px_rgba(244,63,94,0.6)] flex items-center gap-2"
-        >
-          <Save className="w-4 h-4" />
-          {saving ? 'Saving...' : 'Save Squad'}
-        </button>
+        {planView ? (
+          <button
+            onClick={savePlanned}
+            disabled={plannedSaving || !plannedDirty}
+            className="px-8 py-3 bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white rounded-xl font-bold hover:from-violet-400 hover:to-fuchsia-500 disabled:opacity-40 transition-all shadow-[0_10px_30px_-10px_rgba(167,139,250,0.6)] flex items-center gap-2"
+          >
+            <Save className="w-4 h-4" />
+            {plannedSaving ? 'Saving…' : plannedSavedMsg ? 'Saved ✓' : plannedDirty ? 'Save next-round lineup' : 'Next-round lineup saved'}
+          </button>
+        ) : (
+          <button
+            onClick={saveChanges}
+            disabled={saving}
+            className="px-8 py-3 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-xl font-bold hover:from-pink-600 hover:to-rose-600 disabled:opacity-50 transition-all shadow-[0_10px_30px_-10px_rgba(244,63,94,0.6)] flex items-center gap-2"
+          >
+            <Save className="w-4 h-4" />
+            {saving ? 'Saving...' : savedMsg ? 'Saved ✓' : 'Save Squad'}
+          </button>
+        )}
       </div>
 
       {/* Mobile sticky bottom bar */}
       <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-white/10 px-3 pt-2.5 add-pb-safe flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="text-center">
-            <p className="text-[9px] text-white/40 uppercase font-bold leading-none">Pts</p>
-            <p className="text-emerald-400 font-black text-sm leading-tight">{displayTotalPoints}</p>
-          </div>
-          <div className="text-center">
-            <p className="text-[9px] text-white/40 uppercase font-bold leading-none">Bank</p>
-            <p className="text-white font-black text-sm leading-tight">£{bankBalance.toFixed(1)}m</p>
-          </div>
+          {planView ? (
+            <>
+              <div className="text-center">
+                <p className="text-[9px] text-white/40 uppercase font-bold leading-none">Value</p>
+                <p className="text-white font-black text-sm leading-tight">£{projectedTeamValue.toFixed(1)}m</p>
+              </div>
+              <div className="text-center">
+                <p className="text-[9px] text-white/40 uppercase font-bold leading-none">Bank</p>
+                <p className="text-emerald-400 font-black text-sm leading-tight">£{projectedBankView.toFixed(1)}m</p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-center">
+                <p className="text-[9px] text-white/40 uppercase font-bold leading-none">Pts</p>
+                <p className="text-emerald-400 font-black text-sm leading-tight">{displayTotalPoints}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-[9px] text-white/40 uppercase font-bold leading-none">Bank</p>
+                <p className="text-white font-black text-sm leading-tight">£{bankBalance.toFixed(1)}m</p>
+              </div>
+            </>
+          )}
         </div>
-        <button
-          onClick={saveChanges}
-          disabled={saving}
-          className="flex-1 max-w-[200px] px-4 py-3 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-xl font-black text-sm hover:from-pink-600 hover:to-rose-600 disabled:opacity-50 transition-all shadow-lg flex items-center justify-center gap-2"
-        >
-          <Save className="w-4 h-4" />
-          {saving ? 'Saving...' : 'Save'}
-        </button>
+        {planView ? (
+          <button
+            onClick={savePlanned}
+            disabled={plannedSaving || !plannedDirty}
+            className="flex-1 max-w-[200px] px-4 py-3 bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white rounded-xl font-black text-sm hover:from-violet-400 hover:to-fuchsia-500 disabled:opacity-40 transition-all shadow-lg flex items-center justify-center gap-2"
+          >
+            <Save className="w-4 h-4" />
+            {plannedSaving ? 'Saving…' : plannedSavedMsg ? 'Saved ✓' : plannedDirty ? 'Save plan' : 'Saved'}
+          </button>
+        ) : (
+          <button
+            onClick={saveChanges}
+            disabled={saving}
+            className="flex-1 max-w-[200px] px-4 py-3 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-xl font-black text-sm hover:from-pink-600 hover:to-rose-600 disabled:opacity-50 transition-all shadow-lg flex items-center justify-center gap-2"
+          >
+            <Save className="w-4 h-4" />
+            {saving ? 'Saving...' : savedMsg ? 'Saved ✓' : 'Save'}
+          </button>
+        )}
       </div>
 
       {selectedPlayer && (
         <PlayerDetailModal
+          /* Planned view: selectedPlayer IS the incoming player and all actions
+             route through the planned handlers (never the live lineup). */
           player={selectedPlayer}
-          isCaptain={captainId === selectedPlayer.id}
-          isViceCaptain={viceCaptainId === selectedPlayer.id}
-          isStarting={!!selectedPlayer.isStarting}
+          isCaptain={activeCaptainId === selectedPlayer.id}
+          isViceCaptain={activeViceId === selectedPlayer.id}
+          isStarting={planView ? plannedStartingXI.some((p) => p.id === selectedPlayer.id) : !!selectedPlayer.isStarting}
           isAdmin={isAdmin}
-          subTargetName={playerToSub && playerToSub.id !== selectedPlayer.id ? playerToSub.displayName : null}
-          isSubTarget={playerToSub?.id === selectedPlayer.id}
+          subTargetName={activeToSub && activeToSub.id !== selectedPlayer.id ? activeToSub.displayName : null}
+          isSubTarget={activeToSub?.id === selectedPlayer.id}
           onSub={() => {
-            swapPlayer(selectedPlayer);
-            if (!playerToSub) setSelectedPlayer(null);
+            (planView ? plannedSwapPlayer : swapPlayer)(selectedPlayer);
+            if (!activeToSub) setSelectedPlayer(null);
           }}
-          onSetCaptain={() => setCaptain(selectedPlayer.id)}
-          onSetViceCaptain={() => setViceCaptain(selectedPlayer.id)}
-          onCancelSub={() => setPlayerToSub(null)}
+          onSetCaptain={() => (planView ? plannedSetCaptain : setCaptain)(selectedPlayer.id)}
+          onSetViceCaptain={() => (planView ? plannedSetViceCaptain : setViceCaptain)(selectedPlayer.id)}
+          onCancelSub={() => (planView ? setPlannedToSub : setPlayerToSub)(null)}
           onAdjustmentReverted={handleAdjustmentReverted}
           onClose={() => setSelectedPlayer(null)}
         />
@@ -3004,6 +3392,8 @@ export default function SquadPage() {
           onClose={() => setPickerInfoPlayer(null)}
         />
       )}
+
+      {showPoints && <PointsBreakdownModal onClose={() => setShowPoints(false)} />}
 
       {/* Sub-off forfeit warning — fires when moving a player to the bench
           whose match has already kicked off this round. It's a one-way move:

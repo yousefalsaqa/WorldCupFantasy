@@ -252,6 +252,14 @@ model Team {
   // Shape: [{ playerOutId, playerInId, priceIn, priceOut, queuedAt }]
   pendingTransfers String?
 
+  // JSON lineup the user arranged for the PLANNED (next-round) squad — the
+  // current 15 with queued transfers applied. Lets them set the next-round
+  // formation/bench/captain independently of the locked current lineup.
+  // Applied right after pendingTransfers at the stage boundary, then cleared.
+  // Shape: { startingXI: string[], bench: string[], captainId, viceCaptainId }
+  // Ids are FINAL player ids (incoming where transferred, current otherwise).
+  plannedLineup    String?
+
   // Chips
   wildcard1Used   Boolean  @default(false)
   wildcard2Used   Boolean  @default(false)

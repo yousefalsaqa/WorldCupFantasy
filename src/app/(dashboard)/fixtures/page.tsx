@@ -55,6 +55,9 @@ function FixturesContent() {
   const searchParams = useSearchParams();
   const { timezone, abbreviation } = useUserTimezone();
   const [filter, setFilter] = useState<FilterOption>('all');
+  // Manual open/closed overrides per round folder (key → isOpen). Unset rounds
+  // fall back to the smart default (current round + any live round open).
+  const [roundOpen, setRoundOpen] = useState<Record<string, boolean>>({});
   const [scores, setScores] = useState<Record<string, MatchScore[]>>({});
   const [anyLive, setAnyLive] = useState(false);
   // Open fixture-detail modal (only fixtures that exist in the DB).
@@ -161,6 +164,65 @@ function FixturesContent() {
       parseFixtureDateTime(b.date, b.time).getTime();
   });
 
+  // ── Round folders ────────────────────────────────────────────────────
+  // Group the schedule into collapsible round sections so finished rounds
+  // fold away and you land on the current one. The group stage has no round
+  // field, so matchday (1/2/3) is derived per group from the chronological
+  // order of that group's 6 fixtures (FIFA schedules the rounds in order).
+  const groupRoundById = (() => {
+    const m = new Map<string, number>();
+    const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+    for (const L of letters) {
+      const gf = GROUP_FIXTURES.filter((f) => f.group === L).sort(
+        (a, b) => parseFixtureDateTime(a.date, a.time).getTime() - parseFixtureDateTime(b.date, b.time).getTime(),
+      );
+      gf.forEach((f, idx) => m.set(f.id, Math.floor(idx / 2) + 1));
+    }
+    return m;
+  })();
+  const KO_ORDER: Record<string, number> = {
+    'Round of 32': 4, 'Round of 16': 5, 'Quarter Final': 6, 'Semi Final': 7, '3rd Place': 8, 'Final': 9,
+  };
+  const roundInfo = (f: WorldCupFixture): { key: string; label: string; order: number } => {
+    const md = groupRoundById.get(f.id);
+    if (md) return { key: `GR${md}`, label: `Group Stage · Matchday ${md}`, order: md };
+    return { key: f.stage, label: f.stage, order: KO_ORDER[f.stage] ?? 10 };
+  };
+
+  // Build ordered round sections from the filtered list (already date-sorted).
+  const rounds: Array<{ key: string; label: string; order: number; fixtures: WorldCupFixture[] }> = [];
+  const roundIdx = new Map<string, number>();
+  for (const f of filteredFixtures) {
+    const info = roundInfo(f);
+    let idx = roundIdx.get(info.key);
+    if (idx === undefined) {
+      idx = rounds.length;
+      roundIdx.set(info.key, idx);
+      rounds.push({ key: info.key, label: info.label, order: info.order, fixtures: [] });
+    }
+    rounds[idx].fixtures.push(f);
+  }
+  rounds.sort((a, b) => a.order - b.order);
+
+  const roundStatus = (r: { fixtures: WorldCupFixture[] }) => {
+    let finished = 0;
+    let live = 0;
+    for (const f of r.fixtures) {
+      const s = scoreFor(f);
+      if (s?.isFinished) finished += 1;
+      else if (s?.isStarted) live += 1;
+    }
+    return { finished, live, allFinished: finished === r.fixtures.length };
+  };
+  // The current round = first not-yet-finished round; it (and any live round)
+  // opens by default. Everything else is folded unless the user opens it.
+  const currentRoundKey = rounds.find((r) => !roundStatus(r).allFinished)?.key ?? null;
+  const isRoundOpen = (r: { key: string; fixtures: WorldCupFixture[] }) => {
+    if (r.key in roundOpen) return roundOpen[r.key];
+    const st = roundStatus(r);
+    return r.key === currentRoundKey || st.live > 0;
+  };
+
   // Render the calendar day in the user's timezone. For "midnight ET"
   // matches (e.g. Vancouver night games) this means the day label might
   // shift backwards a day for West Coast users — which is correct, since
@@ -201,10 +263,37 @@ function FixturesContent() {
         <FilterButton active={filter === 'knockout'} onClick={() => setFilter('knockout')}>Knockouts</FilterButton>
       </div>
 
-      {/* Fixtures List — grouped under date headers so the schedule scans
-          like a TV guide. Grouping key = calendar day in the USER's zone. */}
+      {/* Fixtures — collapsible round folders. Finished rounds fold away so
+          you land on the current one; inside each folder the matches still
+          group under date headers like a TV guide. */}
       <div className="space-y-3">
-        {filteredFixtures.map((fixture, i) => {
+        {rounds.map((round) => {
+          const st = roundStatus(round);
+          const open = isRoundOpen(round);
+          return (
+            <div key={round.key} className="rounded-2xl border border-white/10 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setRoundOpen((o) => ({ ...o, [round.key]: !open }))}
+                className={`w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors ${
+                  round.key === currentRoundKey ? 'bg-emerald-500/10 hover:bg-emerald-500/15' : 'bg-white/5 hover:bg-white/[0.08]'
+                }`}
+              >
+                <svg className={`w-4 h-4 shrink-0 text-white/50 transition-transform ${open ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+                <span className="font-black text-sm text-white">{round.label}</span>
+                {st.live > 0 && (
+                  <span className="flex items-center gap-1 px-1.5 py-[1px] rounded-md bg-emerald-500/15 ring-1 ring-emerald-400/40 text-emerald-300 text-[9px] font-black tracking-wider">
+                    <span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" /></span>
+                    LIVE
+                  </span>
+                )}
+                <span className="ml-auto text-[10px] font-bold text-white/40 tabular-nums">
+                  {st.allFinished ? 'Finished' : `${st.finished}/${round.fixtures.length} done`}
+                </span>
+              </button>
+              {open && (
+                <div className="space-y-3 p-3">
+                  {round.fixtures.map((fixture, i) => {
           const stadium = STADIUMS[fixture.stadium];
           const score = scoreFor(fixture);
           const isLive = !!score && score.isStarted && !score.isFinished;
@@ -233,7 +322,7 @@ function FixturesContent() {
             msToKickoff > -15 * 60 * 1000;
           const dayLabel = formatDate(fixture.date, fixture.time);
           const prevLabel = i > 0
-            ? formatDate(filteredFixtures[i - 1].date, filteredFixtures[i - 1].time)
+            ? formatDate(round.fixtures[i - 1].date, round.fixtures[i - 1].time)
             : null;
           const showHeader = dayLabel !== prevLabel;
           const isToday = dayLabel === formatDateWithWeekday(new Date(), timezone);
@@ -345,6 +434,11 @@ function FixturesContent() {
             </div>
             </div>
           );
+                  })}
+                </div>
+              )}
+            </div>
+          );
         })}
       </div>
 
@@ -412,16 +506,35 @@ function TeamCell({ code, side }: { code: string; side: 'home' | 'away' }) {
   const isHome = side === 'home';
   const containerAlign = isHome ? '' : 'flex-row-reverse text-right';
   const textAlign = isHome ? '' : 'text-right';
+  // If the flag CDN fails for a code (hiccup / throttle on a burst of flags),
+  // fall back to the code badge instead of showing a broken-image icon.
+  const [flagErr, setFlagErr] = useState(false);
 
-  if (flag) {
+  if (flag && !flagErr) {
     return (
       <div className={`flex items-center gap-2 min-w-0 ${containerAlign}`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={getFlagUrl(flag, 'md')}
           alt={code}
-          className="w-6 h-4 sm:w-8 sm:h-6 rounded shadow-md flex-shrink-0"
+          loading="lazy"
+          decoding="async"
+          onError={() => setFlagErr(true)}
+          className="w-6 h-4 sm:w-8 sm:h-6 rounded shadow-md flex-shrink-0 bg-white/10"
         />
+        <span className={`text-white font-semibold text-xs sm:text-sm truncate ${textAlign}`}>
+          {name}
+        </span>
+      </div>
+    );
+  }
+
+  if (flag && flagErr) {
+    return (
+      <div className={`flex items-center gap-2 min-w-0 ${containerAlign}`}>
+        <div className="w-6 h-4 sm:w-8 sm:h-6 bg-white/10 rounded flex items-center justify-center text-[9px] sm:text-[10px] text-white/70 flex-shrink-0 font-mono font-bold">
+          {code}
+        </div>
         <span className={`text-white font-semibold text-xs sm:text-sm truncate ${textAlign}`}>
           {name}
         </span>

@@ -1,8 +1,90 @@
 # Live Points Feature — Handoff
 
-Last updated: 2026-06-16 (**LIVE** — GR1 ongoing; fixture-detail modal
-self-healing + null-id crash fix; PLAYER PRICING re-do still staged for GR2;
-see Session 2026-06-16 below, then 2026-06-14 №2 and 2026-06-14)
+Last updated: 2026-06-18 (**LIVE** — GR2 active, GR1 settled/banked. Big
+feature branch `feature/transfers-planned-view` built + typechecked but
+**NOT deployed**; pricing fix IS on main/prod. See Session 2026-06-18 below.)
+
+---
+
+## Session 2026-06-18 — PLANNED VIEW + TRANSFER HITS + FIXTURES + POINTS UI (on a branch, NOT deployed)
+
+All of the below lives on branch **`feature/transfers-planned-view`**
+(typechecks clean, tested in dev against the prod DB). **Only the pricing
+fix was pushed to `main`/prod.** Decide deploy timing deliberately — a
+GR1→GR2 rollover already happened on prod's existing code while this branch
+sat undeployed (queued transfers applied fine; the new planned-lineup
+apply did NOT run — it needs a deploy to take effect at the next rollover).
+
+### Shipped to main/prod
+- **Transfer picker affordability fix** — picker "max per pick" + filter now
+  use `projectedBank` (not raw bank), so players you can afford aren't hidden.
+
+### Built on the branch (NOT deployed)
+- **Live | Planned squad view** (squad page). Planned view previews the team
+  AFTER queued transfers apply, with its OWN independent lineup state
+  (`plannedStartingXI/Bench/captain`) so arranging next round never touches
+  the locked current lineup. Saved via `PUT /api/squad/update {forNextRound:true}`
+  → `Team.plannedLineup` (new nullable column, added via `prisma db push`),
+  applied at EVERY stage boundary in `applyPendingTransfers` (groups + KOs).
+- **Transfers beyond the free allotment** now allowed while a round is locked,
+  each extra = **−4 hit** applied to the round they take effect in. Queue
+  entries tagged `isFree` (in `pendingTransfers` JSON); `applyPendingTransfers`
+  writes paid ones as non-free `Transfer` rows (settleStage counts them) and
+  decrements the running total. **Cancel recomputes the free/paid split** from
+  the invariant allotment (`freeTransfers + free entries queued`) so a cancel
+  clears a now-unneeded hit. Pending hit surfaced via `queuedHit` from
+  `/api/squad/get` (Total Pts hint + red badge on the queued card).
+  - Repair script if isFree ever drifts: `scripts/repair-queue-isfree.ts`.
+- **Fixtures** grouped into collapsible round folders (matchday derived per
+  group); current round opens by default. Flag `onError` fallback + lazy load.
+- **Points breakdown popup** (`src/components/points-breakdown-modal.tsx`):
+  tappable Total → per-week list → expand a week to a read-only mini pitch
+  (kit faces + photos). New `GET /api/team/stages-summary` returns per-stage
+  points + `currentRoundPoints` (= total − completed). Top pill = TOTAL, stat
+  card = current ROUND. Wired on dashboard + squad header.
+- Smooth inline "Saved ✓" replaced the `alert()` on squad save.
+
+### ⚠⚠ NEXT: build the EMPTY-SLOT TRANSFER MODULE (requested, NOT started)
+Frontend-only change in `src/app/(dashboard)/squad/page.tsx` transfer mode.
+No backend change needed — the server already takes `{playerOutId, playerInId}`
+pairs; empty slots are transient CLIENT state, never submitted.
+
+Goal: in transfer mode each player card gets an **✕ (transfer out)** that
+frees the slot and banks his money immediately, leaving an **empty slot** you
+fill later (instead of the current force-pick-a-replacement-in-one-tap flow).
+
+Implementation reminders:
+- `pendingTransfers` type → allow `playerIn: Player | null` (currently
+  `{playerOut, playerIn}`). An "out, not yet filled" entry has `playerIn:null`.
+- `transferOut(p)`: push `{playerOut:p, playerIn:null}`.
+- `transferDisplaySquad`: when an entry has `playerIn===null`, render the slot
+  as **empty** — reuse `EmptySlot` from `@/components/kit`, keep the position so
+  it lands in the right row.
+- Fill: tap the empty slot → `startReplace(outPlayer)` → picker → `commitTransfer`
+  sets `playerIn` on the matching entry (match by `playerOut.id`).
+- Budget when filling an empty slot = **`projectedBank`** (the out's money is
+  ALREADY banked into projectedBank — do NOT also add the refund or you
+  double-count). `transferBudgetImpact`: `change += playerOut.currentPrice -
+  (playerIn?.currentPrice ?? 0)`.
+- GUARD every `t.playerIn` read for null: `isPendingIncoming`, `findOutgoingFor`,
+  `projectedNationCounts`, `submitTransfers` (filter out unfilled before mapping).
+- **Block submit while any slot is empty** (user explicitly confirmed: "they
+  shouldn't be able to save with an empty slot"). Disable the Queue/Confirm
+  button + show a hint when `pendingTransfers.some(t => !t.playerIn)`.
+- Undo: support undo by `playerOut.id` (empty slot) as well as `playerIn.id`.
+- Keep the **phone layout, `size="xs"` cards, and existing color palette**
+  (violet=planned/queued, amber=pending, emerald) — user cares about this.
+- Interacts cleanly with the −4 hits already built (each out=in pair still
+  counts as one transfer for the free/hit accounting).
+
+### Branch / DB facts for whoever resumes
+- DB already has `Team.plannedLineup` (nullable) via `db push`; `pendingTransfers`
+  JSON entries may carry `isFree`. These are backward-compatible (old code
+  ignores them; missing `isFree` = treated as free).
+- Read-only check scripts added in `scripts/`: `check-rollover.ts`,
+  `check-gr1-saved.ts`, `repair-queue-isfree.ts`, `inspect-queued-overlay.ts`.
+- Deploy decision still open: deploying makes planned-lineup apply + queued
+  hits live from the next rollover onward.
 
 ---
 
