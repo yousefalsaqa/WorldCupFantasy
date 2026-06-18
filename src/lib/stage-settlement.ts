@@ -201,6 +201,23 @@ export async function settleStage(stage: StageRef): Promise<SettlementResult> {
     }
     const hits = isLate ? 0 : hitsByTeam.get(team.id) ?? 0;
 
+    // Snapshot the squad/lineup that PLAYED this stage. settleStage runs
+    // before applyPendingTransfers, so team.squadPlayers is still the stage's
+    // squad with its saved (pre-auto-sub) lineup flags. The history breakdown
+    // reads this for a perfect past-round team; only player IDs + slot flags
+    // are stored — player names/photos are joined fresh at read time so they
+    // never go stale. (Rounds settled before this existed fall back to a
+    // transfer-rewind reconstruction in the gameweek endpoint.)
+    const squadSnapshot = JSON.stringify(
+      team.squadPlayers.map((sp) => ({
+        playerId: sp.playerId,
+        isStarting: sp.isStarting,
+        isCaptain: sp.isCaptain,
+        isViceCaptain: sp.isViceCaptain,
+        benchOrder: sp.benchOrder,
+      })),
+    );
+
     await prisma.teamStage.upsert({
       where: { teamId_stageId: { teamId: team.id, stageId: stage.id } },
       create: {
@@ -210,12 +227,14 @@ export async function settleStage(stage: StageRef): Promise<SettlementResult> {
         captainPoints: captainExtra,
         transferHits: hits,
         totalPoints: raw + captainExtra - hits,
+        squadSnapshot,
       },
       update: {
         rawPoints: raw,
         captainPoints: captainExtra,
         transferHits: hits,
         totalPoints: raw + captainExtra - hits,
+        squadSnapshot,
       },
     });
     result.teamsSettled++;
