@@ -1,12 +1,107 @@
 # Live Points Feature — Handoff
 
-Last updated: 2026-06-18 (**LIVE** — GR2 active, GR1 settled/banked. Big
-feature branch `feature/transfers-planned-view` built + typechecked but
-**NOT deployed**; pricing fix IS on main/prod. See Session 2026-06-18 below.)
+Last updated: 2026-06-18 PM (**LIVE** — GR2 LOCKED since 16:00Z, GR1
+settled/banked, GR3 next. The `feature/transfers-planned-view` branch is now
+**MERGED + DEPLOYED to main/prod**, plus a big batch of points/transfers/
+history/league fixes shipped this session. JWT_SECRET rotated → forced
+re-login. See **Session 2026-06-18 PM** immediately below; the earlier
+branch-build notes are kept further down for history.)
 
 ---
 
-## Session 2026-06-18 — PLANNED VIEW + TRANSFER HITS + FIXTURES + POINTS UI (on a branch, NOT deployed)
+## Session 2026-06-18 PM — POINTS / TRANSFERS / HISTORY / LEAGUE FIXES + FORCE RE-LOGIN (DEPLOYED)
+
+All of the below is on **main/prod**. Commits: `f60f5eb` (empty-slot + fixtures
+strip), `af0b895` (points/transfers/planned/history), `67463ef` (snapshot),
+`89e8f72` (JWT redeploy), `a993c1b` (breakdown/league/inference), `85a7327`
+(league tie-break). Read-only audit scripts left in `scripts/` as a record.
+
+### Shipped
+- **Empty-slot transfer module** (squad page transfer mode): ✕ frees a slot to
+  empty (banks the money), fill later by tapping the slot; ↺ restores. Body tap
+  still does a direct one-tap replace. `pendingTransfers` now allows
+  `playerIn: null`; submit blocked while any slot empty; filling uses
+  `projectedBank` (no double-refund).
+- **Per-round player pills**: `/api/squad/get` AND league
+  `/api/team/[teamId]/squad` now compute each pill from the **active stage's
+  PlayerPerformance** (live + banked), NOT cumulative `SquadPlayer.points`
+  (which accumulated from when a player joined the team → held vs
+  transferred-in were on different bases). Resets each round; banked
+  `Team.totalPoints` untouched. Pills read 0 until the round's games play.
+- **Top "Round Pts"** (dashboard + squad): `stages-summary.currentRoundPoints`
+  now = active-stage perfs − hits (was `totalPoints − completedSum`, which
+  leaked the leaderboard-vs-snapshot divergence — teams with no games showed
+  +2/+4).
+- **Transfer hit-flag bug FIXED**: immediate mode flagged the WHOLE batch
+  `isFreeTransfer` identically, over-counting hits at settlement on mixed
+  requests. Now per-transfer (mirrors the queue path). Charbel's 3 mislabeled
+  rows repaired (`scripts/repair-transfer-flags.ts --apply`); all teams now
+  consistent (`scripts/scan-transfer-flag-bug.ts`).
+- **Planned-lineup rollover bug FIXED**: `applyPendingTransfers` was
+  double-gated behind `pendingTransfers` (stage-advance only called it for
+  teams WITH queued transfers, AND it early-returned on 0 pending), so a
+  lineup-only planned arrangement was silently dropped. Now runs when
+  `pendingTransfers` OR `plannedLineup` is set. Applies at GR2→GR3.
+- **Squad SNAPSHOT at settlement**: `settleStage` writes
+  `TeamStage.squadSnapshot` (player ids + lineup flags of the squad that played
+  the stage, captured BEFORE `applyPendingTransfers`). The gameweek endpoint
+  prefers it → past-round breakdowns are **EXACT from the GR2→GR3 settlement
+  onward**. (Column already existed in schema — no migration.)
+- **Past-round breakdown for pre-snapshot rounds (GR1/GR2)**: gameweek endpoint
+  reconstructs the squad by **rewinding later-stage transfers** (players +
+  positions exact; same-position transfers keep the formation valid). Then a
+  **best-guess lineup**: corrects the captain from the settled `captainPoints`,
+  infers the XI that sums to `rawPoints` (valid formation, captain forced in),
+  and assigns a valid vice (non-captain starter). Falls back to the raw rewind
+  if no exact subset exists or Bench Boost was active. Modal shows an amber
+  "estimated lineup" note (`lineupInferred` flag).
+- **/history** rows open the shared `PlayerDetailModal` (full match history +
+  upcoming fixtures). Detail modal also shows an "Upcoming" fixture strip.
+- **Breakdown popup**: chip badges per round (WC / BB / 3×C / FH); bench ordered
+  by `benchOrder` (gameweek endpoint now returns it).
+- **Fixtures**: player cards show the NEXT game's FDR only
+  (`getNextWcFixtures(code, 1)`); the detail modal "Upcoming" shows the
+  multi-game run. Shared `getNextWcFixtures` in `lib/world-cup-fixtures`.
+- **League standings tie-break**: still ranks by overall total, but ties break
+  by **this-gameweek points** (desc), then **earliest `Team.updatedAt`** ("who
+  got the score first").
+
+### Ops — FORCE RE-LOGIN (done)
+`JWT_SECRET` rotated in the Vercel dashboard + redeploy → all 7-day tokens
+invalid → everyone re-logs into the fresh build. New secret lives in Vercel
+only (write-only). The 1-min cron (`/api/live/update`) uses no user JWT, so the
+rollover is unaffected.
+
+### Verified (read-only — scripts in `scripts/`)
+- **GR1 banking intact**: all 23 teams settled, 24/24 matches, no lost points.
+  3 teams had small leaderboard-vs-snapshot deltas (mid-stage lineup changes +
+  Charbel's hit-flag) — benign, leaderboard ≥ snapshot.
+- **Inference** across all teams: 20/23 match `rawPoints`, 2 fall back, 1 Bench
+  Boost; captain consistent 21/22 (1 = blanked captain, unrecoverable); **0
+  vice/captain-on-bench**.
+
+### OPEN (user's call, NOT blocking)
+- **Wildcard free-transfer RESET**: a Wildcard/Free-Hit week still **banks**
+  unused free transfers into the next round (chimbohimbo wildcarded GR2, kept
+  4 → will start GR3 with 5). FPL resets to the base (2). Fix would zero the
+  `leftover` fed to `computeNextFreeTransfers` in `stage-advance` for teams
+  whose CLOSING stage's `TeamStage` carried a WILDCARD/FREE_HIT chip — mind
+  transfers queued during the locked wildcard round.
+- **chimbohimbo's saved `plannedLineup` is STALE** (references a dropped
+  player) → would be ignored at GR2→GR3. User to re-save in Planned view.
+
+### Key facts for whoever resumes
+- Active stage = **GR2 (locked since 2026-06-18 16:00Z)**; next = GR3.
+- Rollover trigger: `/api/live/update` (1-min cron) → `maybeAdvanceStage` →
+  `settleStage` + `applyPendingTransfers` (queued transfers + planned lineup).
+
+---
+
+## Session 2026-06-18 (earlier) — PLANNED VIEW + TRANSFER HITS + FIXTURES + POINTS UI
+
+> **STATUS UPDATE:** this branch is now **MERGED + DEPLOYED** (see Session
+> 2026-06-18 PM above). The planned-lineup apply is live (and a rollover bug in
+> it was fixed in the PM session). Kept below for history/context.
 
 All of the below lives on branch **`feature/transfers-planned-view`**
 (typechecks clean, tested in dev against the prod DB). **Only the pricing
@@ -44,7 +139,8 @@ apply did NOT run — it needs a deploy to take effect at the next rollover).
   card = current ROUND. Wired on dashboard + squad header.
 - Smooth inline "Saved ✓" replaced the `alert()` on squad save.
 
-### ⚠⚠ NEXT: build the EMPTY-SLOT TRANSFER MODULE (requested, NOT started)
+### ✅ DONE (Session PM): EMPTY-SLOT TRANSFER MODULE — built + shipped (commit f60f5eb). Original spec kept below.
+### ⚠⚠ (original) NEXT: build the EMPTY-SLOT TRANSFER MODULE (requested, NOT started)
 Frontend-only change in `src/app/(dashboard)/squad/page.tsx` transfer mode.
 No backend change needed — the server already takes `{playerOutId, playerInId}`
 pairs; empty slots are transient CLIENT state, never submitted.
