@@ -464,21 +464,30 @@ export async function DELETE(request: NextRequest) {
 
     const removed = pending.filter((t) => !remaining.includes(t));
     const cancelled = removed.length;
-    // Only entries that actually spent a free transfer at queue time get one
-    // refunded — i.e. non-wildcard AND not a paid (over-allotment) hit entry.
-    const refunded = removed.filter((t) => !t.isWildcard && t.isFree !== false).length;
+
+    // Recompute the free/paid split on the remaining queue. The original free
+    // allotment is invariant: current freeTransfers + the free entries still
+    // queued (each free queued entry decremented freeTransfers by 1). After a
+    // cancel, the first `allotment` remaining non-wildcard transfers are free
+    // again and the rest paid — so cancelling clears a now-unneeded -4 hit.
+    const allotment = team.freeTransfers + pending.filter((t) => !t.isWildcard && t.isFree !== false).length;
+    const remainingNonWild = remaining.filter((t) => !t.isWildcard);
+    remainingNonWild.forEach((t, i) => { t.isFree = i < allotment; });
+    const newFreeTransfers = Math.max(0, allotment - Math.min(allotment, remainingNonWild.length));
+    const queuedHit = remaining.filter((t) => !t.isWildcard && t.isFree === false).length * 4;
+
     await prisma.team.update({
       where: { id: team.id },
       data: {
         pendingTransfers: serializePendingTransfers(remaining),
-        freeTransfers: team.freeTransfers + refunded,
+        freeTransfers: newFreeTransfers,
       },
     });
     await prisma.auditLog.create({
       data: {
         userId: session.userId,
         action: 'QUEUED_TRANSFERS_CANCELLED',
-        details: JSON.stringify({ cancelled, refunded, remaining: remaining.length }),
+        details: JSON.stringify({ cancelled, remaining: remaining.length, freeTransfers: newFreeTransfers, queuedHit }),
       },
     });
 
@@ -486,6 +495,8 @@ export async function DELETE(request: NextRequest) {
       success: true,
       message: `${cancelled} queued transfer${cancelled === 1 ? '' : 's'} cancelled`,
       remaining: remaining.length,
+      freeTransfers: newFreeTransfers,
+      queuedHit,
     });
   } catch (error) {
     console.error('Error cancelling queued transfers:', error);

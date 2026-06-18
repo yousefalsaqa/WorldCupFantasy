@@ -939,8 +939,13 @@ export default function SquadPage() {
         body: JSON.stringify({ playerInId }),
       });
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
         setQueuedTransfers((prev) => prev.filter((t) => t.playerIn?.id !== playerInId));
-        setFreeTransfers((prev) => prev + 1);
+        // Trust the server's recomputed counters so a cancelled transfer
+        // clears any now-unneeded -4 hit (the free/paid split is recomputed).
+        if (typeof data.freeTransfers === 'number') setFreeTransfers(data.freeTransfers);
+        else setFreeTransfers((prev) => prev + 1);
+        if (typeof data.queuedHit === 'number') setQueuedHit(data.queuedHit);
       }
     } catch (err) {
       console.error('Cancel queued transfer failed:', err);
