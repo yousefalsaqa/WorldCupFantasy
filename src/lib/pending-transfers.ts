@@ -55,6 +55,46 @@ export function serializePendingTransfers(list: PendingTransfer[]): string | nul
   return list.length === 0 ? null : JSON.stringify(list);
 }
 
+// ============================================
+// Planned (next-round) lineup
+//
+// The lineup the user arranged for the post-transfer squad while the current
+// round was locked. Stored on Team.plannedLineup as JSON and applied right
+// after the queued transfers at the stage boundary (then cleared). Ids are the
+// FINAL player ids (incoming where a transfer applied, current otherwise).
+// ============================================
+
+export interface PlannedLineup {
+  startingXI: string[];
+  bench: string[];
+  captainId: string;
+  viceCaptainId: string;
+}
+
+export function parsePlannedLineup(json: string | null | undefined): PlannedLineup | null {
+  if (!json) return null;
+  try {
+    const p = JSON.parse(json);
+    if (
+      p &&
+      Array.isArray(p.startingXI) && p.startingXI.length === 11 &&
+      Array.isArray(p.bench) && p.bench.length === 4 &&
+      typeof p.captainId === 'string' &&
+      typeof p.viceCaptainId === 'string' &&
+      [...p.startingXI, ...p.bench].every((id: unknown) => typeof id === 'string')
+    ) {
+      return { startingXI: p.startingXI, bench: p.bench, captainId: p.captainId, viceCaptainId: p.viceCaptainId };
+    }
+  } catch {
+    /* fall through */
+  }
+  return null;
+}
+
+export function serializePlannedLineup(lineup: PlannedLineup | null): string | null {
+  return lineup ? JSON.stringify(lineup) : null;
+}
+
 export interface ApplyResult {
   applied: number;
   // Queued transfers that could no longer be executed (player left squad,
@@ -153,12 +193,54 @@ export async function applyPendingTransfers(
     }
 
     // Recompute team value from the post-apply squad (current prices, same
-    // convention as /api/transfers).
+    // convention as /api/transfers). Also grab positions so we can validate a
+    // planned lineup against the final squad.
     const updatedSquad = await tx.squadPlayer.findMany({
       where: { teamId },
-      include: { player: { select: { currentPrice: true } } },
+      include: { player: { select: { currentPrice: true, position: true } } },
     });
     const newTeamValue = updatedSquad.reduce((sum, sp) => sum + sp.player.currentPrice, 0);
+
+    // Apply the planned (next-round) lineup over the inherited slots, if the
+    // user saved one and it's still valid against the final 15. Invalid or
+    // stale lineups are ignored (the inherited slots stand). Always cleared.
+    const planned = parsePlannedLineup(team.plannedLineup);
+    if (planned) {
+      const finalIds = new Set(updatedSquad.map((sp) => sp.playerId));
+      const submitted = [...planned.startingXI, ...planned.bench];
+      const posById = new Map(updatedSquad.map((sp) => [sp.playerId, sp.player.position]));
+      const counts: Record<string, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+      planned.startingXI.forEach((id) => { const pos = posById.get(id); if (pos) counts[pos]++; });
+      const formationOk =
+        counts.GK === 1 &&
+        counts.DEF >= 3 && counts.DEF <= 5 &&
+        counts.MID >= 2 && counts.MID <= 5 &&
+        counts.FWD >= 1 && counts.FWD <= 3;
+      const lineupValid =
+        submitted.length === 15 &&
+        new Set(submitted).size === 15 &&
+        submitted.every((id) => finalIds.has(id)) &&
+        planned.startingXI.includes(planned.captainId) &&
+        planned.startingXI.includes(planned.viceCaptainId) &&
+        planned.captainId !== planned.viceCaptainId &&
+        formationOk;
+
+      if (lineupValid) {
+        const startSet = new Set(planned.startingXI);
+        const benchIdx = new Map(planned.bench.map((id, i) => [id, i + 1]));
+        for (const sp of updatedSquad) {
+          await tx.squadPlayer.update({
+            where: { id: sp.id },
+            data: {
+              isStarting: startSet.has(sp.playerId),
+              benchOrder: startSet.has(sp.playerId) ? null : (benchIdx.get(sp.playerId) ?? null),
+              isCaptain: sp.playerId === planned.captainId,
+              isViceCaptain: sp.playerId === planned.viceCaptainId,
+            },
+          });
+        }
+      }
+    }
 
     await tx.team.update({
       where: { id: teamId },
@@ -166,6 +248,7 @@ export async function applyPendingTransfers(
         bankBalance: team.bankBalance + bankDelta,
         teamValue: newTeamValue,
         pendingTransfers: null,
+        plannedLineup: null,
       },
     });
   }, { timeout: 15000 });

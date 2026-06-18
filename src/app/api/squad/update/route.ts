@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { verifyToken, JWTPayload } from '@/lib/auth';
 import { getStageLock } from '@/lib/deadline';
 import { parseActiveChips, hasTripleCaptain, hasBenchBoost, type ChipType } from '@/lib/chips-active';
+import { parsePendingTransfers, serializePlannedLineup } from '@/lib/pending-transfers';
 import { cookies } from 'next/headers';
 
 // This route is dynamic because it reads cookies for authentication
@@ -27,7 +28,13 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Please log in' }, { status: 401 });
     }
 
-    const { startingXI, bench, captainId, viceCaptainId } = await request.json();
+    const body = await request.json();
+    const { startingXI, bench, captainId, viceCaptainId } = body;
+    // When true, this saves the PLANNED next-round lineup (current squad with
+    // queued transfers applied) to Team.plannedLineup instead of touching the
+    // live SquadPlayer rows. No current-round lock rules apply — it's the next
+    // round. Applied automatically at the stage boundary (applyPendingTransfers).
+    const forNextRound = body.forNextRound === true;
 
     // Validate
     if (!startingXI || startingXI.length !== 11) {
@@ -50,6 +57,64 @@ export async function PUT(request: NextRequest) {
 
     if (!team) {
       return NextResponse.json({ error: 'Team not found' }, { status: 404 });
+    }
+
+    // ── Planned (next-round) lineup save ───────────────────────────────
+    // Validates against the PLANNED squad (current 15 with queued transfers
+    // applied) and stores it on Team.plannedLineup. No lock/forfeit rules —
+    // it applies next round, when nothing has kicked off yet.
+    if (forNextRound) {
+      const pending = parsePendingTransfers(team.pendingTransfers);
+      // Build the final 15 player ids: swap each queued-out player for its in.
+      const outToIn = new Map(pending.map((t) => [t.playerOutId, t.playerInId]));
+      const plannedIds = team.squadPlayers.map((sp) => outToIn.get(sp.playerId) ?? sp.playerId);
+      const plannedIdSet = new Set(plannedIds);
+
+      const submitted = [...startingXI, ...bench];
+      if (
+        submitted.length !== 15 ||
+        new Set(submitted).size !== 15 ||
+        submitted.some((id: string) => !plannedIdSet.has(id))
+      ) {
+        return NextResponse.json(
+          { error: 'Planned lineup must use exactly your 15 next-round players' },
+          { status: 400 },
+        );
+      }
+      if (!startingXI.includes(captainId) || !startingXI.includes(viceCaptainId) || captainId === viceCaptainId) {
+        return NextResponse.json(
+          { error: 'Captain and vice-captain must be two different starters' },
+          { status: 400 },
+        );
+      }
+
+      // Formation check on the planned starters (need their positions).
+      const positions = await prisma.player.findMany({
+        where: { id: { in: plannedIds } },
+        select: { id: true, position: true },
+      });
+      const posById = new Map(positions.map((p) => [p.id, p.position]));
+      const counts: Record<string, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+      for (const id of startingXI) { const pos = posById.get(id); if (pos) counts[pos]++; }
+      const formationOk =
+        counts.GK === 1 &&
+        counts.DEF >= 3 && counts.DEF <= 5 &&
+        counts.MID >= 2 && counts.MID <= 5 &&
+        counts.FWD >= 1 && counts.FWD <= 3;
+      if (!formationOk) {
+        return NextResponse.json(
+          { error: 'Invalid formation: need 1 GK, 3–5 DEF, 2–5 MID, 1–3 FWD' },
+          { status: 400 },
+        );
+      }
+
+      await prisma.team.update({
+        where: { id: team.id },
+        data: {
+          plannedLineup: serializePlannedLineup({ startingXI, bench, captainId, viceCaptainId }),
+        },
+      });
+      return NextResponse.json({ success: true, planned: true });
     }
 
     // No outsiders: every submitted id must be one of this team's 15. The

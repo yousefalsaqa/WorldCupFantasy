@@ -378,6 +378,9 @@ export async function GET(request: NextRequest) {
       // Transfers queued while the current round is locked; applied at the
       // next stage boundary. Empty array when nothing is queued.
       queuedTransfers,
+      // The user's saved next-round lineup (raw JSON string) for the planned
+      // squad, or null. The squad page hydrates the Planned view from this.
+      plannedLineup: (refreshedTeam ?? team).plannedLineup ?? null,
       // True iff there is at least one match currently in progress. The
       // squad page polls this endpoint every 60s while this is true so
       // the live-points pill ticks up. We keep the signal at the response
