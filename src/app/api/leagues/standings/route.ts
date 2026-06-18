@@ -97,10 +97,22 @@ export async function GET(request: NextRequest) {
           roundPoints: roundTotals.get(m.team!.id) ?? 0,
           liveDelta,
           teamValue: m.team!.teamValue,
+          // Sort-only: when totals AND this-round points tie, the team that
+          // reached the score first wins. updatedAt is the closest proxy for
+          // "when their points last changed" (banking writes the team row).
+          updatedAt: m.team!.updatedAt,
         };
       })
-      .sort((a, b) => b.totalPoints - a.totalPoints)
-      .map((team, index) => ({ ...team, rank: index + 1 }));
+      // Rank by overall total; ties broken by who scored more THIS round, then
+      // by who got there first (earliest update).
+      .sort(
+        (a, b) =>
+          b.totalPoints - a.totalPoints ||
+          b.roundPoints - a.roundPoints ||
+          a.updatedAt.getTime() - b.updatedAt.getTime(),
+      )
+      // Strip the sort-only field and assign final ranks.
+      .map(({ updatedAt: _updatedAt, ...team }, index) => ({ ...team, rank: index + 1 }));
 
     // Tell the client whether there's at least one match in progress.
     // The /leagues page uses this to drive a "poll while live, refresh
