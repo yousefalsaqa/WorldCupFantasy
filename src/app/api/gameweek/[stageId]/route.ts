@@ -123,6 +123,7 @@ export async function GET(
         displayName: sp.player.displayName,
         position: sp.player.position,
         nation: sp.player.nation,
+        photoUrl: sp.player.photoUrl,
         shirtNumber: sp.player.shirtNumber,
         isStarting: sp.isStarting,
         isCaptain: sp.isCaptain,

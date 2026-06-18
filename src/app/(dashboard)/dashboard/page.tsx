@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { getFlagUrl } from '@/lib/flags';
 import { useUserTimezone } from '@/hooks/useTimezone';
 import { formatDateShort } from '@/lib/format-time';
+import PointsBreakdownModal from '@/components/points-breakdown-modal';
 
 interface User {
   id: string;
@@ -37,6 +38,10 @@ export default function DashboardPage() {
   const { timezone } = useUserTimezone();
   const [user, setUser] = useState<User | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
+  const [showPoints, setShowPoints] = useState(false);
+  // Current-round points + stage label for the inline display; the popup shows
+  // the cumulative total + per-week breakdown.
+  const [roundPoints, setRoundPoints] = useState<{ points: number; stageId: string | null }>({ points: 0, stageId: null });
   const [unlimitedTransfers, setUnlimitedTransfers] = useState(false);
   const [currentStage, setCurrentStage] = useState<Stage | null>(null);
   const [loading, setLoading] = useState(true);
@@ -83,6 +88,11 @@ export default function DashboardPage() {
       if (teamRes.ok && teamData.team) {
         setTeam(teamData.team);
         setUnlimitedTransfers(Boolean(teamData.unlimitedTransfers));
+        // Current-round points for the inline display (cheap, non-blocking).
+        fetch('/api/team/stages-summary', { signal: ctrl.signal })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => { if (d) setRoundPoints({ points: d.currentRoundPoints ?? 0, stageId: d.currentStageId ?? null }); })
+          .catch(() => { /* non-fatal */ });
       } else {
         setTeam(null);
       }
@@ -140,6 +150,18 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {team && (
+            <button
+              type="button"
+              onClick={() => setShowPoints(true)}
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 hover:border-emerald-400/50 transition-all active:scale-95"
+              title="See your points by gameweek"
+            >
+              <span className="text-[10px] sm:text-xs uppercase tracking-wider text-emerald-300/70 font-bold">Total</span>
+              <span className="text-lg sm:text-xl font-black text-emerald-400 leading-none tabular-nums">{team.totalPoints}</span>
+              <span className="text-emerald-300/50 text-[10px] font-bold hidden sm:inline">pts ›</span>
+            </button>
+          )}
           {/* Host flags - hidden on very small screens */}
           <div className="hidden sm:flex -space-x-2">
             {HOST_FLAGS.map(code => (
@@ -258,12 +280,14 @@ export default function DashboardPage() {
 
           {/* Stats Grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-            <StatCard
-              label="Total Points"
-              value={team.totalPoints.toString()}
-              icon={<ChartIcon />}
-              highlight
-            />
+            <button type="button" onClick={() => setShowPoints(true)} className="w-full text-left active:scale-[0.98] transition-transform">
+              <StatCard
+                label={`${roundPoints.stageId ?? 'Round'} Points ›`}
+                value={roundPoints.points.toString()}
+                icon={<ChartIcon />}
+                highlight
+              />
+            </button>
             <StatCard
               label="Bank"
               value={`£${team.bankBalance.toFixed(1)}m`}
@@ -339,6 +363,8 @@ export default function DashboardPage() {
           </div>
         </>
       )}
+
+      {showPoints && <PointsBreakdownModal onClose={() => setShowPoints(false)} />}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { PlayerCard, EmptySlot, PlayerFace } from '@/components/kit';
 import PlayerDetailModal from '@/components/player-detail-modal';
 import PitchBg from '@/components/pitch-bg';
 import FormationPicker from '@/components/formation-picker';
+import PointsBreakdownModal from '@/components/points-breakdown-modal';
 import { getFlagUrl } from '@/lib/flags';
 import { getFixtureDifficulty } from '@/lib/fdr';
 import { useUnsavedChanges } from '@/contexts/unsaved-changes';
@@ -283,6 +284,10 @@ export default function SquadPage() {
   // user can arrange formation/captain around the players coming in next
   // round. Only meaningful when there are queued transfers; default "live".
   const [planView, setPlanView] = useState(false);
+  const [showPoints, setShowPoints] = useState(false);
+  // Current-round (this gameweek) points + stage label for the inline pill —
+  // the tappable popup shows the cumulative total + per-week breakdown.
+  const [roundPoints, setRoundPoints] = useState<{ points: number; stageId: string | null }>({ points: 0, stageId: null });
   // The next-round lineup the user has saved (raw JSON from the server), and
   // the live, editable Planned-view lineup state. The Planned view edits these
   // — fully independent of the live startingXI/bench so rearranging next round
@@ -1539,6 +1544,18 @@ export default function SquadPage() {
     }
   }, [planView, plannedDirty, startingXI, bench, captainId, viceCaptainId, savedPlannedLineupRaw, mapToPlanned, plannedInById]);
 
+  // Load the current-round points for the inline pill (cheap summary call).
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/team/stages-summary', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d) setRoundPoints({ points: d.currentRoundPoints ?? 0, stageId: d.currentStageId ?? null });
+      })
+      .catch(() => { /* non-fatal */ });
+    return () => { cancelled = true; };
+  }, []);
+
   // Formation-only swap validity for the Planned lineup — NO current-round
   // played-locks, because next round hasn't kicked off.
   const plannedIsSwapValid = (p1: Player, p2: Player): boolean => {
@@ -2689,7 +2706,20 @@ export default function SquadPage() {
               <Trophy className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">My Squad</h1>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">My Squad</h1>
+                <button
+                  type="button"
+                  onClick={() => setShowPoints(true)}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 hover:border-emerald-400/50 transition-all active:scale-95"
+                  title="Tap for your total + weekly breakdown"
+                >
+                  <Trophy className="w-3 h-3 text-emerald-300" />
+                  <span className="text-emerald-300/70 text-[10px] font-bold uppercase">Total</span>
+                  <span className="text-emerald-400 font-black text-sm leading-none tabular-nums">{displayTotalPoints}</span>
+                  <span className="text-emerald-300/50 text-[10px] font-bold">pts ›</span>
+                </button>
+              </div>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[10px] sm:text-xs uppercase tracking-wider text-white/40 font-bold">Next match in</span>
                 <span className="text-[11px] sm:text-xs text-amber-300 font-black">{countdownStr}</span>
@@ -2717,7 +2747,9 @@ export default function SquadPage() {
 
         {/* Stats strip */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <StatCard icon={<Trophy className="w-4 h-4" />} label="Total Pts" value={`${displayTotalPoints}`} accent="text-emerald-400" highlight hint={queuedHit > 0 ? `−${queuedHit} pts next round` : undefined} />
+          <button type="button" onClick={() => setShowPoints(true)} className="w-full text-left active:scale-[0.98] transition-transform">
+            <StatCard icon={<Trophy className="w-4 h-4" />} label={`${roundPoints.stageId ?? 'Round'} Pts ›`} value={`${roundPoints.points}`} accent="text-emerald-400" highlight hint={queuedHit > 0 ? `−${queuedHit} pts next round` : 'Tap for total'} />
+          </button>
           <StatCard icon={<Coins className="w-4 h-4" />} label="Value" value={`£${teamValue.toFixed(1)}m`} accent="text-white" />
           <StatCard icon={<Wallet className="w-4 h-4" />} label="Bank" value={`£${bankBalance.toFixed(1)}m`} accent="text-emerald-300" />
           <StatCard
@@ -2778,20 +2810,18 @@ export default function SquadPage() {
         </div>
       ) : (
         <div className="px-3 sm:px-0 mb-3">
-          <div className="rounded-2xl border p-3 sm:p-4 flex items-start gap-3 border-sky-500/30 bg-gradient-to-r from-sky-500/15 via-sky-500/10 to-transparent">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 bg-sky-500/20 text-sky-300">
-              <ArrowLeftRight className="w-5 h-5" strokeWidth={2.5} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sky-200 font-black text-sm leading-tight">
-                Transfers lock {chipDeadline ? `${formatDateShort(new Date(chipDeadline), timezone)} · ${formatTime(new Date(chipDeadline), timezone)}` : 'at the round deadline'}
-              </p>
-              <p className="text-sky-100/70 text-xs leading-snug mt-0.5">
-                {chipDeadline && <><span className="font-bold text-sky-200">{formatCountdown(chipDeadline, now)}</span> left to buy &amp; sell. </>}
-                This is the transfer deadline — before the round&apos;s first match. After it, changes queue for the next round.
-                Your <span className="font-bold text-sky-100">lineup</span> locks separately, per match.
-              </p>
-            </div>
+          <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-2 flex items-center gap-2">
+            <ArrowLeftRight className="w-3.5 h-3.5 text-sky-300 shrink-0" strokeWidth={2.5} />
+            <p className="text-sky-100/80 text-xs leading-snug min-w-0">
+              {chipDeadline ? (
+                <>
+                  <span className="font-bold text-sky-200">{formatCountdown(chipDeadline, now)}</span> to transfer ·
+                  locks {formatDateShort(new Date(chipDeadline), timezone)} {formatTime(new Date(chipDeadline), timezone)}
+                </>
+              ) : (
+                <>Transfers lock at the round deadline.</>
+              )}
+            </p>
           </div>
         </div>
       )}
@@ -3362,6 +3392,8 @@ export default function SquadPage() {
           onClose={() => setPickerInfoPlayer(null)}
         />
       )}
+
+      {showPoints && <PointsBreakdownModal onClose={() => setShowPoints(false)} />}
 
       {/* Sub-off forfeit warning — fires when moving a player to the bench
           whose match has already kicked off this round. It's a one-way move:
