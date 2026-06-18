@@ -31,6 +31,9 @@ export interface PendingTransfer {
   // Queued under a next-round Wildcard: doesn't consume a free transfer and
   // never incurs a hit. Absent/false = a normal free queued transfer.
   isWildcard?: boolean;
+  // False = this queued transfer was beyond the free allotment and carries a
+  // -4 point hit (applied to the round it takes effect in). Absent/true = free.
+  isFree?: boolean;
 }
 
 export function parsePendingTransfers(json: string | null | undefined): PendingTransfer[] {
@@ -136,6 +139,10 @@ export async function applyPendingTransfers(
 
   let applied = 0;
   let skipped = 0;
+  // Points hit for queued transfers beyond the free allotment (isFree === false),
+  // charged to the round they take effect in. Wildcard entries are always free.
+  const HIT_COST = 4;
+  let paidApplied = 0;
 
   await prisma.$transaction(async (tx) => {
     // Track squad membership as we go so one queue can't double-fill a slot.
@@ -181,7 +188,9 @@ export async function applyPendingTransfers(
           playerOutId: t.playerOutId,
           priceIn: t.priceIn,
           priceOut: t.priceOut,
-          isFreeTransfer: true,
+          // Paid (over-allotment) entries are NOT free — settleStage counts
+          // these for the stage's transfer-hit total.
+          isFreeTransfer: t.isWildcard ? true : t.isFree !== false,
           isWildcard: !!t.isWildcard,
         },
       });
@@ -189,6 +198,7 @@ export async function applyPendingTransfers(
       squadIds.delete(t.playerOutId);
       squadIds.add(t.playerInId);
       bankDelta += t.priceOut - t.priceIn;
+      if (!t.isWildcard && t.isFree === false) paidApplied += 1;
       applied += 1;
     }
 
@@ -249,6 +259,11 @@ export async function applyPendingTransfers(
         teamValue: newTeamValue,
         pendingTransfers: null,
         plannedLineup: null,
+        // Charge the running leaderboard total for over-allotment queued
+        // transfers now (mirrors immediate-mode's deduct-at-transfer). The
+        // per-stage TeamStage.transferHits snapshot is written separately by
+        // settleStage from the Transfer rows above.
+        ...(paidApplied > 0 ? { totalPoints: { decrement: paidApplied * HIT_COST } } : {}),
       },
     });
   }, { timeout: 15000 });

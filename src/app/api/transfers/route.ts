@@ -113,14 +113,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (queueMode && !nextRoundWildcard && transfers.length > team.freeTransfers) {
-      return NextResponse.json({
-        error:
-          team.freeTransfers <= 0
-            ? 'No free transfers left to queue for next round.'
-            : `You can only queue ${team.freeTransfers} more transfer${team.freeTransfers === 1 ? '' : 's'} for next round (point hits aren't available while a round is being played).`,
-      }, { status: 400 });
-    }
+    // Queued transfers beyond the free allotment are allowed — they carry a
+    // -4 point hit (charged to the round they take effect in), same as making
+    // them at an open deadline. Wildcard-armed next rounds stay unlimited/free.
 
     // Validate all transfers
     const playersOut: string[] = [];
@@ -253,13 +248,23 @@ export async function POST(request: NextRequest) {
     // transfers now; the squad itself changes at the next stage boundary.
     // ============================================
     if (queueMode) {
+      // The first `freeTransfers` queued are free; the rest carry a -4 hit
+      // (applied to the round they take effect in). Wildcard = all free.
+      queueEntries.forEach((e, i) => {
+        e.isFree = nextRoundWildcard ? true : i < team.freeTransfers;
+      });
+      const freeSpent = nextRoundWildcard ? 0 : Math.min(team.freeTransfers, queueEntries.length);
+      const hitCount = nextRoundWildcard ? 0 : Math.max(0, queueEntries.length - team.freeTransfers);
+      const hitCost = hitCount * TRANSFER_HIT_COST;
+
       await prisma.$transaction(async (tx) => {
         await tx.team.update({
           where: { id: team.id },
           data: {
             pendingTransfers: serializePendingTransfers([...existingPending, ...queueEntries]),
-            // Wildcard queued transfers are free — don't spend free transfers.
-            freeTransfers: Math.max(0, team.freeTransfers - (nextRoundWildcard ? 0 : queueEntries.length)),
+            // Only the free ones spend a free transfer; paid ones cost points,
+            // charged at the boundary (applyPendingTransfers) not now.
+            freeTransfers: Math.max(0, team.freeTransfers - freeSpent),
           },
         });
         await tx.auditLog.create({
@@ -270,6 +275,7 @@ export async function POST(request: NextRequest) {
               transfers: queueEntries.length,
               stageLocked: lockedStage?.stageId ?? null,
               cost: netCost,
+              hit: hitCost,
             }),
           },
         });
@@ -278,7 +284,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         queued: true,
-        message: `${queueEntries.length} transfer${queueEntries.length === 1 ? '' : 's'} queued — they'll be applied when the next round starts`,
+        hit: hitCost,
+        message: `${queueEntries.length} transfer${queueEntries.length === 1 ? '' : 's'} queued${hitCost > 0 ? ` (-${hitCost} pts next round)` : ''} — applied when the next round starts`,
       });
     }
 
@@ -457,9 +464,9 @@ export async function DELETE(request: NextRequest) {
 
     const removed = pending.filter((t) => !remaining.includes(t));
     const cancelled = removed.length;
-    // Only non-wildcard entries spent a free transfer at queue time, so only
-    // those get one refunded. Wildcard queued transfers were free.
-    const refunded = removed.filter((t) => !t.isWildcard).length;
+    // Only entries that actually spent a free transfer at queue time get one
+    // refunded — i.e. non-wildcard AND not a paid (over-allotment) hit entry.
+    const refunded = removed.filter((t) => !t.isWildcard && t.isFree !== false).length;
     await prisma.team.update({
       where: { id: team.id },
       data: {

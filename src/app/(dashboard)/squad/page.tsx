@@ -805,26 +805,24 @@ export default function SquadPage() {
 
   const projectedBank = bankBalance + transferBudgetImpact;
 
-  // Points hit cost = (transfers beyond freeTransfers) × 4. Matches the
-  // server-side rule in /api/transfers. Forced to 0 when transfers are
-  // unlimited (pre-tournament, wildcard, free hit) so the UI doesn't show
-  // a deduction the API won't actually apply.
-  const transferHitCost = useMemo(() => {
-    // While the round is locked, transfers are QUEUED for next round and
-    // hits aren't available — the count is capped at freeTransfers instead.
-    if (unlimitedTransfers || stageLocked) return 0;
-    const extra = Math.max(0, pendingTransfers.length - freeTransfers);
-    return extra * 4;
-  }, [pendingTransfers.length, freeTransfers, unlimitedTransfers, stageLocked]);
-
   // A Wildcard armed for the next round makes queued transfers unlimited and
   // free — mirrors the server-side branch in /api/transfers.
   const nextRoundWildcardArmed = !!nextRound?.armed;
 
-  // Queue mode (round in progress): you can only queue up to your remaining
-  // free transfers — unless a next-round Wildcard is armed (then unlimited).
-  // Mirrors the server-side cap in /api/transfers.
-  const overQueueLimit = stageLocked && !nextRoundWildcardArmed && pendingTransfers.length > freeTransfers;
+  // Points hit cost = (transfers beyond freeTransfers) × 4. Matches the
+  // server-side rule in /api/transfers. Applies BOTH at an open deadline
+  // (immediate) and while the round is locked (queued for next round) — the
+  // only free-pass is unlimited transfers (pre-tournament / wildcard / free
+  // hit / next-round wildcard armed).
+  const transferHitCost = useMemo(() => {
+    if (unlimitedTransfers || nextRoundWildcardArmed) return 0;
+    const extra = Math.max(0, pendingTransfers.length - freeTransfers);
+    return extra * 4;
+  }, [pendingTransfers.length, freeTransfers, unlimitedTransfers, nextRoundWildcardArmed]);
+
+  // Over-allotment queued transfers are now allowed (they cost a hit), so this
+  // is no longer a blocker — kept false for compatibility with existing refs.
+  const overQueueLimit = false;
 
   // Nation counts after applying pending transfers, used by the picker to
   // grey out players who would breach the 3-per-nation cap. We start from
@@ -2330,11 +2328,19 @@ export default function SquadPage() {
                 </span>
               </div>
               {stageLocked ? (
-                <div className={`px-2.5 py-1 rounded-lg border ${nextRoundWildcardArmed ? 'bg-emerald-500/15 border-emerald-500/40' : 'bg-violet-500/15 border-violet-500/30'}`}>
-                  <span className={`font-black ${nextRoundWildcardArmed ? 'text-emerald-300' : 'text-violet-300'}`}>
-                    {nextRoundWildcardArmed ? 'Wildcard · next round' : 'Next round'}
-                  </span>
-                </div>
+                <>
+                  <div className={`px-2.5 py-1 rounded-lg border ${nextRoundWildcardArmed ? 'bg-emerald-500/15 border-emerald-500/40' : 'bg-violet-500/15 border-violet-500/30'}`}>
+                    <span className={`font-black ${nextRoundWildcardArmed ? 'text-emerald-300' : 'text-violet-300'}`}>
+                      {nextRoundWildcardArmed ? 'Wildcard · next round' : 'Next round'}
+                    </span>
+                  </div>
+                  {!nextRoundWildcardArmed && transferHitCost > 0 && (
+                    <div className="px-2.5 py-1 rounded-lg border bg-red-500/15 border-red-500/30">
+                      <span className="text-white/50 mr-1">Hit</span>
+                      <span className="font-black text-red-300">-{transferHitCost}</span>
+                    </div>
+                  )}
+                </>
               ) : (
                 !unlimitedTransfers && (
                   <div
@@ -2366,16 +2372,17 @@ export default function SquadPage() {
               This round is being played, so your current squad is locked in.
               Transfers you confirm now are <span className="font-bold">queued</span> and
               applied automatically the moment the next round starts.
-              {nextRoundWildcardArmed && (
+              {nextRoundWildcardArmed ? (
                 <span className="block mt-1 text-emerald-300 font-bold">
                   Wildcard armed for {nextRound?.name ?? 'the next round'} — queue as many
                   transfers as you like, all free.
                 </span>
-              )}
-              {overQueueLimit && (
-                <span className="block mt-1 text-red-300 font-bold">
-                  You only have {freeTransfers} free transfer{freeTransfers === 1 ? '' : 's'} to
-                  queue — point hits aren&apos;t available mid-round.
+              ) : (
+                <span className="block mt-1 text-white/60">
+                  You have <span className="font-bold text-white">{freeTransfers}</span> free transfer{freeTransfers === 1 ? '' : 's'}.
+                  {transferHitCost > 0 && (
+                    <span className="text-red-300 font-bold"> Extra ones cost −4 pts each (−{transferHitCost} total) off next round.</span>
+                  )}
                 </span>
               )}
             </div>
@@ -2446,7 +2453,9 @@ export default function SquadPage() {
                 : pendingTransfers.length === 0
                 ? 'No transfers yet'
                 : stageLocked
-                ? `Queue ${pendingTransfers.length} transfer${pendingTransfers.length === 1 ? '' : 's'} for next round`
+                ? `Queue ${pendingTransfers.length} transfer${pendingTransfers.length === 1 ? '' : 's'} for next round${
+                    transferHitCost > 0 ? ` · -${transferHitCost} pts` : ''
+                  }`
                 : `Confirm ${pendingTransfers.length} transfer${pendingTransfers.length === 1 ? '' : 's'}${
                     !unlimitedTransfers && transferHitCost > 0
                       ? ` · -${transferHitCost} pts`
