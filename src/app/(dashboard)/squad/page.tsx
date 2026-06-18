@@ -91,6 +91,13 @@ interface Player {
 
 type Position = 'GK' | 'DEF' | 'MID' | 'FWD';
 
+// A slot on the transfer-mode pitch: either a player (current or projected
+// incoming) or an empty slot left by a transfer-out that hasn't been
+// re-filled yet. Both carry `position` so they group into the right row.
+type TransferSlot =
+  | { kind: 'player'; position: Position; player: Player }
+  | { kind: 'empty'; position: Position; playerOut: Player };
+
 /**
  * Selection-history chip for picker rows: did this guy actually play his
  * nation's last match? Green = started, amber = bench cameo, gray = unused.
@@ -353,8 +360,12 @@ export default function SquadPage() {
   // 60-second `livePoints` polling effect below — when nothing's live we
   // don't burn DB cycles on a useless poll loop.
   const [anyMatchLive, setAnyMatchLive] = useState(false);
+  // `playerIn: null` = a slot transferred OUT but not yet re-filled (empty
+  // slot). Its money is banked immediately into `projectedBank`; the user
+  // fills it later by tapping the empty slot. Unfilled entries are blocked
+  // from submit and filtered out before hitting the server.
   const [pendingTransfers, setPendingTransfers] = useState<
-    Array<{ playerOut: Player; playerIn: Player }>
+    Array<{ playerOut: Player; playerIn: Player | null }>
   >([]);
   // Transfers already QUEUED on the server for next round (made while the
   // current round was locked). Shown as a card in view mode with per-row
@@ -774,15 +785,23 @@ export default function SquadPage() {
   // the pitch reflects what the team WILL look like after Confirm. Outgoing
   // players keep their slot but visually fade; we render the replacements
   // with an amber glow + Undo button instead.
-  const transferDisplaySquad = useMemo(() => {
-    if (!transferMode) return squad;
+  // Projected squad as discriminated slots so empty (out-but-not-yet-filled)
+  // slots keep their position and render as an EmptySlot in the right row.
+  const transferDisplaySquad = useMemo<TransferSlot[]>(() => {
     return squad.map((sp) => {
-      const t = pendingTransfers.find((pt) => pt.playerOut.id === sp.id);
-      if (!t) return sp;
+      const t = transferMode
+        ? pendingTransfers.find((pt) => pt.playerOut.id === sp.id)
+        : undefined;
+      if (!t) return { kind: 'player', position: sp.position as Position, player: sp };
+      // Transferred out, not yet re-filled → render the slot as empty but
+      // keep the original position (from playerOut) so it lands in its row.
+      if (!t.playerIn) {
+        return { kind: 'empty', position: t.playerOut.position as Position, playerOut: t.playerOut };
+      }
       // Project the incoming player onto the slot. We re-stamp `currentPrice`
       // as the *new* player's price so budget math downstream is correct;
       // `purchasePrice` (refund) stays on the original via t.playerOut.
-      return { ...t.playerIn };
+      return { kind: 'player', position: t.playerIn.position as Position, player: { ...t.playerIn } };
     });
   }, [transferMode, squad, pendingTransfers]);
 
@@ -790,13 +809,13 @@ export default function SquadPage() {
   // the amber glow border and the Replace ↔ Undo button switch.
   const isPendingIncoming = useCallback(
     (playerId: string) =>
-      pendingTransfers.some((t) => t.playerIn.id === playerId),
+      pendingTransfers.some((t) => t.playerIn?.id === playerId),
     [pendingTransfers],
   );
 
   const findOutgoingFor = useCallback(
     (incomingPlayerId: string) =>
-      pendingTransfers.find((t) => t.playerIn.id === incomingPlayerId)
+      pendingTransfers.find((t) => t.playerIn?.id === incomingPlayerId)
         ?.playerOut ?? null,
     [pendingTransfers],
   );
@@ -807,12 +826,22 @@ export default function SquadPage() {
   const transferBudgetImpact = useMemo(() => {
     let change = 0;
     for (const t of pendingTransfers) {
-      change += t.playerOut.currentPrice - t.playerIn.currentPrice;
+      // An empty slot (playerIn null) banks the full refund — its money is
+      // already available to spend filling the slot, so projectedBank rises.
+      change += t.playerOut.currentPrice - (t.playerIn?.currentPrice ?? 0);
     }
     return change;
   }, [pendingTransfers]);
 
   const projectedBank = bankBalance + transferBudgetImpact;
+
+  // True while at least one slot has been transferred out but not yet
+  // re-filled. Blocks submit — the user must fill (or restore) every empty
+  // slot before queueing/confirming.
+  const hasEmptySlot = useMemo(
+    () => pendingTransfers.some((t) => !t.playerIn),
+    [pendingTransfers],
+  );
 
   // A Wildcard armed for the next round makes queued transfers unlimited and
   // free — mirrors the server-side branch in /api/transfers.
@@ -845,6 +874,8 @@ export default function SquadPage() {
       counts[k] = (counts[k] || 0) + 1;
     });
     pendingTransfers.forEach((t) => {
+      // Empty slots add no incoming nation; the out already freed its slot.
+      if (!t.playerIn) return;
       const k = t.playerIn.nation?.id || '';
       counts[k] = (counts[k] || 0) + 1;
     });
@@ -888,12 +919,24 @@ export default function SquadPage() {
     [allPlayers.length],
   );
 
-  // Undo a pending transfer — find the entry by incoming-player id and drop
-  // it. Safe to call multiple times; idempotent if the entry's gone.
-  const undoTransfer = useCallback((incomingPlayerId: string) => {
+  // Undo a pending transfer. Matches on EITHER the incoming player's id
+  // (a committed swap) OR the outgoing player's id (an empty slot whose
+  // refund we're handing back) so both the "undo swap" and "restore" taps
+  // resolve to the same entry. Safe to call repeatedly; idempotent.
+  const undoTransfer = useCallback((playerId: string) => {
     setPendingTransfers((prev) =>
-      prev.filter((t) => t.playerIn.id !== incomingPlayerId),
+      prev.filter((t) => t.playerIn?.id !== playerId && t.playerOut.id !== playerId),
     );
+  }, []);
+
+  // Transfer a player OUT to an empty slot — banks his money immediately and
+  // leaves the slot to be filled later. If the slot already had a pending
+  // entry (e.g. a committed swap) we replace it with an out-only entry.
+  const transferOut = useCallback((playerOut: Player) => {
+    setPendingTransfers((prev) => {
+      const filtered = prev.filter((t) => t.playerOut.id !== playerOut.id);
+      return [...filtered, { playerOut, playerIn: null }];
+    });
   }, []);
 
   // Commit a replacement: replaces an existing pending transfer for this
@@ -960,7 +1003,10 @@ export default function SquadPage() {
   }, []);
 
   const submitTransfers = useCallback(async () => {
-    if (pendingTransfers.length === 0) return;
+    // Only fully-resolved swaps go to the server; an unfilled empty slot is
+    // transient client state and is blocked from submit by the button guard.
+    const ready = pendingTransfers.filter((t) => t.playerIn);
+    if (ready.length === 0) return;
     setTransferSubmitting(true);
     setTransferError(null);
     try {
@@ -969,9 +1015,9 @@ export default function SquadPage() {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          transfers: pendingTransfers.map((t) => ({
+          transfers: ready.map((t) => ({
             playerOutId: t.playerOut.id,
-            playerInId: t.playerIn.id,
+            playerInId: t.playerIn!.id,
           })),
         }),
       });
@@ -1012,8 +1058,21 @@ export default function SquadPage() {
 
     const isTransferPicker = Boolean(transferReplacingFor);
     const squadIds = new Set(squad.map((p) => p.id));
-    const pendingInIds = new Set(pendingTransfers.map((t) => t.playerIn.id));
+    const pendingInIds = new Set(
+      pendingTransfers.filter((t) => t.playerIn).map((t) => t.playerIn!.id),
+    );
     const pendingOutIds = new Set(pendingTransfers.map((t) => t.playerOut.id));
+
+    // When filling an EMPTY slot, the out's refund is ALREADY banked into
+    // projectedBank (the out-only entry contributed +price to the impact).
+    // Adding it again here would double-count, so the budget is just
+    // projectedBank. For a direct replace (no pending entry for this slot
+    // yet) we add the slot player's refund on top.
+    const fillingEmptySlot =
+      isTransferPicker &&
+      pendingTransfers.some(
+        (t) => t.playerOut.id === transferReplacingFor!.id && !t.playerIn,
+      );
 
     // Per-pick budget = money available AFTER all other pending transfers
     // (projectedBank, not the raw bankBalance) plus the refund from the slot
@@ -1022,7 +1081,7 @@ export default function SquadPage() {
     // "Bank £9.3m" while the picker silently filtered out players the user
     // could actually afford.
     const effectiveBudget = isTransferPicker
-      ? projectedBank + (transferReplacingFor?.currentPrice ?? 0)
+      ? projectedBank + (fillingEmptySlot ? 0 : transferReplacingFor?.currentPrice ?? 0)
       : remainingBudget;
 
     const counts = isTransferPicker ? projectedNationCounts : nationCounts;
@@ -2197,10 +2256,10 @@ export default function SquadPage() {
     // Group the projected squad by position. We always show 2 GK / 5 DEF /
     // 5 MID / 3 FWD slots regardless of formation — transfer mode is
     // squad-level, not lineup-level.
-    const tGks = transferDisplaySquad.filter((p) => p.position === 'GK');
-    const tDefs = transferDisplaySquad.filter((p) => p.position === 'DEF');
-    const tMids = transferDisplaySquad.filter((p) => p.position === 'MID');
-    const tFwds = transferDisplaySquad.filter((p) => p.position === 'FWD');
+    const tGks = transferDisplaySquad.filter((s) => s.position === 'GK');
+    const tDefs = transferDisplaySquad.filter((s) => s.position === 'DEF');
+    const tMids = transferDisplaySquad.filter((s) => s.position === 'MID');
+    const tFwds = transferDisplaySquad.filter((s) => s.position === 'FWD');
 
     // Renders one player card as a single tap target.
     //
@@ -2217,47 +2276,111 @@ export default function SquadPage() {
     //   • A small swap-arrows icon sits in the top-right corner of the
     //     kit (where the live-points pill normally lives, which is never
     //     shown in transfer mode) as a discoverability hint.
-    const renderTransferCard = (p: Player) => {
+    //   • A rose ✕ in the TOP-LEFT corner transfers the player OUT to an
+    //     empty slot (banking his money) — distinct from the body tap,
+    //     which still opens the direct-replace picker.
+    const renderTransferCard = (slot: TransferSlot) => {
+      // Empty slot — a player was transferred out and not yet re-filled.
+      // Tap the slot to fill it (picker, budget = his banked refund); the
+      // violet restore pill puts the original player back.
+      if (slot.kind === 'empty') {
+        const out = slot.playerOut;
+        return (
+          <div key={`empty-${out.id}`} className="relative flex-shrink-0 flex flex-col items-center">
+            <div className="rounded-2xl ring-2 ring-rose-400/60 shadow-[0_0_22px_rgba(251,113,133,0.35)]">
+              <EmptySlot position={slot.position} onClick={() => startReplace(out)} />
+            </div>
+            {/* Restore (undo the out) — top-right so it never overlaps the
+                EmptySlot's own "+" badge in the top-right of the kit box. */}
+            <button
+              type="button"
+              onClick={() => undoTransfer(out.id)}
+              aria-label={`Restore ${out.displayName}`}
+              className="absolute -top-1 -right-1 z-20 w-[22px] h-[22px] rounded-full flex items-center justify-center shadow-md bg-violet-400 text-violet-950 ring-2 ring-violet-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+            >
+              <RotateCcw className="w-3 h-3" />
+            </button>
+            <span
+              className="mt-1 mx-auto block w-fit px-2 py-[2px] rounded-full bg-rose-400 text-rose-950 text-[9px] font-black tracking-wider shadow"
+              aria-hidden="true"
+            >
+              EMPTY
+            </span>
+          </div>
+        );
+      }
+
+      const p = slot.player;
       const incoming = isPendingIncoming(p.id);
       // Already queued OUT on the server (made in an earlier locked-round
       // session). Without the violet marker users re-sell the same player:
       // the server rejects it, but only after they've been through the
       // whole picker flow.
       const queuedOut = queuedTransfers.some((t) => t.playerOut?.id === p.id);
+      // Body tap = direct replace; the ✕ (clean cards only) = out-to-empty.
+      // Outer is a div (not a button) so the ✕ can be a real nested button.
+      const onBody = () => {
+        if (incoming) return undoTransfer(p.id);
+        if (queuedOut) {
+          alert(`${p.displayName} already has a transfer queued for next round.\n\nCancel it from the "Queued for next round" card on the squad page if you change your mind.`);
+          return;
+        }
+        startReplace(p);
+      };
       return (
-        <button
-          key={p.id}
-          type="button"
-          onClick={() => {
-            if (incoming) return undoTransfer(p.id);
-            if (queuedOut) {
-              alert(`${p.displayName} already has a transfer queued for next round.\n\nCancel it from the "Queued for next round" card on the squad page if you change your mind.`);
-              return;
-            }
-            startReplace(p);
-          }}
-          aria-label={incoming ? `Undo swap for ${p.displayName}` : `Replace ${p.displayName}`}
-          className="relative flex-shrink-0 group focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 rounded-2xl"
-        >
+        <div key={p.id} className="relative flex-shrink-0 group">
           <div
-            className={
-              incoming
-                ? 'rounded-2xl ring-2 ring-amber-400 shadow-[0_0_22px_rgba(251,191,36,0.45)]'
-                : queuedOut
-                  ? 'rounded-2xl ring-2 ring-violet-400 shadow-[0_0_22px_rgba(167,139,250,0.45)]'
-                  : 'rounded-2xl ring-1 ring-transparent group-active:ring-laliga-gold/40 transition'
-            }
+            role="button"
+            tabIndex={0}
+            onClick={onBody}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onBody();
+              }
+            }}
+            aria-label={incoming ? `Undo swap for ${p.displayName}` : `Replace ${p.displayName}`}
+            className="cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 rounded-2xl"
           >
-            <PlayerCard
-              player={p}
-              showOpponent={getNextOpponent(p.nation?.code || '')}
-              difficulty={getFixtureDifficulty(
-                p.nation?.code || '',
-                getNextOpponent(p.nation?.code || ''),
-              )}
-              size="xs"
-            />
+            <div
+              className={
+                incoming
+                  ? 'rounded-2xl ring-2 ring-amber-400 shadow-[0_0_22px_rgba(251,191,36,0.45)]'
+                  : queuedOut
+                    ? 'rounded-2xl ring-2 ring-violet-400 shadow-[0_0_22px_rgba(167,139,250,0.45)]'
+                    : 'rounded-2xl ring-1 ring-transparent group-active:ring-laliga-gold/40 transition'
+              }
+            >
+              <PlayerCard
+                player={p}
+                showOpponent={getNextOpponent(p.nation?.code || '')}
+                difficulty={getFixtureDifficulty(
+                  p.nation?.code || '',
+                  getNextOpponent(p.nation?.code || ''),
+                )}
+                size="xs"
+              />
+            </div>
           </div>
+
+          {/* ✕ Transfer-out — clean cards only (a pending/queued card already
+              has its own action). Frees the slot to empty and banks the cash.
+              Bottom-LEFT: with the tight row gaps a top-left badge overlaps
+              the neighbour's top-right swap hint, so we drop it diagonally
+              clear of both. */}
+          {!incoming && !queuedOut && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                transferOut(p);
+              }}
+              aria-label={`Transfer out ${p.displayName}`}
+              className="absolute -bottom-1 -left-1 z-30 w-[22px] h-[22px] rounded-full flex items-center justify-center shadow-md bg-rose-500 text-white ring-2 ring-rose-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
+            >
+              <X className="w-3 h-3" strokeWidth={3} />
+            </button>
+          )}
 
           {/* Top-right corner affordance — sits inside the card, never
               spills past the kit edge, so adjacent cards never collide.
@@ -2297,7 +2420,7 @@ export default function SquadPage() {
               QUEUED
             </span>
           )}
-        </button>
+        </div>
       );
     };
 
@@ -2467,7 +2590,7 @@ export default function SquadPage() {
             <button
               type="button"
               onClick={submitTransfers}
-              disabled={pendingTransfers.length === 0 || transferSubmitting || projectedBank < 0 || overQueueLimit}
+              disabled={pendingTransfers.length === 0 || transferSubmitting || projectedBank < 0 || overQueueLimit || hasEmptySlot}
               className={`flex-1 px-4 py-3 rounded-xl text-white font-black text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all ${
                 stageLocked
                   ? 'bg-gradient-to-r from-violet-500 to-fuchsia-600 hover:from-violet-400 hover:to-fuchsia-500'
@@ -2478,6 +2601,8 @@ export default function SquadPage() {
                 ? stageLocked ? 'Queueing…' : 'Confirming…'
                 : pendingTransfers.length === 0
                 ? 'No transfers yet'
+                : hasEmptySlot
+                ? 'Fill empty slots to continue'
                 : stageLocked
                 ? `Queue ${pendingTransfers.length} transfer${pendingTransfers.length === 1 ? '' : 's'} for next round${
                     transferHitCost > 0 ? ` · -${transferHitCost} pts` : ''
