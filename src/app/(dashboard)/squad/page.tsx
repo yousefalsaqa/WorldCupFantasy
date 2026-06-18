@@ -981,8 +981,14 @@ export default function SquadPage() {
     const pendingInIds = new Set(pendingTransfers.map((t) => t.playerIn.id));
     const pendingOutIds = new Set(pendingTransfers.map((t) => t.playerOut.id));
 
+    // Per-pick budget = money available AFTER all other pending transfers
+    // (projectedBank, not the raw bankBalance) plus the refund from the slot
+    // being replaced. Using bankBalance here understated the budget when an
+    // earlier pending transfer had already banked cash — the header showed
+    // "Bank £9.3m" while the picker silently filtered out players the user
+    // could actually afford.
     const effectiveBudget = isTransferPicker
-      ? bankBalance + (transferReplacingFor?.currentPrice ?? 0)
+      ? projectedBank + (transferReplacingFor?.currentPrice ?? 0)
       : remainingBudget;
 
     const counts = isTransferPicker ? projectedNationCounts : nationCounts;
@@ -2239,11 +2245,11 @@ export default function SquadPage() {
                         actually the maximum price for a *single* replacement
                         (current bank + refund from the player going out). */}
                     <p className="text-xs text-white/40">
-                      Bank £{bankBalance.toFixed(1)}m + refund £
+                      Bank £{projectedBank.toFixed(1)}m + refund £
                       {(transferReplacingFor?.currentPrice ?? 0).toFixed(1)}m ·
                       max £
                       {(
-                        bankBalance + (transferReplacingFor?.currentPrice ?? 0)
+                        projectedBank + (transferReplacingFor?.currentPrice ?? 0)
                       ).toFixed(1)}
                       m per pick
                     </p>
