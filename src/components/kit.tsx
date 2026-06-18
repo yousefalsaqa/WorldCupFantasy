@@ -381,6 +381,10 @@ interface PlayerCardProps {
   showOpponent?: string;
   /** Difficulty 1 (easy) → 5 (hard). Colors the opponent badge FPL-style. */
   difficulty?: 1 | 2 | 3 | 4 | 5;
+  /** Next few fixtures as an FPL-style colored strip. When provided it
+   *  replaces the single `showOpponent` badge — the first chip (immediate
+   *  next game) is ringed so it reads as "next". */
+  nextFixtures?: Array<{ opponent: string; difficulty?: 1 | 2 | 3 | 4 | 5; isHome?: boolean }>;
   showPoints?: number;
   /** Live/total points pill */
   livePoints?: number;
@@ -448,6 +452,7 @@ export function PlayerCard({
   onClick,
   showOpponent,
   difficulty,
+  nextFixtures,
   showPoints,
   livePoints,
   form,
@@ -535,12 +540,29 @@ export function PlayerCard({
           {player.displayName}
         </div>
 
-        {/* Opponent (FDR colored) */}
-        {showOpponent && (
+        {/* Fixture run (FPL-style). The multi-game strip wins when provided;
+            otherwise fall back to the single opponent badge. Chips share the
+            plate width evenly so it stays phone-friendly even at xs; the
+            first chip (next game) gets a white ring to read as "up next". */}
+        {nextFixtures && nextFixtures.length > 0 ? (
+          <div className="mt-0.5 flex items-stretch justify-center gap-[2px]">
+            {nextFixtures.map((fx, i) => (
+              <div
+                key={i}
+                title={`${fx.isHome ? 'vs' : '@'} ${fx.opponent}`}
+                className={`flex-1 min-w-0 px-[1px] py-[1px] rounded-sm text-[7px] sm:text-[9px] font-extrabold leading-none tracking-tight ${difficultyClasses(fx.difficulty)} ${
+                  i === 0 && nextFixtures.length > 1 ? 'ring-1 ring-white/50' : ''
+                }`}
+              >
+                <span className="block truncate">{fx.opponent}</span>
+              </div>
+            ))}
+          </div>
+        ) : showOpponent ? (
           <div className={`mt-0.5 px-1 py-[1px] rounded-sm text-[9px] font-extrabold tracking-wide ${difficultyClasses(difficulty)}`}>
             {showOpponent}
           </div>
-        )}
+        ) : null}
 
         {showPoints !== undefined && (
           <div className="text-emerald-400 text-[10px] font-bold">

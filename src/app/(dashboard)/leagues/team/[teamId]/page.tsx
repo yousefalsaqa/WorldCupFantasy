@@ -25,7 +25,7 @@ import { ArrowLeft, Lock } from 'lucide-react';
 import { PlayerCard } from '@/components/kit';
 import PlayerDetailModal, { type ModalPlayer } from '@/components/player-detail-modal';
 import { getFixtureDifficulty, type FDR } from '@/lib/fdr';
-import { getNextWcOpponent } from '@/lib/world-cup-fixtures';
+import { getNextWcFixtures } from '@/lib/world-cup-fixtures';
 
 interface ApiPlayer {
   id: string;
@@ -224,16 +224,17 @@ export default function LeagueTeamViewPage({
   // position rows can call it uniformly and the modal-open click goes
   // through one path. Mirrors the renderPitchPlayer helper on /squad.
   const renderPitchPlayer = (p: ApiPlayer) => {
-    const opponent = getNextWcOpponent(p.nation.code);
-    const fdr = getFixtureDifficulty(p.nation.code, opponent) as FDR;
+    const nextFixtures = getNextWcFixtures(p.nation.code, 1).map((fx) => ({
+      ...fx,
+      difficulty: getFixtureDifficulty(p.nation.code, fx.opponent) as FDR,
+    }));
     const rawPoints = p.livePoints ?? p.points;
     const displayPoints = p.isCaptain ? rawPoints * captainMultiplier : rawPoints;
     return (
       <div key={p.id} className="flex-shrink-0 relative">
         <PlayerCard
           player={toCardPlayer(p)}
-          showOpponent={opponent}
-          difficulty={fdr}
+          nextFixtures={nextFixtures}
           livePoints={displayPoints}
           isCaptain={p.isCaptain}
           isViceCaptain={p.isViceCaptain}
@@ -379,6 +380,10 @@ export default function LeagueTeamViewPage({
                 </span>
                 <PlayerCard
                   player={toCardPlayer(p)}
+                  nextFixtures={getNextWcFixtures(p.nation.code, 1).map((fx) => ({
+                    ...fx,
+                    difficulty: getFixtureDifficulty(p.nation.code, fx.opponent) as FDR,
+                  }))}
                   livePoints={rawPoints}
                   isCaptain={p.isCaptain}
                   isViceCaptain={p.isViceCaptain}

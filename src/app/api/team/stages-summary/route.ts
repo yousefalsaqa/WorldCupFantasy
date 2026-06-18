@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
 import { parseActiveChips } from '@/lib/chips-active';
+import { stageTeamTotals } from '@/lib/live-team-totals';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,15 +76,29 @@ export async function GET(_request: NextRequest) {
       };
     });
 
-    // Current-round (live) points = running total minus everything already
-    // banked in completed stages. Lets the inline "this round" pill update
-    // weekly without needing live per-stage scoring on the client.
-    const completedSum = stages.reduce((sum, s) => {
-      const ts = byStageId.get(s.id);
-      return s.isComplete && ts ? sum + ts.totalPoints : sum;
-    }, 0);
+    // Current-round points, computed DIRECTLY from the active stage's
+    // PlayerPerformance (same basis as the per-player pills) minus any
+    // transfer hits taken this stage. The old `totalPoints − completedSum`
+    // subtraction leaked the leaderboard-vs-snapshot divergence (lineup
+    // changes make Team.totalPoints differ from the settled snapshots), so a
+    // team with no games yet could show +2/+4 — or a heavy-transfer team a
+    // large negative — for the current round. Sourcing from this stage's
+    // perfs makes it match the pitch pills and resets cleanly each round.
     const active = stages.find((s) => s.isActive);
-    const currentRoundPoints = team.totalPoints - completedSum;
+    let currentRoundPoints = 0;
+    if (active) {
+      const stagePts = (await stageTeamTotals([team.id], active.id)).get(team.id) ?? 0;
+      const paidHits = await prisma.transfer.count({
+        where: {
+          teamId: team.id,
+          stageId: active.id,
+          isFreeTransfer: false,
+          isWildcard: false,
+          isMercyTransfer: false,
+        },
+      });
+      currentRoundPoints = stagePts - paidHits * 4;
+    }
 
     return NextResponse.json({
       totalPoints: team.totalPoints,

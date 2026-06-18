@@ -316,6 +316,34 @@ export function getNextWcOpponent(nationCode: string, now: Date = new Date()): s
 }
 
 /**
+ * The next up to `count` upcoming fixtures for a nation, each with its
+ * opponent code and a home/away flag. Powers the FPL-style fixture-run
+ * strip on the player cards (squad + league team-view). Knockout rounds
+ * use placeholder codes ("W R32-1") that never match a nation, so a nation
+ * only ever surfaces its remaining real (group) games here — returns `[]`
+ * once those are exhausted, which callers render as "no strip".
+ *
+ * Difficulty is intentionally NOT computed here so this module stays free
+ * of the fdr dependency; callers layer it on via getFixtureDifficulty.
+ */
+export function getNextWcFixtures(
+  nationCode: string,
+  count = 3,
+  now: Date = new Date(),
+): Array<{ opponent: string; isHome: boolean }> {
+  const parse = (date: string, time: string) => new Date(`${date}T${time}:00-04:00`);
+  return ALL_WC_FIXTURES
+    .filter((f) => f.home === nationCode || f.away === nationCode)
+    .sort((a, b) => parse(a.date, a.time).getTime() - parse(b.date, b.time).getTime())
+    .filter((f) => parse(f.date, f.time) > now)
+    .slice(0, count)
+    .map((f) => ({
+      opponent: f.home === nationCode ? f.away : f.home,
+      isHome: f.home === nationCode,
+    }));
+}
+
+/**
  * Like getNextWcOpponent, but also returns WHEN that fixture kicks off so
  * UIs can show the date/time next to the opponent. Returns null when the
  * nation has no upcoming fixture (eliminated / tournament over) — callers

@@ -120,15 +120,20 @@ export async function applyPendingTransfers(
   nextStageDbId: string,
 ): Promise<ApplyResult> {
   const pending = parsePendingTransfers(pendingJson);
-  if (pending.length === 0) {
-    return { applied: 0, skipped: 0 };
-  }
 
   const team = await prisma.team.findUnique({
     where: { id: teamId },
     include: { squadPlayers: true },
   });
   if (!team) return { applied: 0, skipped: pending.length };
+
+  // Nothing to do ONLY when there are no queued transfers AND no planned
+  // lineup. A team that just rearranged its next-round XI (no transfers) still
+  // needs the planned-lineup block below to run — otherwise the saved lineup
+  // is silently dropped at rollover.
+  if (pending.length === 0 && !team.plannedLineup) {
+    return { applied: 0, skipped: 0 };
+  }
 
   const incomingIds = pending.map((t) => t.playerInId);
   const incomingPlayers = await prisma.player.findMany({

@@ -34,7 +34,7 @@ import { X } from 'lucide-react';
 import Kit from '@/components/kit';
 import { getFlagUrl } from '@/lib/flags';
 import { fdrPill, getFixtureDifficulty } from '@/lib/fdr';
-import { getNextWcOpponent, getNextWcFixture } from '@/lib/world-cup-fixtures';
+import { getNextWcOpponent, getNextWcFixture, getNextWcFixtures } from '@/lib/world-cup-fixtures';
 
 // Per-match performance payload. Mirrors the GET /api/players/[id]/performances
 // response shape one-for-one — kept here so both call sites import
@@ -259,6 +259,11 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
   // null when the nation has no upcoming game (opponent then falls back
   // to the LAST opponent faced — a date would be misleading there).
   const nextKickoff = getNextWcFixture(player.nation?.code || '')?.kickoff ?? null;
+  // Next few fixtures for the "Upcoming" run strip — opponent + FDR each.
+  const nextFixtures = getNextWcFixtures(player.nation?.code || '').map((fx) => ({
+    ...fx,
+    difficulty: getFixtureDifficulty(player.nation?.code || '', fx.opponent),
+  }));
 
   return (
     <div
@@ -443,6 +448,32 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
                 </div>
               )}
             </>
+          )}
+
+          {/* Upcoming fixtures — the next few games with FDR difficulty so
+              you can read the run, not just the immediate next match shown in
+              the header. The first chip (next game) is ringed. */}
+          {nextFixtures.length > 0 && (
+            <div>
+              <h3 className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2">Upcoming</h3>
+              <div className="flex gap-1.5">
+                {nextFixtures.map((fx, i) => (
+                  <div
+                    key={i}
+                    className={`flex-1 flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg bg-white/5 border ${
+                      i === 0 ? 'border-white/25 ring-1 ring-white/15' : 'border-white/10'
+                    }`}
+                  >
+                    <span className="text-white/40 text-[9px] font-bold">{fx.isHome ? 'vs' : '@'}</span>
+                    <img src={getFlagUrl(fx.opponent)} alt="" className="w-3.5 h-2.5 rounded-[1px] object-cover" />
+                    <span className="text-white text-[10px] font-bold">{fx.opponent}</span>
+                    <span className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm text-[9px] font-black ${fdrPill(fx.difficulty)}`}>
+                      {fx.difficulty}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           {/* Season-aggregate stats — derived from the same per-match

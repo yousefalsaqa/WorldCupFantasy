@@ -39,7 +39,7 @@ export async function GET(
     // Get the stage
     const stage = await prisma.stage.findFirst({
       where: { stageId },
-      select: { id: true, stageId: true, name: true },
+      select: { id: true, stageId: true, name: true, order: true },
     });
 
     if (!stage) {
@@ -60,17 +60,59 @@ export async function GET(
       },
     });
 
-    // Get the user's squad players
-    const squadPlayers = await prisma.squadPlayer.findMany({
+    // Reconstruct the squad as it was DURING this stage. There is no stored
+    // squad snapshot, so we rewind the current squad through every transfer
+    // made in a LATER stage: each later transfer swapped playerOut → playerIn
+    // and the incoming player inherited the slot's lineup flags, so undoing it
+    // (playerIn → playerOut, carrying the flags back) recovers the historical
+    // owner. Without this the popup showed the CURRENT squad for every past
+    // round (e.g. your GR2 team under the GR1 breakdown).
+    const currentSquad = await prisma.squadPlayer.findMany({
       where: { teamId: team.id },
+      select: { playerId: true, isStarting: true, isCaptain: true, isViceCaptain: true, benchOrder: true },
+    });
+
+    const allStages = await prisma.stage.findMany({ select: { id: true, order: true } });
+    const orderByStageDbId = new Map(allStages.map((s) => [s.id, s.order]));
+
+    // Newest transfers first so chained swaps in a single later stage rewind
+    // in the right order.
+    const teamTransfers = await prisma.transfer.findMany({
+      where: { teamId: team.id },
+      select: { playerInId: true, playerOutId: true, stageId: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    const laterTransfers = teamTransfers.filter(
+      (t) => t.stageId && (orderByStageDbId.get(t.stageId) ?? -1) > stage.order,
+    );
+
+    type HistSlot = { playerId: string; isStarting: boolean; isCaptain: boolean; isViceCaptain: boolean; benchOrder: number | null };
+    const slotByPlayer = new Map<string, HistSlot>();
+    for (const sp of currentSquad) slotByPlayer.set(sp.playerId, { ...sp });
+    for (const t of laterTransfers) {
+      const inSlot = slotByPlayer.get(t.playerInId);
+      if (!inSlot) continue; // already rewound past, or not a tracked slot
+      slotByPlayer.delete(t.playerInId);
+      slotByPlayer.set(t.playerOutId, { ...inSlot, playerId: t.playerOutId });
+    }
+
+    const histSlots = Array.from(slotByPlayer.values());
+    const histPlayers = await prisma.player.findMany({
+      where: { id: { in: histSlots.map((s) => s.playerId) } },
       include: {
-        player: {
-          include: {
-            nation: { select: { id: true, name: true, code: true, kitColor1: true, kitColor2: true } },
-          },
-        },
+        nation: { select: { id: true, name: true, code: true, kitColor1: true, kitColor2: true } },
       },
     });
+    const playerById = new Map(histPlayers.map((p) => [p.id, p]));
+
+    const squadPlayers = histSlots
+      .map((s) => {
+        const player = playerById.get(s.playerId);
+        return player
+          ? { playerId: s.playerId, isStarting: s.isStarting, isCaptain: s.isCaptain, isViceCaptain: s.isViceCaptain, benchOrder: s.benchOrder, player }
+          : null;
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
 
     // Get performance data for all squad players in this stage's matches
     const matchIds = matches.map(m => m.id);

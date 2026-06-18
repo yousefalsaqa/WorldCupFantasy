@@ -8,7 +8,7 @@ import PitchBg from '@/components/pitch-bg';
 import FormationPicker from '@/components/formation-picker';
 import PointsBreakdownModal from '@/components/points-breakdown-modal';
 import { getFlagUrl } from '@/lib/flags';
-import { getFixtureDifficulty } from '@/lib/fdr';
+import { getFixtureDifficulty, type FDR } from '@/lib/fdr';
 import { useUnsavedChanges } from '@/contexts/unsaved-changes';
 import { ArrowLeftRight, RotateCcw, ArrowLeft } from 'lucide-react';
 import { useUserTimezone, useNow } from '@/hooks/useTimezone';
@@ -197,29 +197,22 @@ function getNationFixtures(nationCode: string): Fixture[] {
     );
 }
 
-// Get next opponent for a nation (first upcoming unplayed game)
-function getNextOpponent(nationCode: string): string {
+// Next up to `count` upcoming (unplayed) fixtures for a nation — each with its
+// opponent, FDR difficulty and home/away flag. Powers the FPL-style fixture
+// strip on the player cards so you can read the run, not just the next game.
+function getNextFixtures(
+  nationCode: string,
+  count = 3,
+): Array<{ opponent: string; difficulty: FDR; isHome: boolean }> {
   const now = new Date();
-  const fixtures = getNationFixtures(nationCode);
-  
-  // Find the next unplayed game
-  const nextFixture = fixtures.find(f => {
-    const fixtureDate = parseFixtureDateTime(f.date, f.time);
-    return fixtureDate > now && !f.isPlayed;
-  });
-  
-  if (!nextFixture) {
-    // If no upcoming games, show last opponent or dash
-    const lastFixture = fixtures[fixtures.length - 1];
-    if (lastFixture) {
-      const opponent = lastFixture.home === nationCode ? lastFixture.away : lastFixture.home;
-      return opponent;
-    }
-    return '-';
-  }
-  
-  const opponent = nextFixture.home === nationCode ? nextFixture.away : nextFixture.home;
-  return opponent;
+  return getNationFixtures(nationCode)
+    .filter((f) => parseFixtureDateTime(f.date, f.time) > now && !f.isPlayed)
+    .slice(0, count)
+    .map((f) => {
+      const isHome = f.home === nationCode;
+      const opponent = isHome ? f.away : f.home;
+      return { opponent, difficulty: getFixtureDifficulty(nationCode, opponent), isHome };
+    });
 }
 
 // Format a calendar date string (YYYY-MM-DD) for display. We anchor at noon
@@ -1821,7 +1814,7 @@ export default function SquadPage() {
               {[...Array(3)].map((_, i) => (
                 fwds[i] ? (
                   <div key={fwds[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(fwds[i].id)}>
-                    <PlayerCard player={fwds[i]} showOpponent={getNextOpponent(fwds[i].nation?.code || '')} difficulty={getFixtureDifficulty(fwds[i].nation?.code || '', getNextOpponent(fwds[i].nation?.code || ''))} size="xs" />
+                    <PlayerCard player={fwds[i]} nextFixtures={getNextFixtures(fwds[i].nation?.code || '', 1)} size="xs" />
                   </div>
                 ) : (
                   <div key={`fwd-${i}`} className="flex-shrink-0">
@@ -1836,7 +1829,7 @@ export default function SquadPage() {
               {[...Array(5)].map((_, i) => (
                 mids[i] ? (
                   <div key={mids[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(mids[i].id)}>
-                    <PlayerCard player={mids[i]} showOpponent={getNextOpponent(mids[i].nation?.code || '')} difficulty={getFixtureDifficulty(mids[i].nation?.code || '', getNextOpponent(mids[i].nation?.code || ''))} size="xs" />
+                    <PlayerCard player={mids[i]} nextFixtures={getNextFixtures(mids[i].nation?.code || '', 1)} size="xs" />
                   </div>
                 ) : (
                   <div key={`mid-${i}`} className="flex-shrink-0">
@@ -1851,7 +1844,7 @@ export default function SquadPage() {
               {[...Array(5)].map((_, i) => (
                 defs[i] ? (
                   <div key={defs[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(defs[i].id)}>
-                    <PlayerCard player={defs[i]} showOpponent={getNextOpponent(defs[i].nation?.code || '')} difficulty={getFixtureDifficulty(defs[i].nation?.code || '', getNextOpponent(defs[i].nation?.code || ''))} size="xs" />
+                    <PlayerCard player={defs[i]} nextFixtures={getNextFixtures(defs[i].nation?.code || '', 1)} size="xs" />
                   </div>
                 ) : (
                   <div key={`def-${i}`} className="flex-shrink-0">
@@ -1866,7 +1859,7 @@ export default function SquadPage() {
               {[...Array(2)].map((_, i) => (
                 gks[i] ? (
                   <div key={gks[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(gks[i].id)}>
-                    <PlayerCard player={gks[i]} showOpponent={getNextOpponent(gks[i].nation?.code || '')} difficulty={getFixtureDifficulty(gks[i].nation?.code || '', getNextOpponent(gks[i].nation?.code || ''))} size="xs" />
+                    <PlayerCard player={gks[i]} nextFixtures={getNextFixtures(gks[i].nation?.code || '', 1)} size="xs" />
                   </div>
                 ) : (
                   <div key={`gk-${i}`} className="flex-shrink-0">
@@ -2143,8 +2136,7 @@ export default function SquadPage() {
   // handlers and never touch the live lineup. Drag is disabled in Planned view
   // (tap-to-sub only) so it can't fall through to the live swap machinery.
   const renderPitchPlayer = (p: Player) => {
-    const opponent = getNextOpponent(p.nation?.code || '');
-    const difficulty = getFixtureDifficulty(p.nation?.code || '', opponent);
+    const nextFixtures = getNextFixtures(p.nation?.code || '', 1);
     const isSelected = activeToSub?.id === p.id;
     const isValid = !!activeToSub && !isSelected && activeValidTargets.has(p.id);
     const isDimmed = !!activeToSub && !isSelected && !activeValidTargets.has(p.id);
@@ -2176,8 +2168,7 @@ export default function SquadPage() {
               setSelectedPlayer(p);
             }
           }}
-          showOpponent={opponent}
-          difficulty={difficulty}
+          nextFixtures={nextFixtures}
           livePoints={planView ? undefined : displayPointsFor(p)}
           isCaptain={activeCaptainId === p.id}
           isViceCaptain={activeViceId === p.id}
@@ -2353,11 +2344,7 @@ export default function SquadPage() {
             >
               <PlayerCard
                 player={p}
-                showOpponent={getNextOpponent(p.nation?.code || '')}
-                difficulty={getFixtureDifficulty(
-                  p.nation?.code || '',
-                  getNextOpponent(p.nation?.code || ''),
-                )}
+                nextFixtures={getNextFixtures(p.nation?.code || '', 1)}
                 size="xs"
               />
             </div>

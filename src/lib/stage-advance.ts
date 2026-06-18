@@ -267,6 +267,7 @@ async function advanceOnce(): Promise<AdvanceResult> {
         id: true,
         freeTransfers: true,
         pendingTransfers: true,
+        plannedLineup: true,
         squadPlayers: {
           select: {
             player: {
@@ -283,7 +284,11 @@ async function advanceOnce(): Promise<AdvanceResult> {
       // only SKIPPED entries refund into the banking math below.
       let applied = 0;
       let skipped = 0;
-      if (team.pendingTransfers) {
+      // Run when there are queued transfers OR a saved planned lineup — the
+      // planned-lineup application lives inside applyPendingTransfers, so a
+      // lineup-only team (no transfers) must still go through here or its
+      // arranged next-round XI is dropped.
+      if (team.pendingTransfers || team.plannedLineup) {
         try {
           const res = await applyPendingTransfers(team.id, team.pendingTransfers, nextStage.id);
           applied = res.applied;

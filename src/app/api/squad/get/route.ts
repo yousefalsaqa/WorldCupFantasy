@@ -132,33 +132,12 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Live points overlay — when a match is currently in progress and
-    // /api/live/update has written PlayerPerformance rows with
-    // `isLive=true`, we surface a `livePoints` field so the squad page
-    // pill can tick up every 60s without waiting for `SquadPlayer.points`
-    // to be incremented at FT. We keep `points` as the persisted total
-    // so any view that wants the finalized number can still read it.
-    //
-    // Captain multiplier is INTENTIONALLY NOT applied here — `points`
-    // stores raw per-player contributions, not captain-doubled values
-    // (the doubling lives in `Team.totalPoints` via `updateSquadPoints`).
-    // Doubling only the live additions would create an inconsistent
-    // "pill jumps down at FT" UX, so we keep the pill raw and let the
-    // captain armband communicate the multiplier visually.
+    // The per-player pill shows ACTIVE-STAGE points (computed further down
+    // from this stage's PlayerPerformance rows), NOT the cumulative
+    // SquadPlayer.points column. Captain multiplier is intentionally not
+    // applied to the pill — the armband communicates ×2/×3 visually, and the
+    // doubling lives in Team.totalPoints via updateSquadPoints.
     const playerIds = squadPlayers.map(sp => sp.playerId);
-    const livePerfs = playerIds.length > 0
-      ? await prisma.playerPerformance.findMany({
-          where: { playerId: { in: playerIds }, isLive: true },
-          select: { playerId: true, totalPoints: true },
-        })
-      : [];
-    const livePointsByPlayer = new Map<string, number>();
-    for (const perf of livePerfs) {
-      livePointsByPlayer.set(
-        perf.playerId,
-        (livePointsByPlayer.get(perf.playerId) ?? 0) + perf.totalPoints,
-      );
-    }
 
     // Drive client-side polling. We treat "any match in progress" as the
     // signal — even if the user's bench is playing, they want the pill
@@ -203,25 +182,47 @@ export async function GET(request: NextRequest) {
         })
       : [];
 
-    // Provisional per-player points for a late team: every perf row (live or
-    // finished) the player has in the active stage. Empty for eligible teams.
-    const provisionalByPlayer = new Map<string, number>();
-    let nextCountingStageName: string | null = null;
-    if (isLate && activeStage) {
+    // Per-player points for the ACTIVE STAGE ONLY — this is what the card
+    // pill shows, so it "resets" every round automatically. We deliberately
+    // do NOT read SquadPlayer.points: that column accumulates from when a
+    // player JOINED the team (never reset at rollover), so held-since-GR1
+    // players and transferred-in players were on different bases — the pills
+    // mixed rounds. Sourcing from this stage's PlayerPerformance rows makes
+    // every player consistent (this round's points), while the banked
+    // leaderboard total (Team.totalPoints) is unaffected. `live` = all perf
+    // rows this stage (in-progress + finished); `banked` = finished only.
+    const activeStageLiveByPlayer = new Map<string, number>();
+    const activeStageBankedByPlayer = new Map<string, number>();
+    if (activeStage && playerIds.length > 0) {
       const stageMatchIds = activeStageMatches.map((m) => m.id);
-      if (stageMatchIds.length > 0 && playerIds.length > 0) {
+      const finishedMatchIds = new Set(
+        activeStageMatches.filter((m) => m.isFinished).map((m) => m.id),
+      );
+      if (stageMatchIds.length > 0) {
         const perfs = await prisma.playerPerformance.findMany({
           where: { playerId: { in: playerIds }, matchId: { in: stageMatchIds } },
-          select: { playerId: true, totalPoints: true },
+          select: { playerId: true, matchId: true, totalPoints: true },
         });
         for (const p of perfs) {
-          provisionalByPlayer.set(
+          activeStageLiveByPlayer.set(
             p.playerId,
-            (provisionalByPlayer.get(p.playerId) ?? 0) + p.totalPoints,
+            (activeStageLiveByPlayer.get(p.playerId) ?? 0) + p.totalPoints,
           );
+          if (finishedMatchIds.has(p.matchId)) {
+            activeStageBankedByPlayer.set(
+              p.playerId,
+              (activeStageBankedByPlayer.get(p.playerId) ?? 0) + p.totalPoints,
+            );
+          }
         }
       }
-      // The stage they DO start counting from = the next stage by order.
+    }
+
+    // Late joiners: the stage they DO start counting from = the next stage by
+    // order. (Their per-player pills are the same active-stage figures above —
+    // shown but never banked into the team total.)
+    let nextCountingStageName: string | null = null;
+    if (isLate && activeStage) {
       const next = await prisma.stage.findFirst({
         where: { order: { gt: activeStage.order } },
         orderBy: { order: 'asc' },
@@ -231,17 +232,16 @@ export async function GET(request: NextRequest) {
     }
 
     const squad = squadPlayers.map(sp => {
-      // Late teams see the active stage's provisional points (never banked);
-      // eligible teams see the normal live overlay (banked + in-progress).
-      const liveAdd = isLate
-        ? (provisionalByPlayer.get(sp.playerId) ?? 0)
-        : (livePointsByPlayer.get(sp.playerId) ?? 0);
+      // Per-round pill (see active-stage maps above). `points` = banked this
+      // stage (finished matches), `livePoints` = banked + in-progress this
+      // stage. Same basis for late and eligible teams; late teams' figures
+      // just don't roll into the banked team total below.
       return {
         id: sp.id,
         playerId: sp.playerId,
         purchasePrice: sp.purchasePrice,
-        points: sp.points,
-        livePoints: sp.points + liveAdd,
+        points: activeStageBankedByPlayer.get(sp.playerId) ?? 0,
+        livePoints: activeStageLiveByPlayer.get(sp.playerId) ?? 0,
         isStarting: sp.isStarting,
         isCaptain: sp.isCaptain,
         isViceCaptain: sp.isViceCaptain,

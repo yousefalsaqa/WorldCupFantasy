@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getFlagUrl } from '@/lib/flags';
+import PlayerDetailModal, { type ModalPlayer } from '@/components/player-detail-modal';
 
 const STAGES = [
   { id: 'GR1', name: 'Group Stage - Round 1' },
@@ -71,11 +72,44 @@ const CHIP_NAMES: Record<string, string> = {
   FREE_HIT: 'Free Hit',
 };
 
+// Map a history breakdown row to the shared modal's player shape. The modal
+// fetches the player's FULL match history + upcoming fixtures itself; we just
+// seed identity + this stage's points tile. No photoUrl in the history
+// payload, so the modal falls back to the rendered Kit.
+function toModalPlayer(p: PlayerBreakdown): ModalPlayer {
+  return {
+    id: p.playerId,
+    displayName: p.displayName,
+    position: p.position,
+    shirtNumber: p.shirtNumber,
+    photoUrl: null,
+    points: p.totalPoints,
+    nation: {
+      code: p.nation.code,
+      name: p.nation.name,
+      kitColor1: p.nation.kitColor1,
+      kitColor2: p.nation.kitColor2,
+    },
+  };
+}
+
 export default function HistoryPage() {
   const [selectedStage, setSelectedStage] = useState(STAGES[0].id);
   const [data, setData] = useState<GameweekData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [expandedPlayer, setExpandedPlayer] = useState<string | null>(null);
+  // Tapped player → opens the shared read-only detail modal (full match
+  // history + upcoming fixtures), replacing the old inline expand.
+  const [selected, setSelected] = useState<PlayerBreakdown | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // One-shot admin check so the modal can still surface the per-adjustment
+  // Undo (server-side admin-gated) from the history view.
+  useEffect(() => {
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setIsAdmin(Boolean(d?.user?.isAdmin)))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     async function fetchData() {
@@ -99,86 +133,36 @@ export default function HistoryPage() {
   const starting = data?.players.filter(p => p.isStarting) ?? [];
   const bench = data?.players.filter(p => !p.isStarting) ?? [];
 
-  function renderBreakdownRow(label: string, value: number) {
-    if (value === 0) return null;
-    return (
-      <div className="flex justify-between text-xs py-0.5">
-        <span className="text-white/50">{label}</span>
-        <span className={value > 0 ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
-          {value > 0 ? `+${value}` : value}
-        </span>
-      </div>
-    );
-  }
-
-  function renderMatchBreakdown(m: MatchDetail) {
-    return (
-      <div key={m.matchId} className="bg-white/[0.02] rounded-lg p-2 mt-1">
-        <div className="flex justify-between items-center mb-1">
-          <span className="text-xs text-white/60 font-medium">vs {m.opponent}</span>
-          <span className="text-xs font-bold text-white">{m.totalPoints} pts</span>
-        </div>
-        <div className="space-y-0">
-          {renderBreakdownRow('Appearance', m.minutesPlayed >= 60 ? 2 : m.minutesPlayed > 0 ? 1 : 0)}
-          {renderBreakdownRow(`Goals (${m.goals})`, m.goals > 0 ? m.goals : 0)}
-          {renderBreakdownRow(`Assists (${m.assists})`, m.assists > 0 ? m.assists : 0)}
-          {m.cleanSheet && renderBreakdownRow('Clean Sheet', 1)}
-          {renderBreakdownRow('Saves', m.saves > 0 ? Math.floor(m.saves / 3) : 0)}
-          {renderBreakdownRow('Pen Saves', m.penaltiesSaved)}
-          {renderBreakdownRow('Pen Missed', m.penaltiesMissed > 0 ? -m.penaltiesMissed * 2 : 0)}
-          {renderBreakdownRow('Yellow Cards', m.yellowCards > 0 ? -m.yellowCards : 0)}
-          {renderBreakdownRow('Red Cards', m.redCards > 0 ? -m.redCards * 3 : 0)}
-          {renderBreakdownRow('Own Goals', m.ownGoals > 0 ? -m.ownGoals * 2 : 0)}
-          {renderBreakdownRow('Bonus', m.bonusPoints)}
-        </div>
-      </div>
-    );
-  }
-
   function renderPlayer(p: PlayerBreakdown) {
-    const isExpanded = expandedPlayer === p.playerId;
-
     return (
-      <div key={p.playerId}>
-        <button
-          onClick={() => setExpandedPlayer(isExpanded ? null : p.playerId)}
-          className="w-full flex items-center justify-between p-3 hover:bg-white/5 transition-colors text-left"
-        >
-          <div className="flex items-center gap-3">
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-              p.position === 'GK' ? 'bg-yellow-500/20 text-yellow-400' :
-              p.position === 'DEF' ? 'bg-blue-500/20 text-blue-400' :
-              p.position === 'MID' ? 'bg-green-500/20 text-green-400' :
-              'bg-red-500/20 text-red-400'
-            }`}>
-              {p.position}
-            </span>
-            <img src={getFlagUrl(p.nation.code)} alt="" className="w-5 h-3.5 rounded-sm object-cover" />
-            <div>
-              <span className="text-sm font-medium text-white">{p.displayName}</span>
-              {p.isCaptain && <span className="ml-1.5 text-[10px] font-black text-yellow-400">(C)</span>}
-              {p.isViceCaptain && <span className="ml-1.5 text-[10px] font-black text-white/40">(V)</span>}
-            </div>
+      <button
+        key={p.playerId}
+        onClick={() => setSelected(p)}
+        className="w-full flex items-center justify-between p-3 hover:bg-white/5 transition-colors text-left"
+      >
+        <div className="flex items-center gap-3">
+          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+            p.position === 'GK' ? 'bg-yellow-500/20 text-yellow-400' :
+            p.position === 'DEF' ? 'bg-blue-500/20 text-blue-400' :
+            p.position === 'MID' ? 'bg-green-500/20 text-green-400' :
+            'bg-red-500/20 text-red-400'
+          }`}>
+            {p.position}
+          </span>
+          <img src={getFlagUrl(p.nation.code)} alt="" className="w-5 h-3.5 rounded-sm object-cover" />
+          <div>
+            <span className="text-sm font-medium text-white">{p.displayName}</span>
+            {p.isCaptain && <span className="ml-1.5 text-[10px] font-black text-yellow-400">(C)</span>}
+            {p.isViceCaptain && <span className="ml-1.5 text-[10px] font-black text-white/40">(V)</span>}
           </div>
-          <div className="flex items-center gap-2">
-            <span className={`text-sm font-bold ${p.totalPoints > 0 ? 'text-emerald-400' : 'text-white/40'}`}>
-              {p.totalPoints}
-            </span>
-            <svg className={`w-4 h-4 text-white/30 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </div>
-        </button>
-        {isExpanded && (
-          <div className="px-3 pb-3">
-            {p.matches.length > 0 ? (
-              p.matches.map(m => renderMatchBreakdown(m))
-            ) : (
-              <p className="text-xs text-white/30 text-center py-2">No match data</p>
-            )}
-          </div>
-        )}
-      </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`text-sm font-bold ${p.totalPoints > 0 ? 'text-emerald-400' : 'text-white/40'}`}>
+            {p.totalPoints}
+          </span>
+          <span className="text-white/30 text-[15px] leading-none">›</span>
+        </div>
+      </button>
     );
   }
 
@@ -290,6 +274,22 @@ export default function HistoryPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Shared read-only player detail modal — full match history + points
+          breakdown + upcoming fixtures. Same component as /squad and the
+          league team-view, so the history view now shows "all the games"
+          for a player instead of just this stage's inline breakdown. */}
+      {selected && (
+        <PlayerDetailModal
+          readOnly
+          player={toModalPlayer(selected)}
+          isCaptain={selected.isCaptain}
+          isViceCaptain={selected.isViceCaptain}
+          isStarting={selected.isStarting}
+          isAdmin={isAdmin}
+          onClose={() => setSelected(null)}
+        />
       )}
     </div>
   );

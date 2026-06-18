@@ -333,7 +333,8 @@ export async function POST(request: NextRequest) {
 
     // Execute transfers in a transaction
     await prisma.$transaction(async (tx) => {
-      for (const transfer of transfers) {
+      for (let idx = 0; idx < transfers.length; idx++) {
+        const transfer = transfers[idx];
         const squadPlayer = team.squadPlayers.find(sp => sp.playerId === transfer.playerOutId)!;
         const playerIn = await tx.player.findUnique({
           where: { id: transfer.playerInId }
@@ -369,7 +370,14 @@ export async function POST(request: NextRequest) {
             playerOutId: transfer.playerOutId,
             priceIn: playerIn!.currentPrice,
             priceOut: squadPlayer.purchasePrice,
-            isFreeTransfer: extraTransfers === 0,
+            // Mark PER-TRANSFER, not per-batch: the first `freeTransfers` in
+            // this request are free, the rest paid. The old `extraTransfers
+            // === 0` flagged the WHOLE batch identically, so a mixed request
+            // (e.g. 3 free + 4 paid) marked all 7 paid — over-counting hits
+            // at settlement (settleStage counts isFreeTransfer=false × 4) even
+            // though the leaderboard was charged the correct amount. Mirrors
+            // the queue path's per-entry `i < team.freeTransfers`.
+            isFreeTransfer: unlimitedTransfers ? true : idx < team.freeTransfers,
             isWildcard: isWildcardActive
           }
         });
