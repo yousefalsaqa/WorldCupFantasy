@@ -826,7 +826,38 @@ export default function SquadPage() {
     return change;
   }, [pendingTransfers]);
 
-  const projectedBank = bankBalance + transferBudgetImpact;
+  // £m already committed by transfers QUEUED in a previous visit (stored in
+  // Team.pendingTransfers). The server doesn't debit bankBalance when you
+  // queue — it just RESERVES this amount (route.ts `pendingNetCost`) and
+  // applies it at the round boundary. So the cash actually available to spend
+  // now is bankBalance minus this reservation. Omitting it was the
+  // "Insufficient funds — need £0.2m but only have £0.0m" bug: the client
+  // showed the full bank and let the user build transfers the server rejected.
+  const queuedNetCost = useMemo(
+    () =>
+      queuedTransfers.reduce(
+        (sum, t) => sum + ((t.priceIn ?? 0) - (t.priceOut ?? 0)),
+        0,
+      ),
+    [queuedTransfers],
+  );
+
+  const projectedBank = bankBalance - queuedNetCost + transferBudgetImpact;
+
+  // Filling an EMPTY slot (out already banked, no incoming yet)? Its refund is
+  // ALREADY part of projectedBank, so the per-pick budget is just projectedBank.
+  // A direct replace of a still-present player adds that player's refund on top.
+  const fillingEmptySlot =
+    !!transferReplacingFor &&
+    pendingTransfers.some(
+      (t) => t.playerOut.id === transferReplacingFor.id && !t.playerIn,
+    );
+
+  // The most a single replacement can cost: cash on hand after every other
+  // pending change, plus the refund freed by selling the player in this slot.
+  // One source of truth for both the picker filter and the picker header.
+  const transferPickMax =
+    projectedBank + (fillingEmptySlot ? 0 : transferReplacingFor?.currentPrice ?? 0);
 
   // True while at least one slot has been transferred out but not yet
   // re-filled. Blocks submit — the user must fill (or restore) every empty
@@ -850,6 +881,11 @@ export default function SquadPage() {
     const extra = Math.max(0, pendingTransfers.length - freeTransfers);
     return extra * 4;
   }, [pendingTransfers.length, freeTransfers, unlimitedTransfers, nextRoundWildcardArmed]);
+
+  // Free transfers still available after the picks made this session. ONE
+  // source of truth so the "Free" pill and the banner copy always agree
+  // (they used to show two different numbers — "Free 0" vs "you have 3 free").
+  const freeTransfersLeft = Math.max(0, freeTransfers - pendingTransfers.length);
 
   // Over-allotment queued transfers are now allowed (they cost a hit), so this
   // is no longer a blocker — kept false for compatibility with existing refs.
@@ -1051,31 +1087,20 @@ export default function SquadPage() {
 
     const isTransferPicker = Boolean(transferReplacingFor);
     const squadIds = new Set(squad.map((p) => p.id));
-    const pendingInIds = new Set(
-      pendingTransfers.filter((t) => t.playerIn).map((t) => t.playerIn!.id),
-    );
+    const pendingInIds = new Set([
+      // In-session picks…
+      ...pendingTransfers.filter((t) => t.playerIn).map((t) => t.playerIn!.id),
+      // …plus anyone already queued to join next round. The server rejects a
+      // second attempt to bring them in ("already queued to join"), so hide
+      // them here instead of letting the user pick a doomed transfer.
+      ...queuedTransfers.map((t) => t.playerIn?.id).filter((id): id is string => !!id),
+    ]);
     const pendingOutIds = new Set(pendingTransfers.map((t) => t.playerOut.id));
 
-    // When filling an EMPTY slot, the out's refund is ALREADY banked into
-    // projectedBank (the out-only entry contributed +price to the impact).
-    // Adding it again here would double-count, so the budget is just
-    // projectedBank. For a direct replace (no pending entry for this slot
-    // yet) we add the slot player's refund on top.
-    const fillingEmptySlot =
-      isTransferPicker &&
-      pendingTransfers.some(
-        (t) => t.playerOut.id === transferReplacingFor!.id && !t.playerIn,
-      );
-
-    // Per-pick budget = money available AFTER all other pending transfers
-    // (projectedBank, not the raw bankBalance) plus the refund from the slot
-    // being replaced. Using bankBalance here understated the budget when an
-    // earlier pending transfer had already banked cash — the header showed
-    // "Bank £9.3m" while the picker silently filtered out players the user
-    // could actually afford.
-    const effectiveBudget = isTransferPicker
-      ? projectedBank + (fillingEmptySlot ? 0 : transferReplacingFor?.currentPrice ?? 0)
-      : remainingBudget;
+    // Per-pick budget = money available AFTER all other pending transfers AND
+    // already-queued reservations (`transferPickMax`, computed once above so
+    // the picker filter and the picker header can never disagree).
+    const effectiveBudget = isTransferPicker ? transferPickMax : remainingBudget;
 
     const counts = isTransferPicker ? projectedNationCounts : nationCounts;
 
@@ -1122,7 +1147,8 @@ export default function SquadPage() {
     sortBy,
     transferReplacingFor,
     pendingTransfers,
-    bankBalance,
+    queuedTransfers,
+    transferPickMax,
     projectedNationCounts,
   ]);
 
@@ -2117,10 +2143,8 @@ export default function SquadPage() {
 
   // Projected money after the queued transfers apply (for the Planned view
   // strip). Bank drops by what you net-spend; team value rises by the same.
-  const plannedMoneyDelta = queuedTransfers.reduce(
-    (sum, t) => sum + ((t.priceIn ?? 0) - (t.priceOut ?? 0)),
-    0,
-  );
+  // Same figure the transfer-mode budget reserves (see `queuedNetCost`).
+  const plannedMoneyDelta = queuedNetCost;
   const projectedTeamValue = teamValue + plannedMoneyDelta;
   const projectedBankView = bankBalance - plannedMoneyDelta;
 
@@ -2460,7 +2484,7 @@ export default function SquadPage() {
                 <span className="font-black text-sky-300">
                   {unlimitedTransfers || nextRoundWildcardArmed
                     ? '∞'
-                    : Math.max(0, freeTransfers - pendingTransfers.length)}
+                    : freeTransfersLeft}
                 </span>
               </div>
               {stageLocked ? (
@@ -2505,19 +2529,19 @@ export default function SquadPage() {
           </p>
           {stageLocked && (
             <div className="mt-2 px-3 py-2 rounded-xl bg-violet-500/10 border border-violet-500/30 text-[11px] sm:text-xs text-violet-200 leading-snug">
-              This round is being played, so your current squad is locked in.
-              Transfers you confirm now are <span className="font-bold">queued</span> and
-              applied automatically the moment the next round starts.
+              Your squad is locked while this round is being played. Changes are
+              saved and applied automatically when the next round kicks off.
               {nextRoundWildcardArmed ? (
                 <span className="block mt-1 text-emerald-300 font-bold">
-                  Wildcard armed for {nextRound?.name ?? 'the next round'} — queue as many
+                  Wildcard armed for {nextRound?.name ?? 'the next round'} — make as many
                   transfers as you like, all free.
                 </span>
               ) : (
                 <span className="block mt-1 text-white/60">
-                  You have <span className="font-bold text-white">{freeTransfers}</span> free transfer{freeTransfers === 1 ? '' : 's'}.
+                  <span className="font-bold text-white">{freeTransfersLeft}</span> of{' '}
+                  <span className="font-bold text-white">{freeTransfers}</span> free transfer{freeTransfers === 1 ? '' : 's'} left.
                   {transferHitCost > 0 && (
-                    <span className="text-red-300 font-bold"> Extra ones cost −4 pts each (−{transferHitCost} total) off next round.</span>
+                    <span className="text-red-300 font-bold"> Extra swaps cost −4 pts each (−{transferHitCost} total off next round).</span>
                   )}
                 </span>
               )}
@@ -2632,18 +2656,24 @@ export default function SquadPage() {
                     <h2 className="text-base sm:text-lg font-bold text-white truncate">
                       Replace {transferReplacingFor?.displayName}
                     </h2>
-                    {/* The previous "Budget after refund" copy read like a
-                        post-transfer bank balance and was confusing — it's
-                        actually the maximum price for a *single* replacement
-                        (current bank + refund from the player going out). */}
-                    <p className="text-xs text-white/40">
-                      Bank £{projectedBank.toFixed(1)}m + refund £
-                      {(transferReplacingFor?.currentPrice ?? 0).toFixed(1)}m ·
-                      max £
-                      {(
-                        projectedBank + (transferReplacingFor?.currentPrice ?? 0)
-                      ).toFixed(1)}
-                      m per pick
+                    {/* Show ONE clear number — the most this single pick can
+                        cost — with a plain-English breakdown underneath. The
+                        old "Bank … + refund … · max … per pick" line read like
+                        an unfinished formula. */}
+                    <p className="text-xs sm:text-sm text-white/70 leading-tight">
+                      Spend up to{' '}
+                      <span className="font-black text-emerald-300">
+                        £{transferPickMax.toFixed(1)}m
+                      </span>
+                    </p>
+                    <p className="text-[11px] text-white/40 leading-tight mt-0.5">
+                      £{projectedBank.toFixed(1)}m in the bank
+                      {!fillingEmptySlot && transferReplacingFor && (
+                        <>
+                          {' '}+ £{(transferReplacingFor.currentPrice ?? 0).toFixed(1)}m from
+                          selling {transferReplacingFor.displayName}
+                        </>
+                      )}
                     </p>
                   </div>
                 </div>

@@ -11,7 +11,7 @@ interface StageSummary {
   order: number;
   isActive: boolean;
   isComplete: boolean;
-  points: { rawPoints: number; captainPoints: number; transferHits: number; totalPoints: number } | null;
+  points: { rawPoints: number; captainPoints: number; transferHits: number; totalPoints: number; live?: boolean } | null;
   chips: string[];
 }
 
@@ -89,11 +89,16 @@ export default function PointsBreakdownModal({ onClose }: { onClose: () => void 
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/team/stages-summary', { credentials: 'include' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (!cancelled) { setSummary(d); setLoading(false); } })
-      .catch(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    const load = () =>
+      fetch('/api/team/stages-summary', { credentials: 'include' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (!cancelled && d) { setSummary(d); setLoading(false); } })
+        .catch(() => { if (!cancelled) setLoading(false); });
+    load();
+    // Keep the in-progress round's total ticking while the popup is open.
+    // Only the summary refetches; the open/expanded state is untouched.
+    const id = setInterval(load, 30_000);
+    return () => { cancelled = true; clearInterval(id); };
   }, []);
 
   const toggleStage = useCallback((stageId: string, hasPoints: boolean) => {
@@ -120,7 +125,11 @@ export default function PointsBreakdownModal({ onClose }: { onClose: () => void 
       onClick={onClose}
     >
       <div
-        className="bg-slate-900 w-full max-w-2xl sm:rounded-2xl rounded-t-2xl border border-white/10 shadow-2xl max-h-[90dvh] flex flex-col"
+        className="bg-slate-900 w-full max-w-2xl sm:rounded-2xl rounded-t-2xl border border-white/10 shadow-2xl flex flex-col"
+        // Cap below the sticky nav so the header never clips when a week's
+        // pitch expands and grows the sheet upward (it's anchored to the
+        // bottom on phones). 4.25rem ≈ nav height + safe-area top.
+        style={{ maxHeight: 'calc(100dvh - env(safe-area-inset-top) - 4.25rem)' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -148,7 +157,10 @@ export default function PointsBreakdownModal({ onClose }: { onClose: () => void 
         </div>
 
         {/* Body */}
-        <div className="overflow-y-auto p-3 space-y-2">
+        <div
+          className="overflow-y-auto p-3 space-y-2"
+          style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
+        >
           {loading && (
             <div className="py-10 text-center text-white/40 text-sm">Loading…</div>
           )}
@@ -184,7 +196,12 @@ export default function PointsBreakdownModal({ onClose }: { onClose: () => void 
                     </p>
                   </div>
                   {s.points ? (
-                    <span className="font-black text-emerald-400 text-base tabular-nums shrink-0">{s.points.totalPoints}</span>
+                    <span className="flex items-center gap-1 shrink-0">
+                      {s.points.live && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
+                      )}
+                      <span className="font-black text-emerald-400 text-base tabular-nums">{s.points.totalPoints}</span>
+                    </span>
                   ) : (
                     <span className="text-white/30 text-sm shrink-0">—</span>
                   )}

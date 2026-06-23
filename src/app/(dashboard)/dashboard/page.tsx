@@ -38,6 +38,10 @@ export default function DashboardPage() {
   const { timezone } = useUserTimezone();
   const [user, setUser] = useState<User | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
+  // Live-inclusive total (banked + in-progress delta) from /api/team, so the
+  // dashboard "Total" pill matches the squad page and league standings during a
+  // live match instead of sitting on the last banked total until full-time.
+  const [liveTotalPoints, setLiveTotalPoints] = useState<number | null>(null);
   const [showPoints, setShowPoints] = useState(false);
   // Current-round points + stage label for the inline display; the popup shows
   // the cumulative total + per-week breakdown.
@@ -87,6 +91,11 @@ export default function DashboardPage() {
       setUser(userData.user);
       if (teamRes.ok && teamData.team) {
         setTeam(teamData.team);
+        setLiveTotalPoints(
+          typeof teamData.liveTotalPoints === 'number'
+            ? teamData.liveTotalPoints
+            : teamData.team.totalPoints,
+        );
         setUnlimitedTransfers(Boolean(teamData.unlimitedTransfers));
         // Current-round points for the inline display (cheap, non-blocking).
         fetch('/api/team/stages-summary', { signal: ctrl.signal })
@@ -158,7 +167,7 @@ export default function DashboardPage() {
               title="See your points by gameweek"
             >
               <span className="text-[10px] sm:text-xs uppercase tracking-wider text-emerald-300/70 font-bold">Total</span>
-              <span className="text-lg sm:text-xl font-black text-emerald-400 leading-none tabular-nums">{team.totalPoints}</span>
+              <span className="text-lg sm:text-xl font-black text-emerald-400 leading-none tabular-nums">{liveTotalPoints ?? team.totalPoints}</span>
               <span className="text-emerald-300/50 text-[10px] font-bold hidden sm:inline">pts ›</span>
             </button>
           )}

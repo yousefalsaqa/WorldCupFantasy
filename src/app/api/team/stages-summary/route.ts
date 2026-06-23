@@ -53,29 +53,6 @@ export async function GET(_request: NextRequest) {
     });
     const byStageId = new Map(teamStages.map((ts) => [ts.stageId, ts]));
 
-    const result = stages.map((s) => {
-      const ts = byStageId.get(s.id);
-      let chips: string[] = ts ? parseActiveChips(ts.chipsUsed) : [];
-      if (chips.length === 0 && ts?.chipUsed) chips = [ts.chipUsed];
-      return {
-        stageId: s.stageId,
-        name: s.name,
-        order: s.order,
-        isActive: s.isActive,
-        isComplete: s.isComplete,
-        // null until the stage has a settled snapshot.
-        points: ts
-          ? {
-              rawPoints: ts.rawPoints,
-              captainPoints: ts.captainPoints,
-              transferHits: ts.transferHits,
-              totalPoints: ts.totalPoints,
-            }
-          : null,
-        chips,
-      };
-    });
-
     // Current-round points, computed DIRECTLY from the active stage's
     // PlayerPerformance (same basis as the per-player pills) minus any
     // transfer hits taken this stage. The old `totalPoints − completedSum`
@@ -99,6 +76,43 @@ export async function GET(_request: NextRequest) {
       });
       currentRoundPoints = stagePts - paidHits * 4;
     }
+
+    const result = stages.map((s) => {
+      const ts = byStageId.get(s.id);
+      let chips: string[] = ts ? parseActiveChips(ts.chipsUsed) : [];
+      if (chips.length === 0 && ts?.chipUsed) chips = [ts.chipUsed];
+      // The in-progress round hasn't settled, so its TeamStage totals are still
+      // 0. Surface the LIVE round total instead (same number the dashboard /
+      // squad "Round Pts" pill shows) so the breakdown list isn't stuck on 0
+      // while matches play.
+      const points =
+        s.id === active?.id
+          ? {
+              rawPoints: currentRoundPoints,
+              captainPoints: 0,
+              transferHits: 0,
+              totalPoints: currentRoundPoints,
+              live: true,
+            }
+          : ts
+          ? {
+              rawPoints: ts.rawPoints,
+              captainPoints: ts.captainPoints,
+              transferHits: ts.transferHits,
+              totalPoints: ts.totalPoints,
+              live: false,
+            }
+          : null; // null until the stage has a settled snapshot.
+      return {
+        stageId: s.stageId,
+        name: s.name,
+        order: s.order,
+        isActive: s.isActive,
+        isComplete: s.isComplete,
+        points,
+        chips,
+      };
+    });
 
     return NextResponse.json({
       totalPoints: team.totalPoints,

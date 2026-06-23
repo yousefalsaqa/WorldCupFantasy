@@ -1,11 +1,91 @@
 # Live Points Feature — Handoff
 
-Last updated: 2026-06-18 PM (**LIVE** — GR2 LOCKED since 16:00Z, GR1
-settled/banked, GR3 next. The `feature/transfers-planned-view` branch is now
-**MERGED + DEPLOYED to main/prod**, plus a big batch of points/transfers/
-history/league fixes shipped this session. JWT_SECRET rotated → forced
-re-login. See **Session 2026-06-18 PM** immediately below; the earlier
-branch-build notes are kept further down for history.)
+Last updated: 2026-06-23 (**LIVE** — GR2 in progress, GR3 next. This session
+fixed a real transfer-budget bug + a batch of transfer/modal/points-pill UX.
+See **Session 2026-06-23** immediately below.)
+
+---
+
+## Session 2026-06-23 — TRANSFER BUDGET BUG + TRANSFER/MODAL/POINTS UX (committed, push pending verify)
+
+All changes committed this session. Found while the user was reshuffling a
+locked (queued) round: the picker let them build transfers the server then
+rejected with "Insufficient funds. Need £0.2m but only have £0.0m".
+
+### Shipped (all typecheck-clean; tested in dev against prod DB)
+- **Transfer "Insufficient funds" bug FIXED (the real one).** In QUEUE mode the
+  server NEVER debits `Team.bankBalance` — it only RESERVES already-queued spend
+  via `pendingNetCost` (`/api/transfers` route) and applies it at the round
+  boundary. The squad page's `projectedBank` was `bankBalance + impact` and
+  ignored that reservation, so it showed the full bank, let the user build
+  transfers, then the server 400'd. Now
+  `projectedBank = bankBalance − queuedNetCost + transferBudgetImpact`
+  (`queuedNetCost` = net £m of already-queued transfers, the same figure
+  `plannedMoneyDelta` used in Planned view — now shared). Client and server
+  budgets agree; picker greys out unaffordable players instead of failing at
+  submit.
+- **Picker also hides already-QUEUED incoming players** (server rejects
+  re-picking them with "already queued to join"). Nation-count divergence for
+  queued transfers is still NOT modelled client-side (queuedTransfers payload
+  carries `nationCode` not `nation.id`) — secondary, left as-is.
+- **Per-pick budget is now ONE source of truth** (`transferPickMax`, hoisted
+  out of the `availablePlayers` memo) used by BOTH the picker filter and the
+  picker header, including the empty-slot case (refund already banked → not
+  added twice). They can no longer disagree.
+- **Picker header rewritten** (was the "weird unfinished" `Bank £6.1m + refund
+  £5.2m · max £11.3m per pick`): now one bold number **"Spend up to £11.3m"** +
+  a plain sub-line "£6.1m in the bank + £5.2m from selling Kimmich" (sub-line
+  drops on empty-slot fills).
+- **Locked-round banner reworded** + the **"Free 0" vs "you have 3 free"
+  contradiction killed**: one source `freeTransfersLeft = max(0, freeTransfers −
+  pendingTransfers.length)` drives BOTH the pill and the banner ("**X of Y free
+  transfers left**"); the **−4 hit copy only appears once you go under**.
+- **Dashboard "Total" pill now LIVE** (user's call). `/api/team` GET returns
+  `liveTotalPoints = team.totalPoints + liveTeamDeltas([id])` (between rounds =
+  banked; mid-match ticks up). Dashboard reads it (falls back to
+  `team.totalPoints`). Squad page already showed live; now dashboard + squad +
+  league all match mid-match.
+- **Per-WEEK points in the breakdown popup now LIVE.** `stages-summary` was
+  showing the in-progress round's un-settled `TeamStage` total (0). It now
+  surfaces the live round total (`currentRoundPoints`, captain/bench/hits) for
+  the active stage, tagged `points.live=true`. Modal shows a **pulsing green
+  dot** beside the live number and **polls the summary every 30s** while open.
+  (Expanded mini-pitch still snapshots at expand time, not on the 30s tick —
+  refreshes on reopen. Left as scope.)
+- **Two modal top-clip fixes.** Both the **PlayerDetailModal** and the
+  **PointsBreakdownModal** clipped their header under the sticky nav when the
+  content grew (expanding a match-history row / a week's pitch, or iOS address-
+  bar collapse). Player modal: was vertically centered → now `items-start
+  sm:items-center` anchored below the nav (`paddingTop: safe-area + 4.5rem`),
+  `max-h-[82dvh]`. Breakdown modal (bottom sheet): capped to
+  `calc(100dvh − safe-area − 4.25rem)` so the header always clears the nav +
+  safe-area bottom pad. (Same class of fix the squad pickers already had.)
+
+### Verified
+- Typecheck clean throughout. Dev compiled all touched pages/routes (200s on
+  `/api/team`, `/api/team/stages-summary`).
+- **Squad snapshot save confirmed working for GR2-onward.** `scripts/check-
+  snapshots.ts` (new, read-only) reports snapshot coverage per stage:
+  currently **GR1 0/27 (settled pre-feature → "estimated" forever), GR2 0 yet
+  (settles exact at GR2→GR3 boundary), 28 teams**. `settleStage` writes
+  `TeamStage.squadSnapshot` (player ids + lineup flags, BEFORE
+  applyPendingTransfers) and the gameweek endpoint PREFERS it (`usedSnapshot`,
+  `lineupInferred=false`). GR1 can't be made exact retroactively (never
+  recorded) — its "estimated" label is honest; did NOT backfill a fake snapshot.
+  - **TODO after GR2→GR3 rollover:** re-run `npx tsx scripts/check-snapshots.ts`
+    to confirm 28/28 GR2 snapshots landed (proves the deployed cron settled
+    with the snapshot code).
+
+### Files touched
+- `src/app/(dashboard)/squad/page.tsx` — budget fix, transferPickMax, picker
+  header, free-left copy, banner.
+- `src/app/api/team/route.ts` — `liveTotalPoints`.
+- `src/app/(dashboard)/dashboard/page.tsx` — live Total pill.
+- `src/app/api/team/stages-summary/route.ts` — live active-stage per-week total.
+- `src/components/points-breakdown-modal.tsx` — live number + pulse + 30s poll +
+  top-clip cap.
+- `src/components/player-detail-modal.tsx` — anchor below nav.
+- `scripts/check-snapshots.ts` — new read-only snapshot-coverage checker.
 
 ---
 

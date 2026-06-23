@@ -267,20 +267,22 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/80 z-[9999] backdrop-blur-sm"
+      className="fixed inset-0 bg-black/80 z-[9999] backdrop-blur-sm flex items-start sm:items-center justify-center"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
-        position: 'fixed',
-        top: 0, left: 0, right: 0, bottom: 0,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '16px',
+        // Anchor to the top (below the sticky nav) on phones so the header
+        // never clips when the modal GROWS — e.g. expanding a match-history
+        // row, or iOS collapsing the address bar. A centered modal grew
+        // symmetrically and pushed its top off-screen. Desktop re-centers.
+        paddingTop: 'calc(env(safe-area-inset-top) + 4.5rem)',
+        paddingLeft: '16px',
+        paddingRight: '16px',
+        paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)',
         overflow: 'hidden',
       }}
     >
       <div
-        className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl max-h-[85dvh] overflow-y-auto"
+        className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl max-h-[82dvh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

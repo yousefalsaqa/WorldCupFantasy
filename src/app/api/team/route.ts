@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth';
 import { computeUnlimitedTransfers } from '@/lib/unlimited-transfers';
+import { liveTeamDeltas } from '@/lib/live-team-totals';
 
 // This route is dynamic because it reads cookies for authentication
 export const dynamic = 'force-dynamic';
@@ -38,7 +39,16 @@ export async function GET() {
   // / wildcard) so the dashboard can show ∞ instead of a misleading "2".
   const unlimitedTransfers = team ? await computeUnlimitedTransfers(team.id) : false;
 
-  return NextResponse.json({ team, unlimitedTransfers }, {
+  // Live-inclusive total = banked Team.totalPoints + the in-progress delta from
+  // matches happening right now (captain ×mult, bench boost, transfer hits, and
+  // the late-joiner gate all handled inside liveTeamDeltas — same code path the
+  // squad page and league standings use). Between rounds the delta is 0, so this
+  // equals the banked total; mid-match it ticks up in step with the squad page.
+  const liveTotalPoints = team
+    ? team.totalPoints + ((await liveTeamDeltas([team.id])).get(team.id) ?? 0)
+    : 0;
+
+  return NextResponse.json({ team, unlimitedTransfers, liveTotalPoints }, {
     // Tiny private cache so quick back-and-forth between dashboard and other
     // pages doesn't refetch every single time. Stale-while-revalidate keeps
     // the data fresh without making the user wait.
