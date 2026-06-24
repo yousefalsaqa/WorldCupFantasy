@@ -37,10 +37,16 @@ tournament — one for the group phase, one for the knockouts.**
   if the user wants locked-round Free Hit to free QUEUED transfers, that's a
   separate (bigger) change, still OPEN.
 
+- **League team-view showed only 2 of a stacked 3-chip round.** The read-only
+  ribbon hard-coded only TC + BB badges; Wildcard / Free Hit never rendered. Now
+  it maps the team's full `activeChips` array (the route already returned it) via
+  a `RIBBON_CHIPS` label/style map, with a TC/BB-boolean fallback.
+
 ### Files touched
 - `src/lib/stage-advance.ts` — once-only chip refresh at group→knockout.
 - `src/app/api/chips/route.ts` — WC1 group-only (hide + POST guard).
 - `src/app/(dashboard)/squad/page.tsx` — `transfersAreFree` from local chips.
+- `src/app/(dashboard)/leagues/team/[teamId]/page.tsx` — render ALL active chips.
 
 ---
 

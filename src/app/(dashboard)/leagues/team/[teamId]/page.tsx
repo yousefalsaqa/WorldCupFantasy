@@ -110,6 +110,17 @@ function toModalPlayer(p: ApiPlayer): ModalPlayer {
   };
 }
 
+// Badge styling for every chip the read-only ribbon can surface. Previously
+// only TC + BB were rendered, so a stacked 3-chip round (e.g. + Wildcard or
+// Free Hit) showed as two. Driven off the team's full `activeChips` array.
+const RIBBON_CHIPS: Record<string, { label: string; cls: string }> = {
+  TRIPLE_CAPTAIN: { label: 'TRIPLE CAPTAIN ×3', cls: 'bg-amber-400/15 text-amber-300 ring-amber-400/40' },
+  BENCH_BOOST: { label: 'BENCH BOOST', cls: 'bg-violet-400/15 text-violet-300 ring-violet-400/40' },
+  WILDCARD_1: { label: 'WILDCARD', cls: 'bg-emerald-400/15 text-emerald-300 ring-emerald-400/40' },
+  WILDCARD_2: { label: 'WILDCARD', cls: 'bg-emerald-400/15 text-emerald-300 ring-emerald-400/40' },
+  FREE_HIT: { label: 'FREE HIT', cls: 'bg-sky-400/15 text-sky-300 ring-sky-400/40' },
+};
+
 export default function LeagueTeamViewPage({
   params,
 }: {
@@ -296,16 +307,23 @@ export default function LeagueTeamViewPage({
           Read-only view
         </span>
         <div className="flex items-center gap-1.5 flex-wrap">
-          {tripleCaptainActive && (
-            <span className="px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-300 text-[10px] font-bold ring-1 ring-amber-400/40">
-              TRIPLE CAPTAIN ×3
-            </span>
-          )}
-          {team.benchBoostActive && (
-            <span className="px-1.5 py-0.5 rounded bg-violet-400/15 text-violet-300 text-[10px] font-bold ring-1 ring-violet-400/40">
-              BENCH BOOST
-            </span>
-          )}
+          {/* Every active chip — driven off the full activeChips array so a
+              stacked round (TC + BB + Wildcard/Free Hit) shows all of them.
+              Falls back to the TC/BB booleans if activeChips is absent. */}
+          {(team.activeChips && team.activeChips.length > 0
+            ? team.activeChips
+            : [
+                ...(tripleCaptainActive ? ['TRIPLE_CAPTAIN'] : []),
+                ...(team.benchBoostActive ? ['BENCH_BOOST'] : []),
+              ]
+          ).map((c) => {
+            const b = RIBBON_CHIPS[c];
+            return b ? (
+              <span key={c} className={`px-1.5 py-0.5 rounded text-[10px] font-bold ring-1 ${b.cls}`}>
+                {b.label}
+              </span>
+            ) : null;
+          })}
           {team.anyMatchLive && (
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 text-[10px] font-bold ring-1 ring-emerald-400/40">
               <span className="w-1 h-1 bg-emerald-400 rounded-full animate-pulse" />
