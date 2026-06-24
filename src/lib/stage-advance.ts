@@ -155,11 +155,15 @@ async function advanceOnce(): Promise<AdvanceResult> {
   });
 
   const isEnteringKnockouts = nextStage !== null && KNOCKOUT_STAGE_IDS.has(nextStage.stageId);
-  // FPL convention: each chip is a one-shot per "phase". When entering the
-  // knockout phase, we re-grant TC / BB / FH so the user gets a fresh set
-  // for the knockouts (WC2 was already available as of R32; WC1 stays
-  // consumed since it's the group-stage wildcard).
-  const refreshChips = isEnteringKnockouts;
+  // Each chip is a one-shot per PHASE — 2 of each across the tournament: one in
+  // the group phase, one in the knockout phase. We re-grant TC / BB / FH EXACTLY
+  // ONCE, at the group→knockout crossover (GR3→R32), so the user gets a single
+  // fresh set for the knockouts. The closing stage being a GROUP stage is what
+  // makes this fire only once — a knockout→knockout advance (R32→R16, …) must
+  // NOT refresh, or chips would regenerate every round. (Wildcards mirror this:
+  // WC1 is the group wildcard and stays consumed; WC2 is the knockout wildcard.)
+  const closingIsGroupStage = !KNOCKOUT_STAGE_IDS.has(activeStage.stageId);
+  const refreshChips = isEnteringKnockouts && closingIsGroupStage;
 
   // 0) Settle the closing stage BEFORE the Free Hit revert: auto-subs,
   // vice-captain fallback, and the TeamStage history snapshot must score

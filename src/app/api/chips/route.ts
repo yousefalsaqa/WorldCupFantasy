@@ -161,13 +161,14 @@ export async function GET() {
       };
     };
 
-    // Build the visible chip list. WC2 is hidden entirely until the
-    // active stage is a knockout stage — keeps the chips card to four
-    // cards in the group phase and five once knockouts begin.
-    const showWildcard2 = isKnockoutStage(activeStage?.stageId);
+    // Build the visible chip list. Each wildcard is scoped to one phase:
+    // WC1 shows only in the group stage, WC2 only in the knockouts — so the
+    // card always reads four (one wildcard + FH + TC + BB). An unused WC1 is
+    // forfeited once the knockouts begin (it's the group-stage wildcard).
+    const inKnockouts = isKnockoutStage(activeStage?.stageId);
     const chips = [
-      buildChip('WILDCARD_1', team.wildcard1Used),
-      ...(showWildcard2 ? [buildChip('WILDCARD_2', team.wildcard2Used)] : []),
+      ...(inKnockouts ? [] : [buildChip('WILDCARD_1', team.wildcard1Used)]),
+      ...(inKnockouts ? [buildChip('WILDCARD_2', team.wildcard2Used)] : []),
       buildChip('FREE_HIT', team.freeHitUsed),
       buildChip('TRIPLE_CAPTAIN', team.tripleCaptainUsed),
       buildChip('BENCH_BOOST', team.benchBoostUsed),
@@ -303,9 +304,16 @@ export async function POST(request: NextRequest) {
     }
 
     if (chipId === 'WILDCARD_2') {
-      const knockoutStages = ['R32', 'R16', 'QF', 'SF', '3RD', 'F'];
-      if (!knockoutStages.includes(targetStage.stageId)) {
+      if (!isKnockoutStage(targetStage.stageId)) {
         return NextResponse.json({ error: 'Wildcard 2 is only available in knockout stages' }, { status: 400 });
+      }
+    }
+    // WC1 is the group-stage wildcard — reject it in the knockouts (symmetric
+    // to the WC2 guard). Without this an unused WC1 could be played in a
+    // knockout round, handing the user a second knockout wildcard.
+    if (chipId === 'WILDCARD_1') {
+      if (isKnockoutStage(targetStage.stageId)) {
+        return NextResponse.json({ error: 'Wildcard 1 is only available in the group stage' }, { status: 400 });
       }
     }
 

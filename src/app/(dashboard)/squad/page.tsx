@@ -871,16 +871,32 @@ export default function SquadPage() {
   // free — mirrors the server-side branch in /api/transfers.
   const nextRoundWildcardArmed = !!nextRound?.armed;
 
+  // A Wildcard or Free Hit active for the CURRENT stage makes THIS round's
+  // transfers unlimited + free (the server's immediate path does the same via
+  // hasUnlimitedTransferChip). We read it from the locally-known chip state so
+  // it's right the instant the chip is toggled — `unlimitedTransfers` comes
+  // from /api/squad/get and can lag a just-activated Free Hit, which showed a
+  // phantom −4 in the UI while the server correctly charged nothing.
+  //
+  // ONLY while the round is OPEN: once it's locked, transfers QUEUE for the
+  // next round, which a current-stage Free Hit does not cover (the server
+  // charges those), so suppressing the hit then would desync client/server.
+  const activeStageUnlimitedChip = chips.some(
+    (c) => (c.id === 'FREE_HIT' || c.id === 'WILDCARD_1' || c.id === 'WILDCARD_2') && c.active,
+  );
+  const transfersAreFree =
+    unlimitedTransfers || (!stageLocked && activeStageUnlimitedChip);
+
   // Points hit cost = (transfers beyond freeTransfers) × 4. Matches the
   // server-side rule in /api/transfers. Applies BOTH at an open deadline
   // (immediate) and while the round is locked (queued for next round) — the
-  // only free-pass is unlimited transfers (pre-tournament / wildcard / free
-  // hit / next-round wildcard armed).
+  // free-passes are unlimited transfers (pre-tournament / active Wildcard or
+  // Free Hit) and a next-round Wildcard armed for the queue.
   const transferHitCost = useMemo(() => {
-    if (unlimitedTransfers || nextRoundWildcardArmed) return 0;
+    if (transfersAreFree || nextRoundWildcardArmed) return 0;
     const extra = Math.max(0, pendingTransfers.length - freeTransfers);
     return extra * 4;
-  }, [pendingTransfers.length, freeTransfers, unlimitedTransfers, nextRoundWildcardArmed]);
+  }, [pendingTransfers.length, freeTransfers, transfersAreFree, nextRoundWildcardArmed]);
 
   // Free transfers still available after the picks made this session. ONE
   // source of truth so the "Free" pill and the banner copy always agree
@@ -2482,7 +2498,7 @@ export default function SquadPage() {
               <div className="px-2.5 py-1 rounded-lg bg-sky-500/10 border border-sky-500/20">
                 <span className="text-white/50 mr-1">Free</span>
                 <span className="font-black text-sky-300">
-                  {unlimitedTransfers || nextRoundWildcardArmed
+                  {transfersAreFree || nextRoundWildcardArmed
                     ? '∞'
                     : freeTransfersLeft}
                 </span>
@@ -2502,7 +2518,7 @@ export default function SquadPage() {
                   )}
                 </>
               ) : (
-                !unlimitedTransfers && (
+                !transfersAreFree && (
                   <div
                     className={`px-2.5 py-1 rounded-lg border ${
                       transferHitCost > 0
@@ -2619,7 +2635,7 @@ export default function SquadPage() {
                     transferHitCost > 0 ? ` · -${transferHitCost} pts` : ''
                   }`
                 : `Confirm ${pendingTransfers.length} transfer${pendingTransfers.length === 1 ? '' : 's'}${
-                    !unlimitedTransfers && transferHitCost > 0
+                    !transfersAreFree && transferHitCost > 0
                       ? ` · -${transferHitCost} pts`
                       : ''
                   }`}

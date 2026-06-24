@@ -6,6 +6,44 @@ See **Session 2026-06-23** immediately below.)
 
 ---
 
+## Session 2026-06-23 №2 — CHIP ECONOMY "2 OF EACH" + FREE HIT TRANSFER-HIT DISPLAY
+
+Follow-up after the user clarified the chip model: **2 of each chip across the
+tournament — one for the group phase, one for the knockouts.**
+
+### Shipped (typecheck-clean)
+- **TC / BB / FH now refresh EXACTLY ONCE**, at the group→knockout crossover
+  (GR3→R32), not at every knockout boundary. Bug: `refreshChips =
+  isEnteringKnockouts` was true at R32→R16, R16→QF, … so chips regenerated every
+  knockout round (6+ of each). Now `refreshChips = isEnteringKnockouts &&
+  closingIsGroupStage` (`!KNOCKOUT_STAGE_IDS.has(activeStage.stageId)`) →
+  `stage-advance.ts` ~157.
+- **Wildcard 1 is now GROUP-ONLY** (symmetric to the existing WC2 knockout-only
+  rule): hidden from the chip list in knockouts + POST rejects it in knockout
+  stages (`chips/route.ts`). Without this an unused WC1 could be played in the
+  knockouts as a 2nd knockout wildcard. An unused WC1 is now forfeited when
+  knockouts begin (standard FPL). Net: WC1 (groups) + WC2 (knockouts) = 2.
+- Result: **WC×2, TC×2, BB×2, FH×2** — one of each per phase.
+- **Free Hit phantom −4 in transfers FIXED.** The transfer-mode hit display
+  keyed off `unlimitedTransfers` (from /api/squad/get), which LAGS a just-
+  activated Free Hit, so the UI showed a −4 the server wasn't charging. Now the
+  squad page also reads the LOCAL chip state: `transfersAreFree =
+  unlimitedTransfers || (!stageLocked && activeStageUnlimitedChip)` where
+  `activeStageUnlimitedChip` = a Free Hit / Wildcard active now. Used by the hit
+  calc, the ∞ Free pill, the Hit pill, and the confirm button. **Guarded to
+  OPEN rounds only** — when locked, transfers queue for next round and a current-
+  stage Free Hit doesn't cover them (server charges; suppressing would desync).
+  NOTE: Free Hit still is NOT armable for the NEXT round the way Wildcard is —
+  if the user wants locked-round Free Hit to free QUEUED transfers, that's a
+  separate (bigger) change, still OPEN.
+
+### Files touched
+- `src/lib/stage-advance.ts` — once-only chip refresh at group→knockout.
+- `src/app/api/chips/route.ts` — WC1 group-only (hide + POST guard).
+- `src/app/(dashboard)/squad/page.tsx` — `transfersAreFree` from local chips.
+
+---
+
 ## Session 2026-06-23 — TRANSFER BUDGET BUG + TRANSFER/MODAL/POINTS UX (committed, push pending verify)
 
 All changes committed this session. Found while the user was reshuffling a
