@@ -41,7 +41,11 @@ const CHIP_BADGE: Record<string, { label: string; cls: string }> = {
 };
 
 // One read-only mini player chip: kit face + name + points pill + armband.
-function MiniChip({ p }: { p: GwPlayer }) {
+// The captain's pill shows his MULTIPLIED total (×2, or ×3 with Triple Captain
+// that round) so it matches the squad page and the round total — the raw
+// per-player score is doubled for the armband holder.
+function MiniChip({ p, captainMultiplier }: { p: GwPlayer; captainMultiplier: number }) {
+  const shownPoints = p.isCaptain ? p.totalPoints * captainMultiplier : p.totalPoints;
   return (
     <div className="flex flex-col items-center w-[52px] shrink-0">
       <div className="relative">
@@ -60,7 +64,7 @@ function MiniChip({ p }: { p: GwPlayer }) {
           <span className="absolute -top-1 -left-1 z-10 w-4 h-4 rounded-full bg-white/80 text-slate-900 text-[8px] font-black flex items-center justify-center">V</span>
         )}
         <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 z-10 px-1 rounded-full bg-emerald-500 text-white text-[9px] font-black leading-tight shadow tabular-nums">
-          {p.totalPoints}
+          {shownPoints}
         </span>
       </div>
       <span className="mt-1 text-[8px] text-white/80 font-semibold truncate w-full text-center leading-tight">
@@ -219,6 +223,9 @@ export default function PointsBreakdownModal({ onClose }: { onClose: () => void 
                       const bench = team
                         .filter((p) => !p.isStarting)
                         .sort((a, b) => (a.benchOrder ?? 99) - (b.benchOrder ?? 99));
+                      // Captain multiplier for THIS round: ×3 when Triple Captain
+                      // was active, otherwise the default ×2.
+                      const capMult = s.chips.includes('TRIPLE_CAPTAIN') ? 3 : 2;
                       return (
                         <div>
                           {inferredByStage[s.stageId] && (
@@ -233,7 +240,7 @@ export default function PointsBreakdownModal({ onClose }: { onClose: () => void 
                               if (row.length === 0) return null;
                               return (
                                 <div key={pos} className="flex justify-center gap-2 min-w-max">
-                                  {row.map((p) => <MiniChip key={p.playerId} p={p} />)}
+                                  {row.map((p) => <MiniChip key={p.playerId} p={p} captainMultiplier={capMult} />)}
                                 </div>
                               );
                             })}
@@ -242,7 +249,7 @@ export default function PointsBreakdownModal({ onClose }: { onClose: () => void 
                             <div className="mt-2">
                               <p className="text-[9px] text-white/30 uppercase tracking-widest font-bold mb-1 text-center">Bench</p>
                               <div className="flex justify-center gap-2 flex-wrap opacity-80">
-                                {bench.map((p) => <MiniChip key={p.playerId} p={p} />)}
+                                {bench.map((p) => <MiniChip key={p.playerId} p={p} captainMultiplier={capMult} />)}
                               </div>
                             </div>
                           )}

@@ -1,8 +1,52 @@
 # Live Points Feature — Handoff
 
-Last updated: 2026-06-23 (**LIVE** — GR2 in progress, GR3 next. This session
-fixed a real transfer-budget bug + a batch of transfer/modal/points-pill UX.
-See **Session 2026-06-23** immediately below.)
+Last updated: 2026-06-26 (**LIVE** — GR3 in progress, 12/24 played, last group
+games run through Jun 28 ~04:00Z. This session prepped the GR3→R32 crossover:
+fixed all 6 knockout deadlines + built the R32 match-creation tooling. See
+**Session 2026-06-26** immediately below.)
+
+---
+
+## Session 2026-06-26 — KNOCKOUT DEADLINES FIXED + R32 CREATION TOOLING (R32 matches pending groups)
+
+Entering the last GR3 matchday. Addressed the long-standing carryover: the
+knockout stage deadlines were wrong placeholders (R32 = Jun 20, BEFORE GR3!),
+and no knockout matches exist in the DB yet.
+
+### Done (applied to prod DB)
+- **All 6 KO stage deadlines corrected** to their real first-kickoff times,
+  derived from `KNOCKOUT_FIXTURES` in `src/lib/world-cup-fixtures.ts` (EDT→UTC):
+  R32 **Jun 28 19:00Z**, R16 Jul 4 17:00Z, QF Jul 9 20:00Z, SF Jul 14 19:00Z,
+  3RD Jul 18 21:00Z, F Jul 19 19:00Z. Was urgent: the moment GR3 completes
+  (~Jun 28 04:00Z) the cron flips R32 active, and the lockout gate
+  (`stage.deadlineTime`) would have read R32 as already-locked with the Jun 20
+  placeholder. Script: `scripts/set-ko-deadlines.ts` (old values printed for
+  rollback; idempotent).
+
+### Built, NOT yet run (run on Jun 28, after groups final, before 19:00Z)
+- **`scripts/create-r32-matches.ts`** — creates the 16 R32 matches. **Manual
+  team entry** (user's call): fill the `R32` INPUT block with the 16 home/away
+  nation codes once qualifiers (incl. the 8 best 3rd-place teams) are known;
+  kickoff times come from the lib schedule automatically (no drift). Idempotent
+  (skips existing pairings). `--apply` creates; `--stamp` also pulls
+  `apiFootballId` from API-Football (Round of 32, via `Nation.apiFootballId`) so
+  live scoring works. Home/away orientation mirrors FIFA's bracket (home = the
+  better seed). After --apply, re-run `set-ko-deadlines.ts --apply`.
+
+### Why R32 matches can't be created now
+- `Match` requires real `homeNationId`/`awayNationId` FKs; the lib schedule only
+  has bracket labels (`2A`, `1C`, `3-A/B/C/D/F`) until groups finish. GR3 is
+  12/24 played; last group games kick off Jun 28 02:00Z. So pairings are unknown
+  until then. The rollover (`stage-advance.ts`) won't cascade past an empty R32
+  (`no-matches-in-stage`), so an empty-but-active R32 for the ~15h gap is safe.
+
+### ⚠ Looming (NOT this session)
+- **API-Football Pro lapses Jul 10** — covers R32/R16/QF live, but SF (Jul 14),
+  3RD (Jul 18), F (Jul 19) fall AFTER. Needs a plan before SF.
+
+### Read-only check scripts added
+- `scripts/check-ko-matches.ts`, `check-gr3-remaining.ts` (+ existing
+  `check-stage-state.ts`).
 
 ---
 
