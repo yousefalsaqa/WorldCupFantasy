@@ -1,9 +1,90 @@
 # Live Points Feature — Handoff
 
-Last updated: 2026-06-27 (**LIVE** — GR3 in progress. This session: fixed a
-captain-pill display bug (shipped), repaired a finished-but-unbanked match
-(NOR-FRA) live, and added a cron safety-net sweep for that failure class. Also
-earlier: KO deadlines + R32 tooling. See sessions below.)
+Last updated: 2026-06-27 (**LIVE** — GR3 winding down. Latest session: player-
+modal "Did not play" rows, Free-Hit-aware Planned view + transfers, DB-resolved
+next game (knockout-aware), and 4 more R32 fixtures synced (9/16). Earlier same
+day: captain-pill fix, NOR-FRA unbanked repair + safety-net sweep, KO deadlines
++ R32 tooling. See sessions below.)
+
+---
+
+## Session 2026-06-27 №2 — FREE-HIT PLANNED/TRANSFERS + DNP ROWS + KNOCKOUT NEXT-GAME
+
+All four changes shipped to main/prod (commits `656111a`, `942cb9c`, `f10a563`,
+`3f2c06a`). Typecheck-clean; verified on dev against prod DB. Scratch check
+scripts left in `scripts/` (untracked): `check-vandeven.ts`, `check-dnp.ts`,
+`check-chimbo-fh.ts`, `verify-chimbo-fh.ts`, `sim-fh-transfer.ts`,
+`list-teams.ts`.
+
+### Player modal — "Did not play" rows (`656111a`)
+- **Match History only listed matches a player had a `PlayerPerformance` row
+  for** — so a finished match his nation played but he was left out of was
+  INVISIBLE, making the list read as "played every game his nation did". (Root
+  of the user's "van de Ven shows 2 but doesn't count" confusion: his pill was
+  last round's points while he sat out the current round's game.)
+- **Fix:** `/api/players/[id]/performances` now (a) flags existing 0-minute
+  finished rows `didNotPlay`, and (b) synthesizes DNP entries for the nation's
+  finished matches the player has NO row for, then merges + re-sorts by kickoff.
+  Modal renders DNP rows muted, non-expandable, "Did not play", "—" pts. Season
+  "Apps" already excludes them (counts `minutes>0`). Shared modal → covers
+  squad, league team-view, /history everywhere.
+
+### Free Hit — Planned view previews the PRE-FH squad (`942cb9c`)
+- While a Free Hit is live, the Planned (next-round) view was previewing the
+  TEMPORARY Free Hit XI. Next round REVERTS to the pre-FH squad, so the preview
+  was wrong. `/api/squad/get` now returns `plannedBaseSquad` (snapshot ids +
+  roles + purchase prices) + `plannedBaseBank` / `plannedBaseFreeTransfers` when
+  a FH is active for the active stage; the Planned view bases its preview on it
+  (XI/captain/vice/bench-order from the snapshot), falling back to the live
+  squad until players load. Same snapshot `stage-advance` restores at the
+  rollover, so preview == what passes over. Banner note added. Any FH team.
+
+### Free Hit — transfers build on the Planned (pre-FH) team (`3f2c06a`)
+- **The team you keep next round is the pre-FH squad, so transfers during a
+  locked Free Hit must target THAT, not the throwaway FH XI.** Two assumptions
+  fixed: the transfer screen (built on the live squad) and the transfer API
+  (rejected selling anyone "not in your [FH] squad").
+- **Client** (`squad/page.tsx`): when `transferMode && stageLocked &&
+  plannedBaseSquad`, a `transferBaseSquad` memo (pre-FH players, `currentPrice`
+  = snapshot purchase price) + `transferBaseBank` drive `transferDisplaySquad`,
+  `projectedNationCounts`, the picker's owned-filter, and `projectedBank`.
+  Strictly guarded → every other transfer path byte-identical. FH banner →
+  "Planning next round".
+- **Server** (`/api/transfers`): in QUEUE mode with a live FH snapshot for the
+  locked stage, validates out/refund/position/nation-cap/**budget** against the
+  snapshot roster + `snapshot.bankBalance` (not the FH team's bank). Settlement
+  already reverts-then-applies, so a queue entry keyed on a pre-FH player lands
+  on the reverted squad — no settlement change needed.
+- NOTE (pre-existing, not touched): the queue's free/paid split still uses the
+  LIVE `team.freeTransfers`, which the FH revert overwrites at the boundary, so
+  the free-vs-hit count for transfers queued DURING a FH is approximate. Low
+  impact (client==server, no desync); revisit if it ever bites.
+- Verified via `sim-fh-transfer.ts`: chimbo's 5 pre-FH players absent from the
+  FH XI (Messi, Sarr, Olise, Musiala, Vozinha) are now sellable; budget reads
+  the pre-FH £1.5m not the FH £0.2m; sample swap passes all checks.
+
+### Knockout-aware "next game" on cards + modal (`f10a563`)
+- The static `world-cup-fixtures` lib only knows knockout BRACKET PLACEHOLDERS
+  ("W R32-1") until teams are decided, so a qualified nation showed NO next game
+  (or a stale last opponent). Now the DB is the source:
+  - **New `GET /api/fixtures/upcoming-by-nation`** → `{ code: [{opponent,isHome,
+    kickoff,stageId}] }` for all not-finished, future-kickoff matches. Squad +
+    league pages fetch it once and a `nextFixturesFor()` resolver feeds the
+    player-card FDR pills (falls back to the static lib).
+  - **`/api/players/[id]/performances`** also returns `upcoming` (nation's
+    future matches); the modal NEXT badge + Upcoming strip read it (fallback to
+    lib). Both filter `kickoffTime > now` to mirror the old "upcoming" semantics.
+- Verified: qualified nations resolve their R32 opponent (NED→MAR, USA→BIH,
+  GER→PAR, FRA→SWE, RSA→CAN, CIV→NOR, BRA→JPN); still-in-group nations show the
+  remaining group game (ARG→JOR GR3).
+
+### R32 fixtures — 4 more synced (9 of 16)
+- Re-ran `scripts/sync-knockout-from-api.ts --round=R32 --apply` (more groups
+  finished): created **GER-PAR, FRA-SWE, AUS-EGY, ARG-CPV** on top of the
+  existing 5 (RSA-CAN, BRA-JPN, NED-MAR, CIV-NOR, USA-BIH). `set-ko-deadlines.ts
+  --apply` = no-op (R32 deadline already Jun 28 19:00Z). **Re-run after groups
+  G/J/K/L finish (~Jun 28 04:00Z) to create the remaining 7**, then run
+  `apply-eliminations-mercy.ts --apply` (see prior session) after the rollover.
 
 ---
 
