@@ -49,6 +49,9 @@ export interface PlayerPerformancePayload {
   matchId: string;
   isLive: boolean;
   lastUpdated: string | null;
+  /** Finished match the player's nation played but he didn't feature in
+   * (0 minutes, or no perf row at all). Rendered as a muted "DNP" row. */
+  didNotPlay?: boolean;
   match: {
     id: string;
     stageId: string;
@@ -526,6 +529,32 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
                   const score = perf.match.homeScore != null && perf.match.awayScore != null
                     ? `${perf.match.homeScore}-${perf.match.awayScore}`
                     : '–';
+
+                  // Did-not-play: nation played, player didn't feature. Render
+                  // a muted, non-expandable row so the match is visible without
+                  // masquerading as a 0-point appearance.
+                  if (perf.didNotPlay) {
+                    return (
+                      <div key={perf.id} className="border-t border-white/5 grid grid-cols-12 gap-1 px-2 py-1.5 items-center opacity-40">
+                        <div className="col-span-4 flex items-center gap-1.5 min-w-0">
+                          <img
+                            src={getFlagUrl(opp.code)}
+                            alt={opp.code}
+                            className="w-4 h-3 rounded-sm object-cover ring-1 ring-white/10 shrink-0 grayscale"
+                          />
+                          <span className="text-[10px] text-white/70 font-medium truncate">
+                            {isHome ? 'vs' : '@'} {opp.code}
+                          </span>
+                          <span className="text-[9px] text-white/40 ml-auto shrink-0">{score}</span>
+                        </div>
+                        <div className="col-span-5 text-center text-[9px] text-white/40 font-bold uppercase tracking-wider">
+                          Did not play
+                        </div>
+                        <div className="col-span-3 text-right text-[10px] text-white/30 font-medium pr-[14px]">—</div>
+                      </div>
+                    );
+                  }
+
                   return (
                     <div key={perf.id} className="border-t border-white/5">
                       <button

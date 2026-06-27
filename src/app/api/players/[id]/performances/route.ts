@@ -304,6 +304,10 @@ export async function GET(
         matchId: perf.matchId,
         isLive: perf.isLive,
         lastUpdated: perf.lastUpdated,
+        // A finished match where the player was named but logged 0 minutes
+        // (unused sub) is a "did not play" — flag it so the UI greys it out
+        // rather than showing a misleading bare "0'".
+        didNotPlay: perf.match.isFinished && perf.minutesPlayed === 0,
         match: {
           id: perf.match.id,
           stageId: perf.match.stage.stageId,
@@ -322,6 +326,61 @@ export async function GET(
         totalPoints: perf.totalPoints,
       };
     });
+
+    // Synthesize "Did not play" rows for FINISHED matches the player's nation
+    // played but where the player has NO performance row at all (left out of
+    // the matchday squad entirely — API-Football never emitted a stats row).
+    // Without these the match is invisible and the history reads as "every
+    // game his nation played, he played", which is misleading. We only do
+    // this for the nation's finished matches, then merge + re-sort by kickoff.
+    const playedMatchIds = new Set(performances.map((p) => p.matchId));
+    const nationMatches = player.nationId
+      ? await prisma.match.findMany({
+          where: {
+            isFinished: true,
+            id: { notIn: Array.from(playedMatchIds) },
+            OR: [{ homeNationId: player.nationId }, { awayNationId: player.nationId }],
+          },
+          include: {
+            homeNation: { select: { code: true, name: true } },
+            awayNation: { select: { code: true, name: true } },
+            stage: { select: { stageId: true, name: true } },
+          },
+        })
+      : [];
+
+    const zeroStats = {
+      minutesPlayed: 0, goals: 0, assists: 0, cleanSheet: false, goalsConceeded: 0,
+      saves: 0, penaltiesSaved: 0, penaltiesMissed: 0, yellowCards: 0, redCards: 0,
+      ownGoals: 0, defensiveActions: 0, bonusPoints: 0,
+    };
+    const dnpPayload = nationMatches.map((m) => ({
+      id: `dnp-${m.id}`,
+      matchId: m.id,
+      isLive: false,
+      lastUpdated: null as Date | null,
+      didNotPlay: true,
+      match: {
+        id: m.id,
+        stageId: m.stage.stageId,
+        stageName: m.stage.name,
+        kickoffTime: m.kickoffTime,
+        homeNation: m.homeNation,
+        awayNation: m.awayNation,
+        homeScore: m.homeScore,
+        awayScore: m.awayScore,
+        isFinished: m.isFinished,
+        isStarted: m.isStarted,
+        currentMinute: m.currentMinute,
+      },
+      stats: zeroStats,
+      breakdown: { lines: [], total: 0 },
+      totalPoints: 0,
+    }));
+
+    const mergedPerformances = [...performancesPayload, ...dnpPayload].sort(
+      (a, b) => new Date(b.match.kickoffTime).getTime() - new Date(a.match.kickoffTime).getTime(),
+    );
 
     const adjustments = rawAdjustments.map((entry) => {
       let parsed: Record<string, unknown> = {};
@@ -346,7 +405,7 @@ export async function GET(
         currentPrice: player.currentPrice,
       },
       squadRow: squadRow ?? null,
-      performances: performancesPayload,
+      performances: mergedPerformances,
       adjustments,
     });
   } catch (error) {
