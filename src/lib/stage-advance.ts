@@ -282,6 +282,21 @@ async function advanceOnce(): Promise<AdvanceResult> {
       },
     });
 
+    // Teams that played a WILDCARD in the CLOSING stage forfeit ALL leftover
+    // free transfers — including mercy ones — so nothing banks past a wildcard
+    // (a wildcard already granted unlimited transfers; standard FPL resets the
+    // count afterwards). Free Hit needs no handling here: its snapshot revert
+    // above already restored the pre-FH freeTransfers.
+    const closingStages = await prisma.teamStage.findMany({
+      where: { stageId: activeStage.id },
+      select: { teamId: true, chipsUsed: true, chipUsed: true },
+    });
+    const wildcardedClose = new Set<string>();
+    for (const ts of closingStages) {
+      const raw = `${ts.chipsUsed ?? ''}|${ts.chipUsed ?? ''}`;
+      if (raw.includes('WILDCARD')) wildcardedClose.add(ts.teamId);
+    }
+
     for (const team of teams) {
       // Execute transfers the user queued while this round was locked.
       // Queued transfers already spent free transfers at queue time, so
@@ -328,8 +343,11 @@ async function advanceOnce(): Promise<AdvanceResult> {
         (sp) => sp.player.nation?.isEliminated,
       ).length;
 
+      // Wildcard in the closing stage → no banking (leftover forfeited).
+      // Mercy still applies on top of the base for the new round's squad.
+      const leftover = wildcardedClose.has(team.id) ? 0 : team.freeTransfers + skipped;
       const allocation = computeNextFreeTransfers({
-        leftover: team.freeTransfers + skipped,
+        leftover,
         baseAllocation,
         eliminatedCount,
         mercyEnabled: TRANSFERS.MERCY_RULE_ENABLED,

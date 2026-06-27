@@ -57,6 +57,41 @@ earlier: KO deadlines + R32 tooling. See sessions below.)
 - This **supersedes the manual-entry `create-r32-matches.ts`** — auto-pull gets
   real teams + fixtureIds with no transcription. Manual script kept as fallback.
 
+### ⚠ MERCY RULE IS BROKEN — eliminations never marked (fix shipped as a script)
+- **`Nation.isEliminated` is set in ONE place: the manual admin results route,
+  and ONLY for knockout losers.** The live cron never marks eliminations (not
+  group non-qualifiers, not even KO losers). Current DB: **0 nations eliminated.**
+- **Consequence:** the mercy rule (`stage-advance` → `computeNextFreeTransfers`:
+  if `eliminatedCount > banked`, free transfers = `eliminatedCount`, uncapped)
+  reads 0 for everyone → at GR3→R32 nobody gets mercy transfers, so a squad full
+  of knocked-out players only gets the base 3 (banked, cap 5) and pays −4/extra.
+- **Transfer caps recap:** banking caps at **5** (`FREE_TRANSFER_BANK_CAP` =
+  leftover + base); **mercy is UNCAPPED** (replaces every eliminated player free).
+- **`scripts/apply-eliminations-mercy.ts`** (new) — the fix, decoupled from the
+  rollover so it can run in the Jun 28 window: (1) marks KO losers (finished KO
+  match w/ winnerId) + group non-qualifiers (group complete AND all 16 R32
+  synced → nations not in any KO match; 16-match guard avoids eliminating an
+  un-synced qualifier), (2) re-grants mercy per team: `delta = max(0,
+  eliminatedCount − (freeTransfers + transfersUsed))`, only ever increases,
+  idempotent. **RUN ORDER on Jun 28:** sync-knockout-from-api.ts --apply (all 16)
+  → apply-eliminations-mercy.ts --apply, AFTER the R32 rollover and BEFORE
+  managers transact (so `used`=0 and everyone gets the full allotment).
+- **Wildcard banking FIXED** (`stage-advance.ts`): a team that played a WILDCARD
+  in the CLOSING stage now forfeits ALL leftover free transfers at the rollover
+  (`leftover = 0`) — so mercy/banked transfers can't survive past a wildcard
+  (standard FPL). Resolves the long-standing open "wildcard keeps banking"
+  bug. Free Hit needs no change (its snapshot revert already restores the pre-FH
+  count). Mercy still applies on top of the new round's base. The mercy SCRIPT
+  also skips teams currently on a wildcard (belt-and-suspenders).
+- **STILL OPEN:** durable automation — teach the live cron to mark KO losers on
+  FT (mirrors admin route; makes R16/QF/… mercy auto-fire) and group non-
+  qualifiers when groups complete. Deferred to avoid touching the live hot path
+  mid-tournament; the script covers R32. (R16 isn't until Jul 4.)
+- chimbohimbo forensics (user's team): GR2 = WILDCARD_1; GR3 stacked TC + BB +
+  **FREE_HIT** (snapshot still active → squad reverts to the pre-FH team at
+  GR3→R32; the current FH XI is temporary). The GR2→GR3 allocation DID run — had
+  6 free in GR3, the −8 was from going 2 over. Not short-changed.
+
 ### Also shipped earlier this session (already pushed, commit 37ee17c)
 - **Captain multiplier on the breakdown-modal mini-pitch.** `MiniChip` showed
   raw `totalPoints` (Mbappé 10 not 20); now multiplies the captain pill by the
