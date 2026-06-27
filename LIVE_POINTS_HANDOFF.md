@@ -88,6 +88,90 @@ scripts left in `scripts/` (untracked): `check-vandeven.ts`, `check-dnp.ts`,
 
 ---
 
+## DESIGN BRAINSTORM — Standings redesign + knockout bracket + player-card stage progress (NOT BUILT)
+
+User request (2026-06-27): two phone-first UI overhauls. Captured here as a
+design backlog to build later — **none of this is implemented yet.**
+
+### Current state (grounded)
+- **`/standings`** (`src/app/(dashboard)/standings/page.tsx`, 211 lines): one
+  full-width 10-col `<table>` per group (Pos, Nation, P, W, D, L, GF, GA, GD,
+  Pts) with `px-6 py-4` cells → too wide, horizontal-scrolls on phone. Group
+  switching is 12 page-reloading `?group=` links. **No knockout view at all.**
+  Data: `GET /api/standings` (+ `?group=`) → `{ standings: Record<group,
+  GroupStanding[]>, groups }`.
+- **`PlayerCard`** (`src/components/kit.tsx`): kit face + name plate + FDR
+  fixture strip + points pill / form dots / status / C-V badges. **Shows no
+  group and no stage/tournament-progress context.**
+- Bracket data available: `KNOCKOUT_FIXTURES` + `getBracketSlot`/placeholder
+  resolver in `src/lib/world-cup-fixtures.ts`, plus real R32 `Match` rows in DB
+  (9/16 synced) and the new `GET /api/fixtures/upcoming-by-nation`.
+  `Nation.isEliminated` exists but is NOT reliably set yet (see mercy-rule note
+  in the 2026-06-27 KO session — automation still open).
+
+### A) Group standings — smaller + compartmentalized + knockout flowchart
+**A1. Density pass (quick win).** Drop `px-6 py-4`→`px-2 py-1.5`, shrink flags
+(`w-8 h-6`→`w-5 h-4`), tighten font. On phone show only **Pos · Nation · P ·
+GD · Pts**; hide W/D/L/GF/GA behind expand. Standalone, low-risk first step.
+
+**A2. Compartmentalized group cards ("like a pop").** Replace the 12 stacked
+tables with a 2-col grid of **compact group cards** (one per group): header
+"Group C" + 4 mini rows (flag + code + Pts), qualification-zone coloured:
+top-2 emerald (through), 3rd amber (best-third bubble), 4th grey (out). Tap a
+card → **bottom-sheet / popup** (reuse the dvh modal pattern from the squad
+pickers) with the FULL P/W/D/L/GF/GA/GD/Pts table + that group's
+fixtures/results. "Pop" = the expand interaction; the grid stays glanceable.
+```
+┌─ Group C ───────┐  ┌─ Group D ───────┐
+│ 🟢 NED      7   │  │ 🟢 ARG      9   │
+│ 🟢 SEN      5   │  │ 🟢 ATBD     4   │   tap → bottom sheet:
+│ 🟡 IRN      4   │  │ 🟡 ...      4   │   full table + results
+│ ⚪ x        0   │  │ ⚪ ...      1   │
+└─────────────────┘  └─────────────────┘
+```
+**A3. Live cues.** Pulsing dot + green tint on a row whose nation is playing
+now (mirror the league-standings live treatment); little Q / E pills as groups
+complete. Live-poll only while `anyMatchLive`.
+
+**A4. Knockout bracket flowchart.** New view/tab on `/standings` (segmented
+toggle Groups ↔ Bracket). Horizontally-scrollable rounds **R32 → R16 → QF → SF
+→ F** with connector lines; each slot a mini chip (flag + code, score if
+played) or a greyed placeholder ("1A", "3rd A/B/C/D"). Highlight the live tie;
+tap a tie → existing `fixture-detail-modal`. Phone option: a **round selector**
+showing one round column at a time, or a vertical bracket that scrolls. Seed
+from `KNOCKOUT_FIXTURES` placeholders, overlay real `Match` rows where synced
+(reuse `/api/fixtures/scores`). TBD slots render greyed until teams resolve.
+
+### B) Player card — group compartment + "in this stage" progress
+**B1. Group context.** Small "Grp C" chip on the name plate (or group-colour
+accent on the kit-face ring) so a card carries its group at a glance. Optional:
+group player-pickers/lists by group with sticky group headers.
+
+**B2. Stage-progress indicator (the "cool way").** A mini tournament-journey
+track showing the nation's run: **GR → R32 → R16 → QF → SF → 🏆**. Render as 6
+pips / a segmented bar — completed rounds filled, current round **glowing**,
+future rounds faint; if eliminated the track caps with a grey "OUT" at the
+round they exited. Compact form lives on the card; full form (round · opponent
+· result) lives in the **player-detail modal** next to the new Upcoming strip.
+```
+card chip:   [GR ✓][R32 •]· · ·        modal journey:
+                    ^ glowing now       GR3  v SWE   2-2  ✓ through
+                                        R32  v MAR   — Jun 30 (NEXT)
+```
+**B3. Eliminated / live state.** Grey the card + "Eliminated" ribbon when
+`Nation.isEliminated` (depends on the still-open elimination automation — until
+then derive from "no upcoming match AND group complete / lost KO tie"). When
+the nation plays now, the stage chip pulses + can show the live score.
+
+### Build order suggestion
+1. A1 density pass (isolated, ship first). 2. A2 group cards + pop sheet.
+3. B2 stage-progress in the player-detail modal (data already there via
+`upcoming` + performances). 4. B1 group chip on the card. 5. A4 bracket
+(biggest; needs bracket-resolution helper + more R32/R16 synced). Tie B3 to
+the elimination automation when that lands.
+
+---
+
 ## Session 2026-06-27 — STUCK "FINISHED-BUT-UNBANKED" MATCH + SAFETY-NET SWEEP
 
 ### Incident (resolved live)
