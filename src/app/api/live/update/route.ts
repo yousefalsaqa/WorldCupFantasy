@@ -13,6 +13,7 @@ import { updateSquadPoints } from '@/lib/squad-points';
 import { maybeAdvanceStage, type AdvanceResult } from '@/lib/stage-advance';
 import { rescorePendingFinishedMatches, type RescoreOutcome } from '@/lib/rescore-pending';
 import { healFixtureDetailCache, type DetailHealOutcome } from '@/lib/fixture-detail';
+import { healUnbankedFinishedMatches, type UnbankedHealOutcome } from '@/lib/heal-unbanked';
 
 export const dynamic = 'force-dynamic';
 
@@ -95,6 +96,27 @@ async function runDetailHealSweep(): Promise<DetailHealOutcome[]> {
   }
 }
 
+/**
+ * Safety net for the "finished but never banked" failure: a match whose FT
+ * handler committed isFinished=true but threw before flipping isLive + banking
+ * (e.g. the post-FT stats-publishing lag). Such a match is never re-selected by
+ * the live query, so its perf rows stay isLive=true and its points unbanked.
+ * This re-pulls those matches and banks them once their snapshot is final.
+ * Best-effort and swallowed: it must never break live scoring.
+ */
+async function runUnbankedHealSweep(): Promise<UnbankedHealOutcome[]> {
+  try {
+    const outcomes = await healUnbankedFinishedMatches();
+    if (outcomes.length > 0) {
+      console.log('[Live Update] unbanked heal sweep:', JSON.stringify(outcomes));
+    }
+    return outcomes;
+  } catch (err) {
+    console.error('[Live Update] unbanked heal sweep failed:', err);
+    return [];
+  }
+}
+
 async function handleUpdate(request: NextRequest) {
   try {
     if (!(await isAuthorized(request))) {
@@ -150,6 +172,11 @@ async function handleUpdate(request: NextRequest) {
       // finalized the last match in the active stage. Try to advance so
       // the cron eventually rolls forward without needing a "live"
       // transition to trigger.
+      // Bank any finished-but-unbanked match BEFORE attempting stage advance,
+      // so settlement never snapshots a stage whose last match's points
+      // haven't landed in Team.totalPoints yet.
+      const unbankedHealed = await runUnbankedHealSweep();
+
       let stageAdvance: AdvanceResult | null = null;
       try {
         stageAdvance = await maybeAdvanceStage();
@@ -168,6 +195,7 @@ async function handleUpdate(request: NextRequest) {
         matchesStarted: recentlyStarted.length,
         results: [],
         stageAdvance,
+        unbankedHealed,
         rescored,
         detailHealed,
       });
@@ -356,6 +384,11 @@ async function handleUpdate(request: NextRequest) {
       }
     }
 
+    // Bank any finished-but-unbanked match (FT handler threw after committing
+    // isFinished on a prior tick) BEFORE stage advance, so settlement sees the
+    // points in Team.totalPoints.
+    const unbankedHealed = await runUnbankedHealSweep();
+
     // Auto stage advancement: if any match transitioned to FT this run,
     // check whether that completed its stage and roll forward to the next
     // one. maybeAdvanceStage is idempotent + cheap when there's nothing
@@ -382,6 +415,7 @@ async function handleUpdate(request: NextRequest) {
       rateLimit: apiFootball.getRateLimitRemaining(),
       lastUpdated: new Date().toISOString(),
       stageAdvance,
+      unbankedHealed,
       rescored,
       detailHealed,
     });

@@ -1,9 +1,47 @@
 # Live Points Feature — Handoff
 
-Last updated: 2026-06-26 (**LIVE** — GR3 in progress, 12/24 played, last group
-games run through Jun 28 ~04:00Z. This session prepped the GR3→R32 crossover:
-fixed all 6 knockout deadlines + built the R32 match-creation tooling. See
-**Session 2026-06-26** immediately below.)
+Last updated: 2026-06-27 (**LIVE** — GR3 in progress. This session: fixed a
+captain-pill display bug (shipped), repaired a finished-but-unbanked match
+(NOR-FRA) live, and added a cron safety-net sweep for that failure class. Also
+earlier: KO deadlines + R32 tooling. See sessions below.)
+
+---
+
+## Session 2026-06-27 — STUCK "FINISHED-BUT-UNBANKED" MATCH + SAFETY-NET SWEEP
+
+### Incident (resolved live)
+- **GR3 NOR 1-4 FRA sat unbanked for ~4h.** Symptom: French players' pills still
+  showed the green "live" badge after FT. Root cause: the live cron's FT handler
+  (`api/live/update/route.ts`) commits `isFinished=true` (~line 200) BEFORE it
+  fetches player stats and banks; the `isLive=false` flip + `updateSquadPoints`
+  live together in the trailing `if (isFinished)` block. At ~21:00Z FRA's tick
+  committed `isFinished=true`, then **threw before banking** (post-FT stats-
+  publishing lag — same class as the rescore feature). The cron's live query is
+  `isStarted && !isFinished`, so the match was never re-selected → 32 perf rows
+  stuck `isLive=true`, points never banked. `runRescoreSweep` didn't catch it
+  (it skips matches whose minutes look final ≥85', which a 90' game always does).
+- **Repair:** flipped NOR-FRA `isFinished=false`; the existing cron re-selected
+  it, re-banked via the normal path, flipped `isLive=false`. Verified: finished,
+  `isLive=0`, banked. Scanned all 62 finished matches — NOR-FRA was the only one.
+
+### Shipped (typecheck-clean; needs deploy to take effect on the cron)
+- **`src/lib/heal-unbanked.ts # healUnbankedFinishedMatches()`** — new safety-net
+  sweep. Finds finished matches that still carry `isLive=true` perf rows (the
+  invariant: banking always flips isLive in the same step, so live rows ⟹ never
+  banked), re-pulls, and once the snapshot is final (max ≥85') upserts the final
+  perfs (`isLive=false`) + banks ONCE (no rollback — it was never banked). Writes
+  a `MATCH_HEALED_UNBANKED` AuditLog. Idempotent; bounded to 18h; best-effort.
+- **Wired into `api/live/update/route.ts`** as `runUnbankedHealSweep()` in BOTH
+  return paths, **before `maybeAdvanceStage`** so a finished-but-unbanked last
+  match can't be settled before its points land. Surfaced as `unbankedHealed`.
+- NOTE: this is the safety net (#2). The deeper root-cause fix (#1: don't commit
+  `isFinished=true` until banking succeeds) is still OPEN — the sweep auto-heals
+  within a cron tick so it's low priority, but worth doing.
+
+### Also shipped earlier this session (already pushed, commit 37ee17c)
+- **Captain multiplier on the breakdown-modal mini-pitch.** `MiniChip` showed
+  raw `totalPoints` (Mbappé 10 not 20); now multiplies the captain pill by the
+  round's ×2/×3. Display-only; scoring was always correct.
 
 ---
 
