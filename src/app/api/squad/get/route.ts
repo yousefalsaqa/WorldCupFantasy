@@ -281,19 +281,26 @@ export async function GET(request: NextRequest) {
     // round"). The Planned view must preview THAT squad, not the temporary
     // Free Hit XI. Null whenever no Free Hit is live.
     let plannedBaseSquad:
-      | Array<{ playerId: string; isStarting: boolean; isCaptain: boolean; isViceCaptain: boolean; benchOrder: number | null }>
+      | Array<{ playerId: string; purchasePrice: number; isStarting: boolean; isCaptain: boolean; isViceCaptain: boolean; benchOrder: number | null }>
       | null = null;
+    // Bank/transfer state of the pre-FH team, so the squad page can run the
+    // transfer budget against the team that actually carries over.
+    let plannedBaseBank: number | null = null;
+    let plannedBaseFreeTransfers: number | null = null;
     if (!reverted && team.freeHitSnapshot) {
       try {
         const snap = JSON.parse(team.freeHitSnapshot) as FreeHitSnapshot;
         if (snap.stageId === activeStage?.id && Array.isArray(snap.players)) {
           plannedBaseSquad = snap.players.map((p) => ({
             playerId: p.playerId,
+            purchasePrice: p.purchasePrice,
             isStarting: p.isStarting,
             isCaptain: p.isCaptain,
             isViceCaptain: p.isViceCaptain,
             benchOrder: p.benchOrder,
           }));
+          plannedBaseBank = snap.bankBalance;
+          plannedBaseFreeTransfers = snap.freeTransfers;
         }
       } catch { /* corrupt snapshot — handled by maybeRevertFreeHit, ignore here */ }
     }
@@ -411,10 +418,15 @@ export async function GET(request: NextRequest) {
       // The user's saved next-round lineup (raw JSON string) for the planned
       // squad, or null. The squad page hydrates the Planned view from this.
       plannedLineup: (refreshedTeam ?? team).plannedLineup ?? null,
-      // Pre-Free-Hit squad (ids + roles) when a Free Hit is live this round.
-      // The Planned view bases its preview on this (next round reverts to it)
-      // instead of the temporary Free Hit XI. Null when no Free Hit is active.
+      // Pre-Free-Hit squad (ids + roles + purchase prices) when a Free Hit is
+      // live this round. The Planned view previews it (next round reverts to
+      // it), and transfer mode bases its budget/roster on it so transfers
+      // target the team that carries over. Null when no Free Hit is active.
       plannedBaseSquad,
+      // Bank + free-transfer count the pre-FH team reverts to — drives the
+      // transfer budget when transferring on the Planned (pre-FH) base.
+      plannedBaseBank,
+      plannedBaseFreeTransfers,
       // True iff there is at least one match currently in progress. The
       // squad page polls this endpoint every 60s while this is true so
       // the live-points pill ticks up. We keep the signal at the response

@@ -298,8 +298,12 @@ export default function SquadPage() {
   // Planned view bases its preview on this — next round reverts to it, not the
   // temporary Free Hit XI. Null when no Free Hit is active.
   const [plannedBaseSquad, setPlannedBaseSquad] = useState<
-    Array<{ playerId: string; isStarting: boolean; isCaptain: boolean; isViceCaptain: boolean; benchOrder: number | null }> | null
+    Array<{ playerId: string; purchasePrice: number; isStarting: boolean; isCaptain: boolean; isViceCaptain: boolean; benchOrder: number | null }> | null
   >(null);
+  // Bank + free-transfer count of the pre-FH team (the one that carries over).
+  // Drives the transfer budget when transferring on the Planned base.
+  const [plannedBaseBank, setPlannedBaseBank] = useState<number | null>(null);
+  const [plannedBaseFreeTransfers, setPlannedBaseFreeTransfers] = useState<number | null>(null);
   // DB-resolved upcoming fixtures per nation (covers confirmed knockout games
   // the static fixture lib can't resolve). Powers the player-card FDR pills.
   const [upcomingByNation, setUpcomingByNation] = useState<
@@ -591,6 +595,8 @@ export default function SquadPage() {
             setQueuedHit(squadData.queuedHit || 0);
             setSavedPlannedLineupRaw(squadData.plannedLineup ?? null);
             setPlannedBaseSquad(squadData.plannedBaseSquad ?? null);
+            setPlannedBaseBank(squadData.plannedBaseBank ?? null);
+            setPlannedBaseFreeTransfers(squadData.plannedBaseFreeTransfers ?? null);
             setStartedNations(new Set<string>(squadData.startedNationCodes || []));
             setLiveNations(new Set<string>(squadData.liveNationCodes || []));
             setIsLate(Boolean(squadData.isLate));
@@ -785,6 +791,40 @@ export default function SquadPage() {
   // TRANSFER MODE — derived state
   // ============================================
   //
+  // Transfers always apply to NEXT round when the stage is locked. Normally
+  // next round's roster == the current squad, so transfers build on `squad`.
+  // The exception is a live Free Hit: next round REVERTS to the pre-FH squad,
+  // so transfers must build on THAT (the Planned base) — otherwise you'd be
+  // editing the throwaway Free Hit team. `plannedBaseSquad` is only sent by
+  // the server while a Free Hit is live for the current stage, so this is the
+  // exact-and-only trigger. When false, everything below is unchanged.
+  const transferOnPlanned = transferMode && stageLocked && !!plannedBaseSquad;
+  const transferBaseSquad = useMemo<Player[]>(() => {
+    if (!transferOnPlanned || !plannedBaseSquad) return squad;
+    const byId = new Map(allPlayers.map((p) => [p.id, p]));
+    const built: Player[] = [];
+    for (const e of plannedBaseSquad) {
+      const p = byId.get(e.playerId);
+      if (!p) return squad; // unresolved (players still loading) → safe fallback
+      // currentPrice carries the REFUND value (purchase price) to mirror how
+      // the live squad is built, so transfer budget math stays correct.
+      built.push({
+        ...p,
+        currentPrice: e.purchasePrice,
+        isStarting: e.isStarting,
+        isCaptain: e.isCaptain,
+        isViceCaptain: e.isViceCaptain,
+        points: 0,
+      });
+    }
+    return built.length === 15 ? built : squad;
+  }, [transferOnPlanned, plannedBaseSquad, allPlayers, squad]);
+  // Bank the transfer budget runs against — the pre-FH bank when transferring
+  // on the Planned base, otherwise the live bank.
+  const transferBaseBank =
+    transferOnPlanned && plannedBaseBank != null ? plannedBaseBank : bankBalance;
+  void plannedBaseFreeTransfers; // reserved: server uses live freeTransfers for the queue split
+  //
   // The "display squad" projects pending transfers onto the current 15-man
   // roster: each outgoing player is swapped for its incoming counterpart so
   // the pitch reflects what the team WILL look like after Confirm. Outgoing
@@ -793,7 +833,7 @@ export default function SquadPage() {
   // Projected squad as discriminated slots so empty (out-but-not-yet-filled)
   // slots keep their position and render as an EmptySlot in the right row.
   const transferDisplaySquad = useMemo<TransferSlot[]>(() => {
-    return squad.map((sp) => {
+    return transferBaseSquad.map((sp) => {
       const t = transferMode
         ? pendingTransfers.find((pt) => pt.playerOut.id === sp.id)
         : undefined;
@@ -808,7 +848,7 @@ export default function SquadPage() {
       // `purchasePrice` (refund) stays on the original via t.playerOut.
       return { kind: 'player', position: t.playerIn.position as Position, player: { ...t.playerIn } };
     });
-  }, [transferMode, squad, pendingTransfers]);
+  }, [transferMode, transferBaseSquad, pendingTransfers]);
 
   // True iff the given slot is showing an incoming pending transfer. Drives
   // the amber glow border and the Replace ↔ Undo button switch.
@@ -854,7 +894,7 @@ export default function SquadPage() {
     [queuedTransfers],
   );
 
-  const projectedBank = bankBalance - queuedNetCost + transferBudgetImpact;
+  const projectedBank = transferBaseBank - queuedNetCost + transferBudgetImpact;
 
   // Filling an EMPTY slot (out already banked, no incoming yet)? Its refund is
   // ALREADY part of projectedBank, so the per-pick budget is just projectedBank.
@@ -925,7 +965,7 @@ export default function SquadPage() {
   const projectedNationCounts = useMemo(() => {
     const out = new Set(pendingTransfers.map((t) => t.playerOut.id));
     const counts: Record<string, number> = {};
-    squad.forEach((p) => {
+    transferBaseSquad.forEach((p) => {
       if (out.has(p.id)) return;
       const k = p.nation?.id || '';
       counts[k] = (counts[k] || 0) + 1;
@@ -937,7 +977,7 @@ export default function SquadPage() {
       counts[k] = (counts[k] || 0) + 1;
     });
     return counts;
-  }, [squad, pendingTransfers]);
+  }, [transferBaseSquad, pendingTransfers]);
 
   // Keep the unsaved-changes guard in sync with pending transfers so the
   // user can't accidentally navigate away mid-flow.
@@ -1114,7 +1154,10 @@ export default function SquadPage() {
     if (!selectingPosition) return [];
 
     const isTransferPicker = Boolean(transferReplacingFor);
-    const squadIds = new Set(squad.map((p) => p.id));
+    // The transfer picker hides players already on the team you're editing —
+    // which is the Planned base when transferring on a live Free Hit, else the
+    // live squad. The builder (no transferReplacingFor) always uses the live squad.
+    const squadIds = new Set((isTransferPicker ? transferBaseSquad : squad).map((p) => p.id));
     const pendingInIds = new Set([
       // In-session picks…
       ...pendingTransfers.filter((t) => t.playerIn).map((t) => t.playerIn!.id),
@@ -1168,6 +1211,7 @@ export default function SquadPage() {
   }, [
     allPlayers,
     squad,
+    transferBaseSquad,
     selectingPosition,
     remainingBudget,
     nationCounts,
@@ -3083,13 +3127,15 @@ export default function SquadPage() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-amber-200 font-black text-sm sm:text-base flex items-center gap-2 flex-wrap">
-                Free Hit Active
+                {transferOnPlanned ? 'Planning next round' : 'Free Hit Active'}
                 <span className="text-[10px] font-bold bg-amber-500/20 text-amber-200 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                  This stage only
+                  {transferOnPlanned ? 'Next round' : 'This stage only'}
                 </span>
               </div>
               <p className="text-amber-200/70 text-xs sm:text-sm mt-0.5 leading-snug">
-                Make as many transfers as you like. Your squad will automatically revert to its previous lineup once this stage ends.
+                {transferOnPlanned
+                  ? 'Your Free Hit reverts when this round ends, so transfers here apply to the team you get back — they queue for next round under the normal transfer rules.'
+                  : 'Make as many transfers as you like. Your squad will automatically revert to its previous lineup once this stage ends.'}
               </p>
             </div>
           </div>

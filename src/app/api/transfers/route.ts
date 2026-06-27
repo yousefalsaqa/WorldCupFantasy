@@ -117,6 +117,44 @@ export async function POST(request: NextRequest) {
     // -4 point hit (charged to the round they take effect in), same as making
     // them at an open deadline. Wildcard-armed next rounds stay unlimited/free.
 
+    // FREE HIT in progress: transfers must target the PRE-FH roster (the team
+    // that reverts at the boundary), NOT the temporary Free Hit squad. Build a
+    // virtual roster + bank from the snapshot so selling a pre-FH player (e.g.
+    // one not in the current Free Hit XI) is accepted and priced from the team
+    // that actually carries over. The settlement order already supports this:
+    // stage-advance reverts the Free Hit FIRST, then applies queued transfers,
+    // so a queue entry keyed on a pre-FH player lands on the reverted squad.
+    // Guarded to queue mode + a snapshot whose stage is the one now locked.
+    let fhRoster: Map<string, { purchasePrice: number; position: string; nationId: string; displayName: string }> | null = null;
+    let fhBank: number | null = null;
+    if (queueMode && lockedStage && team.freeHitSnapshot) {
+      try {
+        const snap = JSON.parse(team.freeHitSnapshot) as {
+          stageId: string;
+          bankBalance: number;
+          players: Array<{ playerId: string; purchasePrice: number }>;
+        };
+        if (snap.stageId === lockedStage.id && Array.isArray(snap.players)) {
+          const ids = snap.players.map((p) => p.playerId);
+          const meta = await prisma.player.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, position: true, nationId: true, displayName: true },
+          });
+          const metaById = new Map(meta.map((m) => [m.id, m]));
+          fhRoster = new Map();
+          for (const p of snap.players) {
+            const m = metaById.get(p.playerId);
+            if (m) fhRoster.set(p.playerId, { purchasePrice: p.purchasePrice, position: m.position, nationId: m.nationId, displayName: m.displayName });
+          }
+          fhBank = snap.bankBalance;
+        }
+      } catch { /* corrupt snapshot — fall back to the live-squad basis below */ }
+    }
+    // Resolve "is this player on the team being edited?" against the Free Hit
+    // roster when one is active, else the live squad.
+    const rosterHas = (playerId: string) =>
+      fhRoster ? fhRoster.has(playerId) : team.squadPlayers.some((sp) => sp.playerId === playerId);
+
     // Validate all transfers
     const playersOut: string[] = [];
     const playersIn: string[] = [];
@@ -125,9 +163,16 @@ export async function POST(request: NextRequest) {
     let moneyBack = 0;
 
     for (const transfer of transfers) {
-      // Check player out is in squad
+      // Resolve the outgoing player from the team being edited — the Free Hit
+      // roster when one is active (transfers target next round's reverted
+      // team), else the live squad. Normalised so the rest of the loop reads
+      // one shape regardless of basis.
+      const fhOut = fhRoster?.get(transfer.playerOutId);
       const squadPlayer = team.squadPlayers.find(sp => sp.playerId === transfer.playerOutId);
-      if (!squadPlayer) {
+      const outPlayer = fhRoster
+        ? (fhOut ? { purchasePrice: fhOut.purchasePrice, position: fhOut.position, displayName: fhOut.displayName } : null)
+        : (squadPlayer ? { purchasePrice: squadPlayer.purchasePrice, position: squadPlayer.player.position, displayName: squadPlayer.player.displayName } : null);
+      if (!outPlayer) {
         return NextResponse.json({
           error: `Player ${transfer.playerOutId} is not in your squad`
         }, { status: 400 });
@@ -136,7 +181,7 @@ export async function POST(request: NextRequest) {
       // Can't sell the same player twice across queued batches.
       if (pendingOutIds.has(transfer.playerOutId)) {
         return NextResponse.json({
-          error: `${squadPlayer.player.displayName} already has a transfer queued for next round`,
+          error: `${outPlayer.displayName} already has a transfer queued for next round`,
         }, { status: 400 });
       }
 
@@ -159,14 +204,14 @@ export async function POST(request: NextRequest) {
       }
 
       // Check position match
-      if (squadPlayer.player.position !== playerIn.position) {
+      if (outPlayer.position !== playerIn.position) {
         return NextResponse.json({
-          error: `Position mismatch: ${squadPlayer.player.displayName} (${squadPlayer.player.position}) cannot be replaced by ${playerIn.displayName} (${playerIn.position})`
+          error: `Position mismatch: ${outPlayer.displayName} (${outPlayer.position}) cannot be replaced by ${playerIn.displayName} (${playerIn.position})`
         }, { status: 400 });
       }
 
       // Check not already in squad, pending transfer, or queued for next round
-      if (team.squadPlayers.some(sp => sp.playerId === transfer.playerInId && !playersOut.includes(sp.playerId) && !pendingOutIds.has(sp.playerId))) {
+      if (rosterHas(transfer.playerInId) && !playersOut.includes(transfer.playerInId) && !pendingOutIds.has(transfer.playerInId)) {
         return NextResponse.json({
           error: `${playerIn.displayName} is already in your squad`
         }, { status: 400 });
@@ -181,22 +226,24 @@ export async function POST(request: NextRequest) {
       playersIn.push(transfer.playerInId);
 
       // In World Cup mode, sell price = purchase price (fixed prices)
-      moneyBack += squadPlayer.purchasePrice;
+      moneyBack += outPlayer.purchasePrice;
       totalCost += playerIn.currentPrice;
 
       queueEntries.push({
         playerOutId: transfer.playerOutId,
         playerInId: transfer.playerInId,
         priceIn: playerIn.currentPrice,
-        priceOut: squadPlayer.purchasePrice,
+        priceOut: outPlayer.purchasePrice,
         queuedAt: new Date().toISOString(),
         isWildcard: nextRoundWildcard,
       });
     }
 
-    // Check budget (minus what already-queued transfers will spend)
+    // Check budget (minus what already-queued transfers will spend). When a
+    // Free Hit is live the budget is the PRE-FH bank (what reverts), not the
+    // temporary Free Hit team's bank.
     const netCost = totalCost - moneyBack;
-    const availableBank = team.bankBalance - pendingNetCost;
+    const availableBank = (fhBank ?? team.bankBalance) - pendingNetCost;
     if (netCost > availableBank) {
       return NextResponse.json({
         error: `Insufficient funds. Need £${netCost.toFixed(1)}m but only have £${availableBank.toFixed(1)}m`
@@ -216,12 +263,16 @@ export async function POST(request: NextRequest) {
       select: { id: true, nationId: true, displayName: true, nation: { select: { name: true } } },
     });
     const finalNationCounts: Record<string, number> = {};
-    // Add players that are STAYING (in squad and not being sold or queued out)
-    for (const sp of team.squadPlayers) {
+    // Add players that are STAYING (on the edited team and not being sold or
+    // queued out). The edited team is the Free Hit roster when one is active,
+    // else the live squad.
+    const stayingRoster: Array<{ playerId: string; nationId: string }> = fhRoster
+      ? Array.from(fhRoster.entries()).map(([playerId, v]) => ({ playerId, nationId: v.nationId }))
+      : team.squadPlayers.map((sp) => ({ playerId: sp.playerId, nationId: sp.player.nationId }));
+    for (const sp of stayingRoster) {
       if (playersOut.includes(sp.playerId)) continue;
       if (pendingOutIds.has(sp.playerId)) continue;
-      finalNationCounts[sp.player.nationId] =
-        (finalNationCounts[sp.player.nationId] || 0) + 1;
+      finalNationCounts[sp.nationId] = (finalNationCounts[sp.nationId] || 0) + 1;
     }
     // Add incoming players (this batch + already queued)
     for (const p of incomingPlayers) {
