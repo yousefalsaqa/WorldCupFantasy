@@ -38,6 +38,25 @@ earlier: KO deadlines + R32 tooling. See sessions below.)
   `isFinished=true` until banking succeeds) is still OPEN — the sweep auto-heals
   within a cron tick so it's low priority, but worth doing.
 
+### R32 fixtures — auto-pull from API (5 of 16 created)
+- **The Pro API key IS in local `.env`** — but `tsx -e`/scripts don't auto-load
+  `.env` (Prisma does; the api-football client does NOT). Run API scripts with
+  `npx tsx --env-file=.env ...` or they send an empty key → **403**. (That 403 is
+  NOT a free-tier block.)
+- **`scripts/sync-knockout-from-api.ts`** (new) — pulls WC knockout fixtures from
+  API-Football, maps teams via `Nation.apiFootballId`, and creates Match rows
+  with kickoff + `apiFootballId` (live scoring ready). Idempotent (keyed on the
+  unique `apiFootballId`); skips fixtures whose teams are still TBD. Handles ALL
+  KO rounds (round-label → stageId map), so re-use it for R16/QF/… too. Dry-run
+  default; `--apply` writes; `--round=R32` to limit.
+- **APPLIED: 5 R32 games created** (API had these confirmed as of Jun 27):
+  RSA-CAN (28th), BRA-JPN, NED-MAR, CIV-NOR, **USA-BIH** (1D v 3rd-place — API
+  already assigned BIH; user opted to trust it). R32 deadline already correct
+  (Jun 28 19:00Z = first match). **Re-run after groups G/J/K/L finish (Jun 28
+  ~04:00Z)** to create the remaining 11, then `set-ko-deadlines.ts` is a no-op.
+- This **supersedes the manual-entry `create-r32-matches.ts`** — auto-pull gets
+  real teams + fixtureIds with no transcription. Manual script kept as fallback.
+
 ### Also shipped earlier this session (already pushed, commit 37ee17c)
 - **Captain multiplier on the breakdown-modal mini-pitch.** `MiniChip` showed
   raw `totalPoints` (Mbappé 10 not 20); now multiplies the captain pill by the
