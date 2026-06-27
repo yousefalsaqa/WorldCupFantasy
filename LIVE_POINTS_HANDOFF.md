@@ -172,6 +172,53 @@ the elimination automation when that lands.
 
 ---
 
+## DESIGN DECISIONS — knockout mercy + eliminations + final-crunch (NOT BUILT)
+
+User-confirmed direction (2026-06-27). **Not implemented — backlog.** The
+field halves every knockout round (32 → 16 → 8 → 4 → 2), so without this the
+late rounds — especially the **final** — become unplayable.
+
+### Locked decisions
+1. **Mercy rule fires EVERY knockout stage.** The math already does this
+   (`computeNextFreeTransfers`, [transfer-allocation.ts:38](src/lib/transfer-allocation.ts#L38)):
+   each rollover, **every knocked-out player in your squad = one free transfer**
+   (`freeTransfers = eliminatedCount`, uncapped). Confirmed: 1 elimination → 1
+   free transfer, every round.
+2. **Eliminations must be MARKED every round (the actual gap to build).**
+   `Nation.isEliminated` is currently only set by the manual admin route + the
+   one-off R32 script, so mercy reads `eliminatedCount = 0` past R32 and never
+   fires. BUILD: durable automation in the live cron to mark **KO losers on FT**
+   each round (mirror the admin route) **and group non-qualifiers** when groups
+   complete. Until then mercy is dead past R32. (See the open item in the
+   2026-06-27 KO session.)
+3. **Clear "eliminated" marker on player cards.** Grey the card + an
+   "Eliminated" ribbon/pill, driven by `Nation.isEliminated` (so it lights up
+   the moment a nation goes out). Ties to the player-card stage-progress idea in
+   the DESIGN BRAINSTORM above (track caps with a grey "OUT").
+4. **Wildcard wipes all transfers — make it explicit in the UI.** Already
+   implemented server-side (`stage-advance.ts`: a wildcard in the closing stage
+   forfeits ALL leftover/banked free transfers, `leftover = 0`). Decision: add
+   clear copy so the user KNOWS playing a wildcard deletes banked/mercy
+   transfers (no silent loss). Display-only; logic already correct.
+5. **Final-crunch → Option A: relax the per-nation cap as the field shrinks.**
+   With the 3-per-nation cap and only 2 nations in the final, you can own at
+   most 6 finalist players but need 11 starters — impossible, so mercy
+   transfers can't fill the XI (nobody left to buy). FIX: raise/remove
+   `MAX_PLAYERS_PER_NATION` (currently 3, enforced in `/api/transfers`,
+   `/api/squad`, and the squad-page picker) in the late knockouts (e.g. from SF
+   or F) so a real XI is fillable. Must change BOTH the server guards and the
+   client picker together, and mind already-owned squads when the cap loosens.
+
+### Cross-cutting constraint (applies to ALL of the above + the brainstorm)
+- **Phone-first, small + neat, ZERO clipping.** Tight paddings, compact chips,
+  `dvh` not `vh`, `min-w-0` + truncate on flex children, anchor modals below the
+  sticky nav (recurring gotchas — see the 2026-06-12 "search-popup geometry
+  saga"). Every new pill/ribbon/marker must fit the xs card without overflowing
+  the name plate or colliding with the C/V badge (top-left), points pill
+  (top-right) or status badge (bottom-left).
+
+---
+
 ## Session 2026-06-27 — STUCK "FINISHED-BUT-UNBANKED" MATCH + SAFETY-NET SWEEP
 
 ### Incident (resolved live)
