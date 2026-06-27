@@ -274,6 +274,30 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    // Pre-Free-Hit squad for the Planned view. While a Free Hit is active for
+    // the CURRENT stage, next round reverts to the squad captured at activation
+    // (maybeRevertFreeHit only reverts AFTER the stage ends — so an un-reverted
+    // snapshot whose stage is still active is exactly "Free Hit live this
+    // round"). The Planned view must preview THAT squad, not the temporary
+    // Free Hit XI. Null whenever no Free Hit is live.
+    let plannedBaseSquad:
+      | Array<{ playerId: string; isStarting: boolean; isCaptain: boolean; isViceCaptain: boolean; benchOrder: number | null }>
+      | null = null;
+    if (!reverted && team.freeHitSnapshot) {
+      try {
+        const snap = JSON.parse(team.freeHitSnapshot) as FreeHitSnapshot;
+        if (snap.stageId === activeStage?.id && Array.isArray(snap.players)) {
+          plannedBaseSquad = snap.players.map((p) => ({
+            playerId: p.playerId,
+            isStarting: p.isStarting,
+            isCaptain: p.isCaptain,
+            isViceCaptain: p.isViceCaptain,
+            benchOrder: p.benchOrder,
+          }));
+        }
+      } catch { /* corrupt snapshot — handled by maybeRevertFreeHit, ignore here */ }
+    }
+
     const unlimitedTransfers = await computeUnlimitedTransfers(team.id);
 
     // Hydrate transfers queued for next round so the squad page can show a
@@ -387,6 +411,10 @@ export async function GET(request: NextRequest) {
       // The user's saved next-round lineup (raw JSON string) for the planned
       // squad, or null. The squad page hydrates the Planned view from this.
       plannedLineup: (refreshedTeam ?? team).plannedLineup ?? null,
+      // Pre-Free-Hit squad (ids + roles) when a Free Hit is live this round.
+      // The Planned view bases its preview on this (next round reverts to it)
+      // instead of the temporary Free Hit XI. Null when no Free Hit is active.
+      plannedBaseSquad,
       // True iff there is at least one match currently in progress. The
       // squad page polls this endpoint every 60s while this is true so
       // the live-points pill ticks up. We keep the signal at the response

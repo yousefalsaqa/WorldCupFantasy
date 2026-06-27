@@ -294,6 +294,12 @@ export default function SquadPage() {
   // never touches (or corrupts) the current locked lineup. Saved via the
   // forNextRound path and applied at the stage boundary.
   const [savedPlannedLineupRaw, setSavedPlannedLineupRaw] = useState<string | null>(null);
+  // Pre-Free-Hit squad (ids + roles) when a Free Hit is live this round. The
+  // Planned view bases its preview on this — next round reverts to it, not the
+  // temporary Free Hit XI. Null when no Free Hit is active.
+  const [plannedBaseSquad, setPlannedBaseSquad] = useState<
+    Array<{ playerId: string; isStarting: boolean; isCaptain: boolean; isViceCaptain: boolean; benchOrder: number | null }> | null
+  >(null);
   const [plannedStartingXI, setPlannedStartingXI] = useState<Player[]>([]);
   const [plannedBench, setPlannedBench] = useState<Player[]>([]);
   const [plannedCaptainId, setPlannedCaptainId] = useState<string | null>(null);
@@ -579,6 +585,7 @@ export default function SquadPage() {
             setQueuedTransfers(squadData.queuedTransfers || []);
             setQueuedHit(squadData.queuedHit || 0);
             setSavedPlannedLineupRaw(squadData.plannedLineup ?? null);
+            setPlannedBaseSquad(squadData.plannedBaseSquad ?? null);
             setStartedNations(new Set<string>(squadData.startedNationCodes || []));
             setLiveNations(new Set<string>(squadData.liveNationCodes || []));
             setIsLate(Boolean(squadData.isLate));
@@ -1612,7 +1619,31 @@ export default function SquadPage() {
   // lineup with each queued-in player inheriting his outgoing player's slot.
   useEffect(() => {
     if (!planView || plannedDirty) return;
-    const planned15 = [...startingXI, ...bench].map(mapToPlanned);
+
+    // Base-15 for the preview. Normally the current (live) squad, but when a
+    // Free Hit is live this round next round reverts to the pre-FH squad, so
+    // Planned must preview THAT instead of the temporary Free Hit XI. Resolve
+    // the snapshot ids to full player records; if any can't be resolved yet
+    // (allPlayers still loading) fall back to the live squad so we never render
+    // broken — the effect re-runs and corrects once players arrive.
+    let baseStarting = startingXI;
+    let baseBench = bench;
+    let baseCaptainId = captainId;
+    let baseViceId = viceCaptainId;
+    if (plannedBaseSquad) {
+      const resolved = plannedBaseSquad.map((e) => ({ e, p: allPlayers.find((ap) => ap.id === e.playerId) }));
+      if (resolved.length === 15 && resolved.every((r) => r.p)) {
+        baseStarting = resolved.filter((r) => r.e.isStarting).map((r) => r.p!);
+        baseBench = resolved
+          .filter((r) => !r.e.isStarting)
+          .sort((a, b) => (a.e.benchOrder ?? 0) - (b.e.benchOrder ?? 0))
+          .map((r) => r.p!);
+        baseCaptainId = resolved.find((r) => r.e.isCaptain)?.e.playerId ?? null;
+        baseViceId = resolved.find((r) => r.e.isViceCaptain)?.e.playerId ?? null;
+      }
+    }
+
+    const planned15 = [...baseStarting, ...baseBench].map(mapToPlanned);
     const byId = new Map(planned15.map((p) => [p.id, p]));
     let saved: { startingXI: string[]; bench: string[]; captainId: string; viceCaptainId: string } | null = null;
     if (savedPlannedLineupRaw) {
@@ -1631,12 +1662,12 @@ export default function SquadPage() {
       setPlannedCaptainId(saved.captainId);
       setPlannedViceCaptainId(saved.viceCaptainId);
     } else {
-      setPlannedStartingXI(startingXI.map(mapToPlanned));
-      setPlannedBench(bench.map(mapToPlanned));
-      setPlannedCaptainId(captainId ? (plannedInById.get(captainId)?.id ?? captainId) : null);
-      setPlannedViceCaptainId(viceCaptainId ? (plannedInById.get(viceCaptainId)?.id ?? viceCaptainId) : null);
+      setPlannedStartingXI(baseStarting.map(mapToPlanned));
+      setPlannedBench(baseBench.map(mapToPlanned));
+      setPlannedCaptainId(baseCaptainId ? (plannedInById.get(baseCaptainId)?.id ?? baseCaptainId) : null);
+      setPlannedViceCaptainId(baseViceId ? (plannedInById.get(baseViceId)?.id ?? baseViceId) : null);
     }
-  }, [planView, plannedDirty, startingXI, bench, captainId, viceCaptainId, savedPlannedLineupRaw, mapToPlanned, plannedInById]);
+  }, [planView, plannedDirty, startingXI, bench, captainId, viceCaptainId, savedPlannedLineupRaw, mapToPlanned, plannedInById, plannedBaseSquad, allPlayers]);
 
   // Load the current-round points for the inline pill (cheap summary call).
   useEffect(() => {
@@ -3288,6 +3319,11 @@ export default function SquadPage() {
             <ArrowLeftRight className="w-3.5 h-3.5 text-violet-300 shrink-0" strokeWidth={2.5} />
             <p className="text-violet-200/80 text-xs leading-snug min-w-0">
               <span className="font-bold text-violet-100">Planned team</span> — next round preview. Arrange it here; it applies when the round flips.
+              {plannedBaseSquad && (
+                <span className="block mt-0.5 text-violet-200/60">
+                  Your Free Hit ends this round — this shows the squad it reverts to.
+                </span>
+              )}
             </p>
           </div>
         </div>
