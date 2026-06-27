@@ -300,6 +300,11 @@ export default function SquadPage() {
   const [plannedBaseSquad, setPlannedBaseSquad] = useState<
     Array<{ playerId: string; isStarting: boolean; isCaptain: boolean; isViceCaptain: boolean; benchOrder: number | null }> | null
   >(null);
+  // DB-resolved upcoming fixtures per nation (covers confirmed knockout games
+  // the static fixture lib can't resolve). Powers the player-card FDR pills.
+  const [upcomingByNation, setUpcomingByNation] = useState<
+    Record<string, Array<{ opponent: string; isHome: boolean; kickoff: string; stageId: string }>>
+  >({});
   const [plannedStartingXI, setPlannedStartingXI] = useState<Player[]>([]);
   const [plannedBench, setPlannedBench] = useState<Player[]>([]);
   const [plannedCaptainId, setPlannedCaptainId] = useState<string | null>(null);
@@ -1669,6 +1674,36 @@ export default function SquadPage() {
     }
   }, [planView, plannedDirty, startingXI, bench, captainId, viceCaptainId, savedPlannedLineupRaw, mapToPlanned, plannedInById, plannedBaseSquad, allPlayers]);
 
+  // Load DB-resolved upcoming fixtures per nation once on mount, so the player
+  // cards can show the real next-game FDR for confirmed knockout matchups (the
+  // static lib only knows bracket placeholders until teams are decided).
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/fixtures/upcoming-by-nation', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled && d?.byNation) setUpcomingByNation(d.byNation); })
+      .catch(() => { /* non-fatal — cards fall back to the static lib */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Next `count` fixtures for a nation's card FDR pill. Prefers the DB-resolved
+  // upcoming list (knockout-aware); falls back to the static lib when the DB
+  // has nothing for that nation yet (or hasn't loaded).
+  const nextFixturesFor = useCallback(
+    (nationCode: string, count = 1): Array<{ opponent: string; difficulty: FDR; isHome: boolean }> => {
+      const db = upcomingByNation[nationCode];
+      if (db && db.length > 0) {
+        return db.slice(0, count).map((fx) => ({
+          opponent: fx.opponent,
+          isHome: fx.isHome,
+          difficulty: getFixtureDifficulty(nationCode, fx.opponent),
+        }));
+      }
+      return getNextFixtures(nationCode, count);
+    },
+    [upcomingByNation],
+  );
+
   // Load the current-round points for the inline pill (cheap summary call).
   useEffect(() => {
     let cancelled = false;
@@ -1887,7 +1922,7 @@ export default function SquadPage() {
               {[...Array(3)].map((_, i) => (
                 fwds[i] ? (
                   <div key={fwds[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(fwds[i].id)}>
-                    <PlayerCard player={fwds[i]} nextFixtures={getNextFixtures(fwds[i].nation?.code || '', 1)} size="xs" />
+                    <PlayerCard player={fwds[i]} nextFixtures={nextFixturesFor(fwds[i].nation?.code || '', 1)} size="xs" />
                   </div>
                 ) : (
                   <div key={`fwd-${i}`} className="flex-shrink-0">
@@ -1902,7 +1937,7 @@ export default function SquadPage() {
               {[...Array(5)].map((_, i) => (
                 mids[i] ? (
                   <div key={mids[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(mids[i].id)}>
-                    <PlayerCard player={mids[i]} nextFixtures={getNextFixtures(mids[i].nation?.code || '', 1)} size="xs" />
+                    <PlayerCard player={mids[i]} nextFixtures={nextFixturesFor(mids[i].nation?.code || '', 1)} size="xs" />
                   </div>
                 ) : (
                   <div key={`mid-${i}`} className="flex-shrink-0">
@@ -1917,7 +1952,7 @@ export default function SquadPage() {
               {[...Array(5)].map((_, i) => (
                 defs[i] ? (
                   <div key={defs[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(defs[i].id)}>
-                    <PlayerCard player={defs[i]} nextFixtures={getNextFixtures(defs[i].nation?.code || '', 1)} size="xs" />
+                    <PlayerCard player={defs[i]} nextFixtures={nextFixturesFor(defs[i].nation?.code || '', 1)} size="xs" />
                   </div>
                 ) : (
                   <div key={`def-${i}`} className="flex-shrink-0">
@@ -1932,7 +1967,7 @@ export default function SquadPage() {
               {[...Array(2)].map((_, i) => (
                 gks[i] ? (
                   <div key={gks[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(gks[i].id)}>
-                    <PlayerCard player={gks[i]} nextFixtures={getNextFixtures(gks[i].nation?.code || '', 1)} size="xs" />
+                    <PlayerCard player={gks[i]} nextFixtures={nextFixturesFor(gks[i].nation?.code || '', 1)} size="xs" />
                   </div>
                 ) : (
                   <div key={`gk-${i}`} className="flex-shrink-0">
@@ -2207,7 +2242,7 @@ export default function SquadPage() {
   // handlers and never touch the live lineup. Drag is disabled in Planned view
   // (tap-to-sub only) so it can't fall through to the live swap machinery.
   const renderPitchPlayer = (p: Player) => {
-    const nextFixtures = getNextFixtures(p.nation?.code || '', 1);
+    const nextFixtures = nextFixturesFor(p.nation?.code || '', 1);
     const isSelected = activeToSub?.id === p.id;
     const isValid = !!activeToSub && !isSelected && activeValidTargets.has(p.id);
     const isDimmed = !!activeToSub && !isSelected && !activeValidTargets.has(p.id);
@@ -2415,7 +2450,7 @@ export default function SquadPage() {
             >
               <PlayerCard
                 player={p}
-                nextFixtures={getNextFixtures(p.nation?.code || '', 1)}
+                nextFixtures={nextFixturesFor(p.nation?.code || '', 1)}
                 size="xs"
               />
             </div>

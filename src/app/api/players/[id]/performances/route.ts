@@ -382,6 +382,39 @@ export async function GET(
       (a, b) => new Date(b.match.kickoffTime).getTime() - new Date(a.match.kickoffTime).getTime(),
     );
 
+    // Upcoming (not-finished) matches for the player's nation, from the DB —
+    // the authoritative source. The static fixture lib can't resolve knockout
+    // opponents (bracket placeholders until teams are known), so once a nation
+    // qualifies its "next game" only appears here. Drives the modal's NEXT
+    // badge + Upcoming strip for both group AND confirmed knockout games.
+    const upcomingMatches = player.nationId
+      ? await prisma.match.findMany({
+          where: {
+            isFinished: false,
+            kickoffTime: { gt: new Date() },
+            OR: [{ homeNationId: player.nationId }, { awayNationId: player.nationId }],
+          },
+          include: {
+            homeNation: { select: { code: true } },
+            awayNation: { select: { code: true } },
+            stage: { select: { stageId: true, name: true } },
+          },
+          orderBy: { kickoffTime: 'asc' },
+          take: 5,
+        })
+      : [];
+    const upcoming = upcomingMatches.map((m) => {
+      const isHome = m.homeNation.code === player.nation?.code;
+      return {
+        matchId: m.id,
+        opponent: isHome ? m.awayNation.code : m.homeNation.code,
+        isHome,
+        kickoff: m.kickoffTime,
+        stageId: m.stage.stageId,
+        stageName: m.stage.name,
+      };
+    });
+
     const adjustments = rawAdjustments.map((entry) => {
       let parsed: Record<string, unknown> = {};
       try { parsed = JSON.parse(entry.details); } catch { /* ignore */ }
@@ -406,6 +439,7 @@ export async function GET(
       },
       squadRow: squadRow ?? null,
       performances: mergedPerformances,
+      upcoming,
       adjustments,
     });
   } catch (error) {

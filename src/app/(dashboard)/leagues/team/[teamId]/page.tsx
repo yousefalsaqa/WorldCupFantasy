@@ -135,6 +135,11 @@ export default function LeagueTeamViewPage({
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<ApiPlayer | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  // DB-resolved upcoming fixtures per nation — knockout-aware next-game FDR for
+  // the player cards (the static lib only knows bracket placeholders).
+  const [upcomingByNation, setUpcomingByNation] = useState<
+    Record<string, Array<{ opponent: string; isHome: boolean; kickoff: string; stageId: string }>>
+  >({});
 
   // Poll state — we want a stable ref to the latest "is anything live"
   // signal so the interval callback doesn't re-bind on every fetch.
@@ -161,6 +166,29 @@ export default function LeagueTeamViewPage({
   }, [teamId]);
 
   useEffect(() => { fetchTeam(); }, [fetchTeam]);
+
+  // DB-resolved upcoming fixtures (once on mount) for knockout-aware card FDR.
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/fixtures/upcoming-by-nation', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled && d?.byNation) setUpcomingByNation(d.byNation); })
+      .catch(() => { /* non-fatal — cards fall back to the static lib */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Next `count` fixtures for a nation's card FDR. Prefers the DB-resolved
+  // upcoming list (knockout-aware); falls back to the static lib.
+  const nextFixturesFor = useCallback(
+    (nationCode: string, count = 1): Array<{ opponent: string; isHome: boolean; difficulty: FDR }> => {
+      const db = upcomingByNation[nationCode];
+      const base = db && db.length > 0
+        ? db.slice(0, count).map((fx) => ({ opponent: fx.opponent, isHome: fx.isHome }))
+        : getNextWcFixtures(nationCode, count);
+      return base.map((fx) => ({ ...fx, difficulty: getFixtureDifficulty(nationCode, fx.opponent) as FDR }));
+    },
+    [upcomingByNation],
+  );
 
   // One-shot admin check — surfaces the per-adjustment Undo button
   // inside the shared modal. Failure is silent (defaults to non-admin).
@@ -235,10 +263,7 @@ export default function LeagueTeamViewPage({
   // position rows can call it uniformly and the modal-open click goes
   // through one path. Mirrors the renderPitchPlayer helper on /squad.
   const renderPitchPlayer = (p: ApiPlayer) => {
-    const nextFixtures = getNextWcFixtures(p.nation.code, 1).map((fx) => ({
-      ...fx,
-      difficulty: getFixtureDifficulty(p.nation.code, fx.opponent) as FDR,
-    }));
+    const nextFixtures = nextFixturesFor(p.nation.code, 1);
     const rawPoints = p.livePoints ?? p.points;
     const displayPoints = p.isCaptain ? rawPoints * captainMultiplier : rawPoints;
     return (
@@ -398,10 +423,7 @@ export default function LeagueTeamViewPage({
                 </span>
                 <PlayerCard
                   player={toCardPlayer(p)}
-                  nextFixtures={getNextWcFixtures(p.nation.code, 1).map((fx) => ({
-                    ...fx,
-                    difficulty: getFixtureDifficulty(p.nation.code, fx.opponent) as FDR,
-                  }))}
+                  nextFixtures={nextFixturesFor(p.nation.code, 1)}
                   livePoints={rawPoints}
                   isCaptain={p.isCaptain}
                   isViceCaptain={p.isViceCaptain}

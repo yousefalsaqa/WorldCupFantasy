@@ -165,6 +165,12 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
   const readOnly = props.readOnly === true;
 
   const [performances, setPerformances] = useState<PlayerPerformancePayload[] | null>(null);
+  // Upcoming (not-finished) matches for this player's nation, from the DB.
+  // Authoritative for the NEXT badge + Upcoming strip — covers confirmed
+  // knockout games the static fixture lib can't resolve. Null until loaded.
+  const [upcoming, setUpcoming] = useState<
+    Array<{ matchId: string; opponent: string; isHome: boolean; kickoff: string; stageId: string; stageName: string }> | null
+  >(null);
   const [adjustments, setAdjustments] = useState<PlayerAdjustmentPayload[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -194,11 +200,13 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
       if (!res.ok) throw new Error(`Status ${res.status}`);
       const data = await res.json();
       setPerformances(data.performances || []);
+      setUpcoming(data.upcoming || []);
       setAdjustments(data.adjustments || []);
     } catch (err) {
       console.error('Failed to load performances:', err);
       setError('Failed to load match history');
       setPerformances([]);
+      setUpcoming(null);
       setAdjustments([]);
     } finally {
       setLoading(false);
@@ -256,16 +264,28 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
     }
   };
 
-  const opponent = getNextWcOpponent(player.nation?.code || '');
-  const fdr = getFixtureDifficulty(player.nation?.code || '', opponent);
+  const nationCode = player.nation?.code || '';
+  // Prefer the DB's upcoming matches (authoritative — resolves confirmed
+  // knockout opponents the static lib can't). Fall back to the static fixture
+  // lib while the fetch is in flight or if it returned nothing (so group-stage
+  // behaviour is unchanged on first paint).
+  const dbUpcoming = upcoming && upcoming.length > 0 ? upcoming : null;
+  const opponent = dbUpcoming ? dbUpcoming[0].opponent : getNextWcOpponent(nationCode);
+  const fdr = getFixtureDifficulty(nationCode, opponent);
   // Kickoff of the next fixture, shown in the viewer's local timezone.
   // null when the nation has no upcoming game (opponent then falls back
   // to the LAST opponent faced — a date would be misleading there).
-  const nextKickoff = getNextWcFixture(player.nation?.code || '')?.kickoff ?? null;
+  const nextKickoff = dbUpcoming
+    ? new Date(dbUpcoming[0].kickoff)
+    : (getNextWcFixture(nationCode)?.kickoff ?? null);
   // Next few fixtures for the "Upcoming" run strip — opponent + FDR each.
-  const nextFixtures = getNextWcFixtures(player.nation?.code || '').map((fx) => ({
+  const nextFixtures = (
+    dbUpcoming
+      ? dbUpcoming.map((m) => ({ opponent: m.opponent, isHome: m.isHome }))
+      : getNextWcFixtures(nationCode)
+  ).map((fx) => ({
     ...fx,
-    difficulty: getFixtureDifficulty(player.nation?.code || '', fx.opponent),
+    difficulty: getFixtureDifficulty(nationCode, fx.opponent),
   }));
 
   return (
