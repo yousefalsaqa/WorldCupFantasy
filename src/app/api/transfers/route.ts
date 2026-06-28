@@ -458,7 +458,11 @@ export async function POST(request: NextRequest) {
         where: { teamId: team.id },
         include: { player: true }
       });
-      const newTeamValue = updatedSquad.reduce((sum, sp) => sum + sp.player.currentPrice, 0);
+      // Team value = what you PAID (purchasePrice), matching the sell-refund +
+      // bank accounting. Using live currentPrice here would silently bake in
+      // admin price changes to held players and break the bank+value=£100
+      // invariant.
+      const newTeamValue = updatedSquad.reduce((sum, sp) => sum + sp.purchasePrice, 0);
 
       await tx.team.update({
         where: { id: team.id },

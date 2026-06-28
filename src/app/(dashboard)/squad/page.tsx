@@ -248,10 +248,10 @@ function formatFixtureDate(dateStr: string, tz?: string): string {
 // Position limits
 const POSITION_LIMITS: Record<Position, number> = { GK: 2, DEF: 5, MID: 5, FWD: 3 };
 const MAX_PER_NATION = 3;
-// Gameweek-history slider — WIP, intentionally OFF in production. Flip to true
-// to finish/ship it (carousel + squad-page top section still pending). The code
-// (state/effects/overlay/HistoricalSquad) ships dormant while this is false.
-const SHOW_GW_HISTORY = false;
+// Gameweek-history slider — SHIPPED. A swipeable round selector above the pitch
+// that swaps the squad area in place (top section stays static) to show a past
+// round's read-only XI + bench. Set false to hide it again if needed.
+const SHOW_GW_HISTORY = true;
 
 // Read-only historical squad for the gameweek slider: that round's XI on the
 // pitch + bench, each card tappable (opens the read-only detail modal). Points
@@ -266,22 +266,9 @@ function HistoricalSquad({
   data: GameweekHistory | null;
   onSelect: (p: HistPlayer) => void;
 }) {
-  if (loading || !data || !data.stage || !Array.isArray(data.players)) {
-    return (
-      <div className="rounded-2xl ring-1 ring-white/10 bg-white/[0.03] py-16 flex items-center justify-center mb-5">
-        <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-  const players = data.players;
-  if (players.length === 0) {
-    return (
-      <div className="rounded-2xl ring-1 ring-white/10 bg-white/[0.03] py-12 text-center text-white/40 mb-5">
-        No squad recorded for {data.stage.name}.
-      </div>
-    );
-  }
-  const mult = data.teamStage?.chipsUsed?.includes('TRIPLE_CAPTAIN') ? 3 : 2;
+  const ready = !loading && !!data && !!data.stage && Array.isArray(data.players) && data.players.length > 0;
+  const mult = data?.teamStage?.chipsUsed?.includes('TRIPLE_CAPTAIN') ? 3 : 2;
+  const players = ready ? data!.players : [];
   const xi = players.filter((p) => p.isStarting);
   const bench = players.filter((p) => !p.isStarting).sort((a, b) => (a.benchOrder ?? 9) - (b.benchOrder ?? 9));
   const byPos = (pos: string) => xi.filter((p) => p.position === pos);
@@ -300,19 +287,30 @@ function HistoricalSquad({
   );
   return (
     <div>
-      <div className="relative rounded-2xl mb-5 sm:mb-6 overflow-hidden shadow-[0_20px_60px_-20px_rgba(0,0,0,0.65)] ring-1 ring-white/10">
+      {/* Pitch frame is ALWAYS rendered so the slider stays on the centre spot
+          even while a round's squad is loading. */}
+      <div className="relative rounded-2xl mb-5 sm:mb-6 overflow-hidden shadow-[0_20px_60px_-20px_rgba(0,0,0,0.65)] ring-1 ring-white/10 min-h-[20rem]">
         <PitchBg />
-        <div className="relative z-10 p-2 sm:p-6 space-y-4 sm:space-y-7 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-          <div className="flex justify-center gap-1.5 sm:gap-6 min-w-max sm:min-w-0">{byPos('FWD').map(card)}</div>
-          <div className="flex justify-center gap-1 sm:gap-4 min-w-max sm:min-w-0">{byPos('MID').map(card)}</div>
-          <div className="flex justify-center gap-1 sm:gap-4 min-w-max sm:min-w-0">{byPos('DEF').map(card)}</div>
-          <div className="flex justify-center gap-2 sm:gap-6 min-w-max sm:min-w-0">{byPos('GK').map(card)}</div>
-        </div>
-        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 px-3 py-1 rounded-full bg-black/50 text-white text-[11px] font-black backdrop-blur-sm whitespace-nowrap">
-          {data.stage.name}{data.teamStage ? ` · ${data.teamStage.totalPoints} pts` : ''}
-        </div>
+
+        {ready ? (
+          <div className="relative z-10 p-2 sm:p-6 space-y-4 sm:space-y-7 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <div className="flex justify-center gap-1.5 sm:gap-6 min-w-max sm:min-w-0">{byPos('FWD').map(card)}</div>
+            <div className="flex justify-center gap-1 sm:gap-4 min-w-max sm:min-w-0">{byPos('MID').map(card)}</div>
+            <div className="flex justify-center gap-1 sm:gap-4 min-w-max sm:min-w-0">{byPos('DEF').map(card)}</div>
+            <div className="flex justify-center gap-2 sm:gap-6 min-w-max sm:min-w-0">{byPos('GK').map(card)}</div>
+          </div>
+        ) : (
+          <div className="relative z-10 py-20 flex items-center justify-center text-center">
+            {loading ? (
+              <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <span className="text-white/50 text-sm px-6">No squad recorded for {data?.stage?.name ?? 'this round'}.</span>
+            )}
+          </div>
+        )}
+
       </div>
-      {bench.length > 0 && (
+      {ready && bench.length > 0 && (
         <div className="px-3 sm:px-0 mb-5">
           <div className="rounded-2xl overflow-hidden shadow-xl bg-gradient-to-b from-slate-900 via-slate-950 to-black p-3 sm:p-4">
             <h2 className="text-xs font-black text-white/70 uppercase tracking-widest mb-3 flex items-center gap-2">
@@ -337,6 +335,147 @@ function HistoricalSquad({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Gameweek carousel — a swipeable, snap-scrolling row of round chips that
+// auto-centers the selected round (or "now" when none is selected). Shared by
+// the inline above-pitch slider and the in-overlay slider so they stay in
+// lockstep. Leading/trailing spacers let the first/last chip reach dead-center.
+type GwStage = { stageId: string; name: string; points: number | null; isActive: boolean; isComplete: boolean };
+function GwSlider({
+  stages,
+  historyStageId,
+  onSelect,
+  size = 'md',
+  compact = false,
+}: {
+  stages: GwStage[];
+  historyStageId: string | null;
+  onSelect: (stageId: string | null) => void;
+  size?: 'sm' | 'md';
+  // compact = the in-pitch "center circle" carousel: a narrow fixed-width
+  // track with a faint pill backdrop so it reads as sitting on the centre spot.
+  compact?: boolean;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const centeredRef = useRef<HTMLButtonElement | null>(null);
+  const chipEls = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The chip we keep centered: the selected past round, else the live "now" one.
+  const centeredId = historyStageId ?? stages.find((s) => s.isActive)?.stageId ?? null;
+
+  // Re-center whenever the selection changes (and on first paint once stages
+  // load). Instant on mount, smooth on later selection changes.
+  useEffect(() => {
+    const el = centeredRef.current;
+    const container = scrollRef.current;
+    if (!el || !container) return;
+    const target = el.offsetLeft - container.clientWidth / 2 + el.clientWidth / 2;
+    container.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
+  }, [centeredId, stages.length]);
+
+  const isFuture = (s: GwStage) => !s.isComplete && !s.isActive;
+
+  // Slide-to-switch: once a swipe settles, snap to the nearest PLAYABLE round
+  // and select it. Future rounds are never snap targets (see snap-align below),
+  // so an over-shoot toward, say, the Final lands back on the last real round.
+  // The settle handler then locks it precisely there and switches the squad.
+  const handleScroll = () => {
+    if (settleTimer.current) clearTimeout(settleTimer.current);
+    settleTimer.current = setTimeout(() => {
+      const container = scrollRef.current;
+      if (!container) return;
+      const mid = container.scrollLeft + container.clientWidth / 2;
+      let bestId: string | null = null;
+      let bestDist = Infinity;
+      chipEls.current.forEach((el, stageId) => {
+        const stage = stages.find((s) => s.stageId === stageId);
+        if (!stage || isFuture(stage)) return; // only playable rounds are targets
+        const c = el.offsetLeft + el.clientWidth / 2;
+        const d = Math.abs(c - mid);
+        if (d < bestDist) { bestDist = d; bestId = stageId; }
+      });
+      if (!bestId) return;
+      // Lock precisely onto it (shoots back from any over-shoot).
+      const el = chipEls.current.get(bestId);
+      if (el && bestDist > 2) {
+        const target = el.offsetLeft - container.clientWidth / 2 + el.clientWidth / 2;
+        container.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
+      }
+      const stage = stages.find((s) => s.stageId === bestId)!;
+      const next = stage.isActive ? null : bestId;
+      if (next !== historyStageId) onSelect(next);
+    }, 120);
+  };
+
+  const sm = compact || size === 'sm';
+  const pad = compact ? 'px-3 py-1' : sm ? 'px-2.5 py-1' : 'px-2.5 py-1';
+  // Fixed narrow width when compact so the chips sit "in the circle"; the
+  // spacers must be ≥ half the track so the first/last chip can reach centre.
+  const spacer = compact ? 'w-[4.5rem]' : 'w-[42vw] sm:w-32';
+  return (
+    <div
+      ref={scrollRef}
+      onScroll={handleScroll}
+      className={`overflow-x-auto scrollbar-hide snap-x snap-mandatory ${
+        compact
+          ? 'w-44 max-w-[62vw] mx-auto rounded-full bg-black/45 backdrop-blur-md ring-1 ring-white/20 py-1 shadow-[0_4px_20px_rgba(0,0,0,0.6)]'
+          : '-mx-1'
+      }`}
+      style={{ WebkitOverflowScrolling: 'touch', scrollPaddingLeft: '50%', scrollPaddingRight: '50%', touchAction: 'pan-x', overscrollBehaviorX: 'contain' }}
+    >
+      <div className="inline-flex items-center gap-1.5">
+        {/* leading spacer so the first chip can sit dead-center */}
+        <div className={`shrink-0 ${spacer}`} aria-hidden />
+        {stages.map((s) => {
+          const isCurrent = s.isActive;
+          const future = !s.isComplete && !s.isActive;
+          const selected = isCurrent ? historyStageId === null : historyStageId === s.stageId;
+          const isCentered = s.stageId === centeredId;
+          const base = s.stageId.startsWith('GR') ? `GS${s.stageId.slice(2)}` : s.stageId;
+          // compact = one slim line ("GS3 · 99", "R32 · now"); roomy = two lines.
+          const label = compact
+            ? `${base}${isCurrent ? ' · now' : !future && s.points != null ? ` · ${s.points}` : ''}`
+            : null;
+          return (
+            <button
+              key={s.stageId}
+              ref={(el) => {
+                if (isCentered) centeredRef.current = el;
+                if (el) chipEls.current.set(s.stageId, el); else chipEls.current.delete(s.stageId);
+              }}
+              type="button"
+              disabled={future}
+              onClick={() => { if (!future) onSelect(isCurrent ? null : s.stageId); }}
+              style={{ scrollSnapAlign: future ? 'none' : 'center' }}
+              className={`shrink-0 rounded-xl font-black transition-all whitespace-nowrap flex flex-col items-center leading-tight ${pad} ${
+                future
+                  ? 'bg-white/[0.03] text-white/25 cursor-not-allowed'
+                  : selected
+                    ? 'bg-emerald-500/90 text-emerald-950 shadow-lg scale-105'
+                    : 'bg-white/5 text-white/55 ring-1 ring-white/10 hover:text-white active:scale-95'
+              }`}
+            >
+              {compact ? (
+                <span className="text-[11px]">{label}</span>
+              ) : (
+                <>
+                  <span className="text-[10px]">{base}{isCurrent ? ' · now' : ''}</span>
+                  {!future && s.points != null && (
+                    <span className={`tabular-nums text-[9px] leading-none ${selected ? 'text-emerald-900/80' : 'text-white/35'}`}>
+                      {s.points} pts
+                    </span>
+                  )}
+                </>
+              )}
+            </button>
+          );
+        })}
+        {/* trailing spacer so the last chip can sit dead-center */}
+        <div className={`shrink-0 ${spacer}`} aria-hidden />
+      </div>
     </div>
   );
 }
@@ -1185,6 +1324,7 @@ export default function SquadPage() {
   );
 
   const enterTransferMode = useCallback(() => {
+    setHistoryStageId(null); // any squad action snaps back to the current squad
     setTransferMode(true);
     setTransferError(null);
     setPendingTransfers([]);
@@ -1902,6 +2042,13 @@ export default function SquadPage() {
     return () => { cancelled = true; };
   }, []);
 
+  // Past-week browsing is a live-view-only thing. Entering Planned or transfer
+  // mode (by any path) always snaps back to the current squad — covers every
+  // entry point at once, so no individual button can sneak you into history.
+  useEffect(() => {
+    if (planView || transferMode) setHistoryStageId(null);
+  }, [planView, transferMode]);
+
   // Fetch a past gameweek's squad when the slider selects one (null = current).
   useEffect(() => {
     if (!historyStageId) { setHistoryData(null); return; }
@@ -2386,8 +2533,9 @@ export default function SquadPage() {
   
   // Change formation
   const changeFormation = (newFormation: string) => {
+    setHistoryStageId(null); // editing the lineup snaps back to the current squad
     const { def, mid, fwd } = parseFormation(newFormation);
-    
+
     const gkPlayers = allSquadPlayers.filter(p => p.position === 'GK');
     const defPlayers = allSquadPlayers.filter(p => p.position === 'DEF');
     const midPlayers = allSquadPlayers.filter(p => p.position === 'MID');
@@ -3199,7 +3347,7 @@ export default function SquadPage() {
         <div className="mt-3 inline-flex p-0.5 rounded-xl bg-white/5 ring-1 ring-white/10">
           <button
             type="button"
-            onClick={() => setPlanView(false)}
+            onClick={() => { setHistoryStageId(null); setPlanView(false); }}
             className={`px-3 py-1.5 rounded-lg text-xs font-black transition-colors ${
               !planView ? 'bg-emerald-500/90 text-emerald-950 shadow' : 'text-white/60 hover:text-white'
             }`}
@@ -3208,7 +3356,7 @@ export default function SquadPage() {
           </button>
           <button
             type="button"
-            onClick={() => setPlanView(true)}
+            onClick={() => { setHistoryStageId(null); setPlanView(true); }}
             className={`px-3 py-1.5 rounded-lg text-xs font-black transition-colors inline-flex items-center gap-1 ${
               planView ? 'bg-violet-500/90 text-white shadow' : 'text-white/60 hover:text-white'
             }`}
@@ -3355,7 +3503,9 @@ export default function SquadPage() {
           plain-English explanation and the activate/cancel actions. */}
       {chips.length > 0 && (
         <div className="px-3 sm:px-0 mb-4">
-          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+          {/* py gives the chip rings/active glow vertical room so the scroll
+              container doesn't clip them top & bottom. */}
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide py-1" style={{ WebkitOverflowScrolling: 'touch' }}>
             <span className="shrink-0 text-[10px] font-black text-white/40 uppercase tracking-widest flex items-center gap-1 mr-1">
               <Sparkles className="w-3 h-3" />
               Chips
@@ -3364,22 +3514,20 @@ export default function SquadPage() {
               <button
                 key={chip.id}
                 type="button"
-                onClick={() => setChipConfirm(chip)}
+                onClick={() => { setHistoryStageId(null); setChipConfirm(chip); }}
                 aria-label={`${chip.name}: ${chip.active ? 'active' : chip.used ? 'used' : chip.available ? 'available' : 'unavailable'}`}
-                className={`relative shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap transition-all active:scale-95 ${
+                title={chip.name}
+                className={`shrink-0 px-2 py-1 rounded-md text-[10px] font-black tracking-wide leading-none transition-colors ${
                   chip.active
-                    ? 'bg-gradient-to-br from-emerald-500/40 to-emerald-700/30 ring-1 ring-emerald-400 text-emerald-100 shadow-[0_0_14px_rgba(16,185,129,0.45)]'
+                    ? 'bg-emerald-500 text-emerald-950 ring-1 ring-emerald-400'
                     : chip.used
-                    ? 'bg-white/[0.03] ring-1 ring-white/5 text-white/25 line-through'
+                    ? 'bg-white/[0.03] ring-1 ring-white/10 text-white/25 line-through'
                     : chip.available
-                    ? 'bg-white/5 ring-1 ring-white/15 text-white/80 hover:bg-white/10 hover:ring-white/30 hover:-translate-y-0.5'
-                    : 'bg-white/[0.03] ring-1 ring-white/5 text-white/30'
+                    ? 'bg-emerald-500/10 ring-1 ring-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
+                    : 'bg-white/[0.03] ring-1 ring-white/10 text-white/30'
                 }`}
               >
-                {chip.name}
-                {chip.active && (
-                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-slate-950 animate-pulse" />
-                )}
+                {chipAcronym(chip.id, chip.name)}
               </button>
             ))}
           </div>
@@ -3599,46 +3747,28 @@ export default function SquadPage() {
         </div>
       )}
 
-      {/* Mobile gesture hint — desktop gets the equivalent line under the pitch */}
-      <p className="sm:hidden px-3 mb-2 text-center text-[10px] text-white/30 font-medium">
-        Tap a player for details · hold to substitute
-      </p>
 
-      {/* Gameweek slider — right above the pitch. WIP, gated off in prod. */}
-      {SHOW_GW_HISTORY && (
-      <div className="px-3 sm:px-0 mb-3 -mx-1 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-        <div className="inline-flex gap-1.5 px-1">
-          {gwStages.map((s) => {
-            const isCurrent = s.isActive;
-            const future = !s.isComplete && !s.isActive;
-            const selected = isCurrent ? historyStageId === null : historyStageId === s.stageId;
-            const base = s.stageId.startsWith('GR') ? `GS${s.stageId.slice(2)}` : s.stageId;
-            const text = `${base}${isCurrent ? ' · now' : ''}${!future && s.points != null ? ` ${s.points}` : ''}`;
-            return (
-              <button
-                key={s.stageId}
-                type="button"
-                disabled={future}
-                onClick={() => { if (!future) setHistoryStageId(isCurrent ? null : s.stageId); }}
-                className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-black transition-colors whitespace-nowrap ${
-                  future
-                    ? 'bg-white/[0.03] text-white/25 cursor-not-allowed'
-                    : selected
-                      ? 'bg-emerald-500/90 text-emerald-950 shadow'
-                      : 'bg-white/5 text-white/60 ring-1 ring-white/10 hover:text-white'
-                }`}
-              >
-                {text}
-              </button>
-            );
-          })}
+      {/* Squad area — pitch + bench. Wrapped `relative` so selecting a past
+          round can swap ONLY this region in place (top section stays static).
+          The live pitch stays mounted under the overlay, so drag-drop-touch is
+          never unmounted → no removeChild crash. */}
+      <div className="relative">
+
+      {/* Gameweek slider — its own full-width row right above the pitch. Swipe
+          through rounds; it auto-switches the squad below to whichever round
+          snaps to centre (or "now"). Only in the live view — Planned/transfer
+          modes are their own thing, so past-week browsing is hidden there.
+          WIP, gated off in prod. */}
+      {SHOW_GW_HISTORY && gwStages.length > 0 && !planView && !transferMode && (
+        <div className="px-2 sm:px-0 mb-3">
+          <GwSlider stages={gwStages} historyStageId={historyStageId} onSelect={setHistoryStageId} />
         </div>
-      </div>
       )}
 
       {/* Pitch */}
       <div className="relative rounded-2xl mb-5 sm:mb-6 overflow-hidden shadow-[0_20px_60px_-20px_rgba(0,0,0,0.65)] ring-1 ring-white/10">
         <PitchBg />
+
         <div className="relative z-10 p-2 sm:p-6 space-y-4 sm:space-y-7 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
           {/* FWD */}
           <div className="flex justify-center gap-1.5 sm:gap-6 min-w-max sm:min-w-0 animate-slide-down">
@@ -3781,6 +3911,53 @@ export default function SquadPage() {
         </div>
       </div>
 
+        {/* Past-round squad — covers ONLY the squad area (pitch + bench) while
+            the top section stays put. The live pitch sits mounted underneath
+            (z-10), this overlay on top (z-40); its own slider keeps you moving
+            between rounds or back to "now". */}
+        {SHOW_GW_HISTORY && historyStageId && !planView && !transferMode && (
+          <div className="absolute inset-0 z-40 bg-[#0a0e17] rounded-2xl overflow-y-auto scrollbar-hide">
+            {/* Same corner gradient tints as the dashboard background so the
+                panel blends instead of reading as a flat patch. */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                backgroundImage:
+                  'radial-gradient(ellipse 700px 500px at 20% -10%, rgba(244,63,94,0.10), transparent 60%), radial-gradient(ellipse 700px 500px at 85% 110%, rgba(59,130,246,0.08), transparent 60%), radial-gradient(ellipse 500px 400px at 70% 20%, rgba(168,85,247,0.05), transparent 65%)',
+              }}
+            />
+            {/* Slider + round header pinned at the top; only the squad below
+                scrolls/swaps. */}
+            <div className="relative sticky top-0 z-10 bg-[#0a0e17]/95 backdrop-blur-sm pb-1.5">
+              <div className="px-2 sm:px-0 mb-1.5">
+                <GwSlider stages={gwStages} historyStageId={historyStageId} onSelect={setHistoryStageId} />
+              </div>
+              {(() => {
+                const st = gwStages.find((s) => s.stageId === historyStageId);
+                return (
+                  <div className="px-3 sm:px-0 flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-black text-white/80 truncate leading-tight min-w-0">{st?.name ?? historyStageId}</h3>
+                    {st?.points != null && (
+                      <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-500/15 ring-1 ring-emerald-500/30 text-emerald-300 text-[11px] font-black tabular-nums">
+                        {st.points} pts
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+            <div className="relative pt-2">
+              <HistoricalSquad
+                loading={historyLoading}
+                data={historyData}
+                onSelect={(p) => setHistorySelected(p)}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+      {/* /Squad area */}
+
       {/* Desktop actions */}
       <div className="hidden sm:flex items-center justify-between px-3 sm:px-0">
         <p className="text-white/40 text-sm">Tap players to manage your team. Coloured badges show fixture difficulty.</p>
@@ -3890,68 +4067,6 @@ export default function SquadPage() {
       )}
 
       {showPoints && <PointsBreakdownModal onClose={() => setShowPoints(false)} />}
-
-      {/* Past-gameweek squad — full-screen view on the app background so it
-          reads as the squad page swapping, not a popup. The live pitch stays
-          mounted underneath (overlay, never unmount/hide → no removeChild). The
-          slider lives inside too so you can slide between rounds or back to now. */}
-      {SHOW_GW_HISTORY && historyStageId && (
-        <div
-          className="fixed inset-0 z-[9999] bg-[#0a0e17] overflow-y-auto"
-          style={{ paddingTop: 'calc(env(safe-area-inset-top) + 5.5rem)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.5rem)' }}
-        >
-          <div className="max-w-2xl mx-auto px-3">
-            {/* Header */}
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <div className="min-w-0">
-                <h2 className="text-base sm:text-lg font-black text-white truncate">
-                  {gwStages.find((s) => s.stageId === historyStageId)?.name ?? historyStageId}
-                </h2>
-                <p className="text-[11px] text-white/40 leading-tight">Your squad that round · read-only</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setHistoryStageId(null)}
-                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/10 text-white/80 text-xs font-bold hover:bg-white/15 active:scale-95"
-              >
-                <X className="w-3.5 h-3.5" /> Back to now
-              </button>
-            </div>
-
-            {/* Slider (inside the view) — switch rounds or tap "now" to close. */}
-            <div className="-mx-1 mb-3 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-              <div className="inline-flex gap-1.5 px-1">
-                {gwStages.map((s) => {
-                  const isCurrent = s.isActive;
-                  const future = !s.isComplete && !s.isActive;
-                  const selected = historyStageId === s.stageId;
-                  const base = s.stageId.startsWith('GR') ? `GS${s.stageId.slice(2)}` : s.stageId;
-                  const text = `${base}${isCurrent ? ' · now' : ''}${!future && s.points != null ? ` ${s.points}` : ''}`;
-                  return (
-                    <button
-                      key={s.stageId}
-                      type="button"
-                      disabled={future}
-                      onClick={() => { if (!future) setHistoryStageId(isCurrent ? null : s.stageId); }}
-                      className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-black transition-colors whitespace-nowrap ${
-                        future
-                          ? 'bg-white/[0.03] text-white/25 cursor-not-allowed'
-                          : selected
-                            ? 'bg-emerald-500/90 text-emerald-950 shadow'
-                            : 'bg-white/5 text-white/60 ring-1 ring-white/10 hover:text-white'
-                      }`}
-                    >
-                      {text}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <HistoricalSquad loading={historyLoading} data={historyData} onSelect={(p) => setHistorySelected(p)} />
-          </div>
-        </div>
-      )}
 
       {/* Read-only detail for a player tapped on a past gameweek's pitch. */}
       {historySelected && (
@@ -4089,18 +4204,18 @@ interface StatCardProps {
 
 function StatCard({ icon, label, value, hint, accent = 'text-white', highlight = false }: StatCardProps) {
   return (
-    <div className={`relative px-3 py-2 rounded-xl border overflow-hidden transition-all ${
+    <div className={`relative px-2.5 py-1.5 rounded-lg border overflow-hidden transition-all ${
       highlight
-        ? 'bg-gradient-to-br from-emerald-500/10 to-emerald-700/5 border-emerald-500/30 shadow-[0_0_20px_-5px_rgba(16,185,129,0.4)]'
+        ? 'bg-gradient-to-br from-emerald-500/10 to-emerald-700/5 border-emerald-500/30'
         : 'bg-white/5 border-white/10'
     }`}>
-      <div className="flex items-center gap-1.5 mb-0.5">
-        <span className={accent}>{icon}</span>
-        <p className="text-[9px] sm:text-[10px] uppercase tracking-wider font-bold text-white/50 leading-none">{label}</p>
+      <div className="flex items-center gap-1 mb-0.5">
+        <span className={`${accent} [&>svg]:w-3 [&>svg]:h-3`}>{icon}</span>
+        <p className="text-[9px] uppercase tracking-wider font-bold text-white/50 leading-none truncate">{label}</p>
       </div>
-      <p className={`text-base sm:text-xl font-black leading-tight ${accent}`}>{value}</p>
+      <p className={`text-sm sm:text-base font-black leading-tight ${accent}`}>{value}</p>
       {hint && (
-        <p className="text-[9px] sm:text-[10px] font-medium text-white/40 mt-0.5 leading-tight truncate">
+        <p className="text-[9px] font-medium text-white/40 leading-tight truncate">
           {hint}
         </p>
       )}
@@ -4127,6 +4242,20 @@ function chipIcon(name: string): any {
   if (n.includes('bench')) return Users;
   if (n.includes('boost')) return Zap;
   return Sparkles;
+}
+
+// Short acronym for the chips bar (WC1/WC2/FH/TC/BB). Falls back to the
+// initials of the name for anything unmapped.
+function chipAcronym(id: string, name: string): string {
+  switch (id) {
+    case 'WILDCARD_1': return 'WC1';
+    case 'WILDCARD_2': return 'WC2';
+    case 'FREE_HIT': return 'FH';
+    case 'TRIPLE_CAPTAIN': return 'TC';
+    case 'BENCH_BOOST': return 'BB';
+    default:
+      return name.split(/\s+/).map((w) => w[0]).join('').slice(0, 3).toUpperCase();
+  }
 }
 
 // Plain-English pitch for each chip, shown in the detail popup. Written for

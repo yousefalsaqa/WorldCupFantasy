@@ -214,7 +214,9 @@ export async function applyPendingTransfers(
       where: { teamId },
       include: { player: { select: { currentPrice: true, position: true } } },
     });
-    const newTeamValue = updatedSquad.reduce((sum, sp) => sum + sp.player.currentPrice, 0);
+    // Team value = sum of purchasePrice (what was paid), matching the sell +
+    // bank accounting so bank+value stays £100 regardless of admin reprices.
+    const newTeamValue = updatedSquad.reduce((sum, sp) => sum + sp.purchasePrice, 0);
 
     // Apply the planned (next-round) lineup over the inherited slots, if the
     // user saved one and it's still valid against the final 15. Invalid or
