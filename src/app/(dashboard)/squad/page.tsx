@@ -363,17 +363,29 @@ function GwSlider({
   const centeredRef = useRef<HTMLButtonElement | null>(null);
   const chipEls = useRef<Map<string, HTMLButtonElement>>(new Map());
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // True only once the USER has actually grabbed the slider. Until then any
+  // scroll is layout/programmatic (initial snap, our own re-centering) and must
+  // NOT auto-select — otherwise a fresh load snaps onto the first chip and
+  // "opens" it instead of resting on the current round.
+  const userDriven = useRef(false);
+  const didInit = useRef(false);
   // The chip we keep centered: the selected past round, else the live "now" one.
   const centeredId = historyStageId ?? stages.find((s) => s.isActive)?.stageId ?? null;
 
-  // Re-center whenever the selection changes (and on first paint once stages
-  // load). Instant on mount, smooth on later selection changes.
+  // Center on the current round on load, and re-center when the selection
+  // changes. Deferred a frame so chip widths are laid out (fixes refresh
+  // landing on the first chip); instant on first paint, smooth thereafter.
   useEffect(() => {
-    const el = centeredRef.current;
     const container = scrollRef.current;
-    if (!el || !container) return;
-    const target = el.offsetLeft - container.clientWidth / 2 + el.clientWidth / 2;
-    container.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
+    if (!container) return;
+    const raf = requestAnimationFrame(() => {
+      const el = centeredRef.current;
+      if (!el) return;
+      const target = el.offsetLeft - container.clientWidth / 2 + el.clientWidth / 2;
+      container.scrollTo({ left: Math.max(0, target), behavior: didInit.current ? 'smooth' : 'auto' });
+      didInit.current = true;
+    });
+    return () => cancelAnimationFrame(raf);
   }, [centeredId, stages.length]);
 
   const isFuture = (s: GwStage) => !s.isComplete && !s.isActive;
@@ -383,6 +395,7 @@ function GwSlider({
   // so an over-shoot toward, say, the Final lands back on the last real round.
   // The settle handler then locks it precisely there and switches the squad.
   const handleScroll = () => {
+    if (!userDriven.current) return; // ignore initial snap + our own re-centering
     if (settleTimer.current) clearTimeout(settleTimer.current);
     settleTimer.current = setTimeout(() => {
       const container = scrollRef.current;
@@ -419,6 +432,9 @@ function GwSlider({
     <div
       ref={scrollRef}
       onScroll={handleScroll}
+      onPointerDown={() => { userDriven.current = true; }}
+      onTouchStart={() => { userDriven.current = true; }}
+      onWheel={() => { userDriven.current = true; }}
       className={`overflow-x-auto scrollbar-hide snap-x snap-mandatory ${
         compact
           ? 'w-44 max-w-[62vw] mx-auto rounded-full bg-black/45 backdrop-blur-md ring-1 ring-white/20 py-1 shadow-[0_4px_20px_rgba(0,0,0,0.6)]'
