@@ -39,7 +39,8 @@ export const SQUAD = {
     FWD: { total: 3, min: 1, max: 3 },
   },
   
-  // Max players from same nation
+  // Max players from same nation (default; relaxes in late knockouts — see
+  // maxPerNationForStage)
   maxPerNation: 3,
   
   // Budget
@@ -199,6 +200,45 @@ export const STAGES = {
 } as const;
 
 export type StageId = keyof typeof STAGES;
+
+// ============================================
+// NATION CAP — FINAL CRUNCH RELAX
+// ============================================
+// The field halves every knockout round (32→16→8→4→2). With the standard
+// 3-per-nation cap and only 2 nations in the Final, you could own at most 6
+// finalists but need 11 starters — an XI becomes impossible to field. So the
+// cap loosens as the field shrinks:
+//   • Default (groups → QF): 3 per nation.
+//   • SF / 3rd-place play-off (4 nations): 5 per nation.
+//   • Final (2 nations): no cap (Infinity) so a full XI is fillable.
+// Returned as a number; `Infinity` means "no limit". Callers that need a
+// finite display value should special-case Infinity.
+export function maxPerNationForStage(stageId: string | null | undefined): number {
+  switch (stageId) {
+    case 'SF':
+    case '3RD':
+      return 5;
+    case 'F':
+      return Infinity;
+    default:
+      return SQUAD.maxPerNation; // 3
+  }
+}
+
+// ============================================
+// AUTO-UNLIMITED TRANSFER STAGES
+// ============================================
+// Stages whose OPEN transfer window grants every team unlimited free transfers
+// automatically — no chip consumed, no -4 hits. The group→knockout crossover
+// (R32) is a massive squad reshuffle (16 nations knocked out), so the whole
+// field gets a free rebuild instead of the mercy rule firing at that boundary.
+// Mercy still applies normally from R16 onward as the field halves. The cap
+// (maxPerNationForStage) is unaffected — R32 keeps the standard 3-per-nation.
+export const AUTO_UNLIMITED_TRANSFER_STAGE_IDS: ReadonlySet<string> = new Set(['R32']);
+
+export function isAutoUnlimitedTransferStage(stageId: string | null | undefined): boolean {
+  return !!stageId && AUTO_UNLIMITED_TRANSFER_STAGE_IDS.has(stageId);
+}
 
 // ============================================
 // POSITION DISPLAY

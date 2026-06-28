@@ -30,7 +30,7 @@
 
 import { prisma } from './db';
 import { settleStage } from './stage-settlement';
-import { TRANSFERS } from './wc-constants';
+import { TRANSFERS, isAutoUnlimitedTransferStage } from './wc-constants';
 import { applyPendingTransfers, parsePendingTransfers } from './pending-transfers';
 import { computeNextFreeTransfers } from './transfer-allocation';
 
@@ -344,13 +344,17 @@ async function advanceOnce(): Promise<AdvanceResult> {
       ).length;
 
       // Wildcard in the closing stage → no banking (leftover forfeited).
-      // Mercy still applies on top of the base for the new round's squad.
+      // Mercy still applies on top of the base for the new round's squad —
+      // EXCEPT when entering an auto-unlimited stage (R32): that round's open
+      // window already gives a free rebuild, so mercy would be redundant. The
+      // raw eliminatedCount is still stamped on TeamStage below for history.
+      const enteringAutoUnlimited = isAutoUnlimitedTransferStage(nextStage.stageId);
       const leftover = wildcardedClose.has(team.id) ? 0 : team.freeTransfers + skipped;
       const allocation = computeNextFreeTransfers({
         leftover,
         baseAllocation,
         eliminatedCount,
-        mercyEnabled: TRANSFERS.MERCY_RULE_ENABLED,
+        mercyEnabled: TRANSFERS.MERCY_RULE_ENABLED && !enteringAutoUnlimited,
       });
 
       // Build the team update. Refresh per-stage chips when entering

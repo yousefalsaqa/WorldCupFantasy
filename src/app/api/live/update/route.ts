@@ -14,6 +14,7 @@ import { maybeAdvanceStage, type AdvanceResult } from '@/lib/stage-advance';
 import { rescorePendingFinishedMatches, type RescoreOutcome } from '@/lib/rescore-pending';
 import { healFixtureDetailCache, type DetailHealOutcome } from '@/lib/fixture-detail';
 import { healUnbankedFinishedMatches, type UnbankedHealOutcome } from '@/lib/heal-unbanked';
+import { markEliminations, type MarkEliminationsResult } from '@/lib/mark-eliminations';
 
 export const dynamic = 'force-dynamic';
 
@@ -117,6 +118,26 @@ async function runUnbankedHealSweep(): Promise<UnbankedHealOutcome[]> {
   }
 }
 
+/**
+ * Mark eliminations (KO losers + guarded group non-qualifiers) so the mercy
+ * rule fires at the rollover. MUST run before maybeAdvanceStage in the same
+ * tick — stage-advance reads Nation.isEliminated live to compute mercy free
+ * transfers, so marking after the advance would miss that round. Best-effort
+ * and swallowed: it must never break live scoring.
+ */
+async function runEliminationSweep(): Promise<MarkEliminationsResult | null> {
+  try {
+    const result = await markEliminations();
+    if (result.marked.length > 0) {
+      console.log('[Live Update] eliminations marked:', JSON.stringify(result.marked));
+    }
+    return result;
+  } catch (err) {
+    console.error('[Live Update] elimination sweep failed:', err);
+    return null;
+  }
+}
+
 async function handleUpdate(request: NextRequest) {
   try {
     if (!(await isAuthorized(request))) {
@@ -177,6 +198,9 @@ async function handleUpdate(request: NextRequest) {
       // haven't landed in Team.totalPoints yet.
       const unbankedHealed = await runUnbankedHealSweep();
 
+      // Mark eliminations BEFORE advancing so the mercy rule reads them.
+      const eliminationsMarked = await runEliminationSweep();
+
       let stageAdvance: AdvanceResult | null = null;
       try {
         stageAdvance = await maybeAdvanceStage();
@@ -196,6 +220,7 @@ async function handleUpdate(request: NextRequest) {
         results: [],
         stageAdvance,
         unbankedHealed,
+        eliminationsMarked,
         rescored,
         detailHealed,
       });
@@ -389,6 +414,11 @@ async function handleUpdate(request: NextRequest) {
     // points in Team.totalPoints.
     const unbankedHealed = await runUnbankedHealSweep();
 
+    // Mark eliminations BEFORE advancing so the mercy rule reads them. A KO
+    // match that just FT'd above set its winnerId; this turns the loser into
+    // an isEliminated mark in time for the same-tick rollover.
+    const eliminationsMarked = await runEliminationSweep();
+
     // Auto stage advancement: if any match transitioned to FT this run,
     // check whether that completed its stage and roll forward to the next
     // one. maybeAdvanceStage is idempotent + cheap when there's nothing
@@ -416,6 +446,7 @@ async function handleUpdate(request: NextRequest) {
       lastUpdated: new Date().toISOString(),
       stageAdvance,
       unbankedHealed,
+      eliminationsMarked,
       rescored,
       detailHealed,
     });

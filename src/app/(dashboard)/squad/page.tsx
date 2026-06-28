@@ -51,6 +51,7 @@ interface NextRoundChip {
   used: boolean;
   canCancel: boolean;
   queuedWildcardTransfers: number;
+  autoUnlimited?: boolean;
 }
 
 // Types
@@ -60,6 +61,7 @@ interface Nation {
   code: string;
   kitColor1: string;
   kitColor2: string;
+  isEliminated?: boolean;
 }
 
 interface Player {
@@ -364,6 +366,12 @@ export default function SquadPage() {
   // true the transfer UI hides the "Hit" pill and "−X pts" labels so we
   // don't scare users with a deduction that won't be applied.
   const [unlimitedTransfers, setUnlimitedTransfers] = useState(false);
+  // Effective nation cap from the server (3 normally; 5 at SF/3rd; 99 = no cap
+  // at the Final). Defaults to the standard cap until squad/get resolves.
+  const [maxPerNation, setMaxPerNation] = useState(MAX_PER_NATION);
+  // True during the open R32 window: transfers are free for everyone (knockout
+  // free rebuild). Drives a tailored transfer-mode banner.
+  const [autoUnlimitedStage, setAutoUnlimitedStage] = useState(false);
   // True iff at least one match is currently in progress. Drives the
   // 60-second `livePoints` polling effect below — when nothing's live we
   // don't burn DB cycles on a useless poll loop.
@@ -590,6 +598,8 @@ export default function SquadPage() {
             // pre-tournament — fall back to 0 in that case.
             setFreeTransfers(squadData.freeTransfers ?? 0);
             setUnlimitedTransfers(Boolean(squadData.unlimitedTransfers));
+            if (typeof squadData.maxPerNation === 'number') setMaxPerNation(squadData.maxPerNation);
+            setAutoUnlimitedStage(Boolean(squadData.autoUnlimitedTransferStage));
             setAnyMatchLive(Boolean(squadData.anyMatchLive));
             setQueuedTransfers(squadData.queuedTransfers || []);
             setQueuedHit(squadData.queuedHit || 0);
@@ -1200,7 +1210,7 @@ export default function SquadPage() {
           if (squadIds.has(p.id)) return false;
         }
         if (p.currentPrice > effectiveBudget) return false;
-        if ((counts[p.nation?.id || ''] || 0) >= MAX_PER_NATION) return false;
+        if ((counts[p.nation?.id || ''] || 0) >= maxPerNation) return false;
         return true;
       })
       .sort((a, b) =>
@@ -1222,6 +1232,7 @@ export default function SquadPage() {
     queuedTransfers,
     transferPickMax,
     projectedNationCounts,
+    maxPerNation,
   ]);
 
   // Add player to squad. Two distinct flows share this handler:
@@ -1966,7 +1977,7 @@ export default function SquadPage() {
               {[...Array(3)].map((_, i) => (
                 fwds[i] ? (
                   <div key={fwds[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(fwds[i].id)}>
-                    <PlayerCard player={fwds[i]} nextFixtures={nextFixturesFor(fwds[i].nation?.code || '', 1)} size="xs" />
+                    <PlayerCard player={fwds[i]} nextFixtures={nextFixturesFor(fwds[i].nation?.code || '', 1)} eliminated={fwds[i].nation?.isEliminated} size="xs" />
                   </div>
                 ) : (
                   <div key={`fwd-${i}`} className="flex-shrink-0">
@@ -1981,7 +1992,7 @@ export default function SquadPage() {
               {[...Array(5)].map((_, i) => (
                 mids[i] ? (
                   <div key={mids[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(mids[i].id)}>
-                    <PlayerCard player={mids[i]} nextFixtures={nextFixturesFor(mids[i].nation?.code || '', 1)} size="xs" />
+                    <PlayerCard player={mids[i]} nextFixtures={nextFixturesFor(mids[i].nation?.code || '', 1)} eliminated={mids[i].nation?.isEliminated} size="xs" />
                   </div>
                 ) : (
                   <div key={`mid-${i}`} className="flex-shrink-0">
@@ -1996,7 +2007,7 @@ export default function SquadPage() {
               {[...Array(5)].map((_, i) => (
                 defs[i] ? (
                   <div key={defs[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(defs[i].id)}>
-                    <PlayerCard player={defs[i]} nextFixtures={nextFixturesFor(defs[i].nation?.code || '', 1)} size="xs" />
+                    <PlayerCard player={defs[i]} nextFixtures={nextFixturesFor(defs[i].nation?.code || '', 1)} eliminated={defs[i].nation?.isEliminated} size="xs" />
                   </div>
                 ) : (
                   <div key={`def-${i}`} className="flex-shrink-0">
@@ -2011,7 +2022,7 @@ export default function SquadPage() {
               {[...Array(2)].map((_, i) => (
                 gks[i] ? (
                   <div key={gks[i].id} className="group cursor-pointer flex-shrink-0" onClick={() => removePlayer(gks[i].id)}>
-                    <PlayerCard player={gks[i]} nextFixtures={nextFixturesFor(gks[i].nation?.code || '', 1)} size="xs" />
+                    <PlayerCard player={gks[i]} nextFixtures={nextFixturesFor(gks[i].nation?.code || '', 1)} eliminated={gks[i].nation?.isEliminated} size="xs" />
                   </div>
                 ) : (
                   <div key={`gk-${i}`} className="flex-shrink-0">
@@ -2319,6 +2330,7 @@ export default function SquadPage() {
             }
           }}
           nextFixtures={nextFixtures}
+          eliminated={p.nation?.isEliminated}
           livePoints={planView ? undefined : displayPointsFor(p)}
           isCaptain={activeCaptainId === p.id}
           isViceCaptain={activeViceId === p.id}
@@ -2495,6 +2507,7 @@ export default function SquadPage() {
               <PlayerCard
                 player={p}
                 nextFixtures={nextFixturesFor(p.nation?.code || '', 1)}
+                eliminated={p.nation?.isEliminated}
                 size="xs"
               />
             </div>
@@ -2653,6 +2666,13 @@ export default function SquadPage() {
             Pending swaps glow amber — tap again to{' '}
             <span className="text-amber-300 font-bold">undo</span>.
           </p>
+          {!stageLocked && autoUnlimitedStage && (
+            <div className="mt-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-[11px] sm:text-xs text-emerald-200 leading-snug">
+              <span className="font-bold text-emerald-300">Free rebuild for the Round of 32.</span>{' '}
+              Entering the knockouts, transfers are <span className="font-bold">unlimited and free</span> this
+              round — reshape your whole squad with no −4 hits. (Normal free-transfer limits return next round.)
+            </div>
+          )}
           {stageLocked && (
             <div className="mt-2 px-3 py-2 rounded-xl bg-violet-500/10 border border-violet-500/30 text-[11px] sm:text-xs text-violet-200 leading-snug">
               Your squad is locked while this round is being played. Changes are
@@ -3292,6 +3312,34 @@ export default function SquadPage() {
                   groups, the second for the knockouts.
                   {!chip.active && !chip.used && ' You can change your mind and cancel it any time before the stage deadline.'}
                 </p>
+                {(chip.id === 'WILDCARD_1' || chip.id === 'WILDCARD_2') && !chip.used && (() => {
+                  // A Wildcard played FOR the Round of 32 is wasted: that round
+                  // already hands everyone a free unlimited rebuild. Detect it
+                  // for both the "arm for next round" case (next round is R32)
+                  // and the "use now" case (R32 is the live open stage).
+                  const wastedOnR32 = chip.forNextRound
+                    ? Boolean(nextRound?.autoUnlimited)
+                    : autoUnlimitedStage;
+                  return wastedOnR32 ? (
+                    <div className="mt-2 mb-1 p-3 rounded-lg bg-rose-500/10 border border-rose-500/40">
+                      <p className="text-rose-300 text-[11px] font-bold mb-1">Don&apos;t waste it</p>
+                      <p className="text-rose-200/85 text-[11px] leading-snug">
+                        The Round of 32 already gives <span className="font-bold">everyone unlimited free
+                        transfers</span> — a Wildcard here does nothing extra and is gone for good. Save it
+                        for a later knockout round (R16 onward).
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mt-2 mb-1 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                      <p className="text-amber-300 text-[11px] font-semibold mb-1">Heads up</p>
+                      <p className="text-amber-200/80 text-[11px] leading-snug">
+                        Playing a Wildcard wipes any banked and mercy free transfers — you start the
+                        next round on the base allowance. Use your free transfers first if you want to
+                        keep them.
+                      </p>
+                    </div>
+                  );
+                })()}
                 {chip.active && chipDeadline && !stageLocked && (
                   <p className="text-emerald-300/80 text-[11px] font-semibold">
                     Locks in {formatCountdown(chipDeadline, now)}. After that it&apos;s spent.
@@ -3299,9 +3347,17 @@ export default function SquadPage() {
                 )}
                 {chip.active && stageLocked && (
                   chip.forNextRound ? (
-                    <p className="text-emerald-300/80 text-[11px] font-semibold">
-                      Armed for {chip.nextRoundName ?? 'the next round'} — queue unlimited free transfers now. Cancel any time before that round starts.
-                    </p>
+                    nextRound?.autoUnlimited ? (
+                      <p className="text-rose-300 text-[11px] font-bold">
+                        ⚠ Armed for {chip.nextRoundName ?? 'the next round'}, which already gives everyone
+                        unlimited free transfers — this Wildcard will be wasted. Cancel it now and save it
+                        for a later knockout round.
+                      </p>
+                    ) : (
+                      <p className="text-emerald-300/80 text-[11px] font-semibold">
+                        Armed for {chip.nextRoundName ?? 'the next round'} — queue unlimited free transfers now. Cancel any time before that round starts.
+                      </p>
+                    )
                   ) : (
                     <p className="text-white/40 text-[11px] font-semibold">Locked in. The stage has started.</p>
                   )

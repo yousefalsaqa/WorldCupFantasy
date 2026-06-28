@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
+import { markEliminations } from '@/lib/mark-eliminations';
 
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
   throw new Error('JWT_SECRET environment variable is required in production');
@@ -83,21 +84,12 @@ export async function POST(request: Request) {
       },
     });
 
-    // If knockout match and finished, mark loser as eliminated
-    if (isFinished && winnerId) {
-      const stage = await prisma.stage.findUnique({ where: { id: match.stageId } });
-      const isKnockout = stage && stage.order >= 4; // R32 and beyond
-      
-      if (isKnockout) {
-        const loserId = winnerId === match.homeNationId ? match.awayNationId : match.homeNationId;
-        await prisma.nation.update({
-          where: { id: loserId },
-          data: {
-            isEliminated: true,
-            eliminatedAt: stage.stageId,
-          },
-        });
-      }
+    // Mark eliminations via the shared rule (KO losers — incl. this match's —
+    // plus group non-qualifiers once the guard is satisfied). Idempotent, so
+    // calling it after every result entry is safe; keeps manual SF/F entry
+    // working after API-Football Pro lapses.
+    if (isFinished) {
+      await markEliminations();
     }
 
     return NextResponse.json({ match: updatedMatch });

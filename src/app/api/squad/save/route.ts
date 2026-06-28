@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyToken, JWTPayload } from '@/lib/auth';
 import { getStageLock, LOCKED_ERROR } from '@/lib/deadline';
+import { maxPerNationForStage } from '@/lib/wc-constants';
 
 // This route is dynamic because it reads cookies for authentication
 export const dynamic = 'force-dynamic';
@@ -90,11 +91,9 @@ export async function POST(request: NextRequest) {
     // banking code in lib/squad-points gates on firstSquadSavedAt, stamped
     // below on the first complete save).
     const existingCount = await prisma.squadPlayer.count({ where: { teamId: team.id } });
-    if (existingCount > 0) {
-      const { locked } = await getStageLock();
-      if (locked) {
-        return NextResponse.json({ error: LOCKED_ERROR }, { status: 403 });
-      }
+    const { stage: activeStage, locked } = await getStageLock();
+    if (existingCount > 0 && locked) {
+      return NextResponse.json({ error: LOCKED_ERROR }, { status: 403 });
     }
 
     // Nation-limit check (3 max per nation). Mirrors /api/transfers and the
@@ -118,6 +117,9 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+    // Nation cap — 3 by default, relaxes in the late knockouts (5 at SF/3rd,
+    // none at the Final) keyed on the active stage.
+    const maxPerNation = maxPerNationForStage(activeStage?.stageId);
     const nationCounts: Record<string, { count: number; name: string }> = {};
     for (const p of submittedPlayers) {
       const entry = nationCounts[p.nationId];
@@ -128,9 +130,9 @@ export async function POST(request: NextRequest) {
       }
     }
     for (const { count, name } of Object.values(nationCounts)) {
-      if (count > 3) {
+      if (count > maxPerNation) {
         return NextResponse.json(
-          { error: `Cannot have more than 3 players from ${name} (you have ${count}).` },
+          { error: `Cannot have more than ${maxPerNation} players from ${name} (you have ${count}).` },
           { status: 400 },
         );
       }

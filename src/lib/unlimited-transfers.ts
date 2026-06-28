@@ -13,7 +13,9 @@
 //   b) the active stage is GR1 and its deadline (= first kickoff) hasn't
 //      passed — everyone can rebuild freely until the tournament starts, or
 //   c) an unlimited-transfer chip (Wildcard 1/2, Free Hit) is active for
-//      this team in the active stage.
+//      this team in the active stage, or
+//   d) the active stage is an AUTO-UNLIMITED stage (R32 — the group→knockout
+//      crossover gives the whole field a free rebuild; see wc-constants).
 //
 // NEVER unlimited while the stage is locked (round in progress): in that
 // window transfers are QUEUED for the next round and capped at the
@@ -26,6 +28,7 @@ import {
   hasUnlimitedTransferChip,
   type ChipType,
 } from './chips-active';
+import { isAutoUnlimitedTransferStage } from './wc-constants';
 
 export async function computeUnlimitedTransfers(teamId: string): Promise<boolean> {
   const activeStage = await prisma.stage.findFirst({
@@ -40,6 +43,9 @@ export async function computeUnlimitedTransfers(teamId: string): Promise<boolean
   if (locked) return false; // round in progress → queue rules apply
 
   if (activeStage.stageId === 'GR1') return true; // pre-tournament grace
+
+  // Auto-unlimited crossover stage (R32): free rebuild for everyone, no chip.
+  if (isAutoUnlimitedTransferStage(activeStage.stageId)) return true;
 
   const teamStage = await prisma.teamStage.findUnique({
     where: { teamId_stageId: { teamId, stageId: activeStage.id } },

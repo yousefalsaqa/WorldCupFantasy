@@ -4,6 +4,7 @@ import { verifyToken } from '@/lib/auth';
 import { computeUnlimitedTransfers } from '@/lib/unlimited-transfers';
 import { parsePendingTransfers } from '@/lib/pending-transfers';
 import { liveTeamDeltas } from '@/lib/live-team-totals';
+import { maxPerNationForStage, isAutoUnlimitedTransferStage } from '@/lib/wc-constants';
 
 export const dynamic = 'force-dynamic';
 
@@ -158,7 +159,7 @@ export async function GET(request: NextRequest) {
     // stage's own deadline, so it works for a late joiner at ANY stage.
     const activeStage = await prisma.stage.findFirst({
       where: { isActive: true },
-      select: { id: true, name: true, order: true, deadlineTime: true },
+      select: { id: true, stageId: true, name: true, order: true, deadlineTime: true },
     });
     const effectiveTeam = refreshedTeam ?? team;
     const isLate = !!(
@@ -260,6 +261,7 @@ export async function GET(request: NextRequest) {
             code: sp.player.nation.code,
             kitColor1: sp.player.nation.kitColor1,
             kitColor2: sp.player.nation.kitColor2,
+            isEliminated: sp.player.nation.isEliminated,
           },
         },
         stats: {
@@ -306,6 +308,30 @@ export async function GET(request: NextRequest) {
     }
 
     const unlimitedTransfers = await computeUnlimitedTransfers(team.id);
+
+    // Effective nation cap for the round the picker targets: the active stage
+    // when open, the next incomplete stage when locked (transfers queue for it).
+    // Cap relaxes in late knockouts (5 at SF/3rd, none at the Final). Infinity
+    // can't ride JSON, so map "no cap" to a large sentinel the client treats as
+    // unlimited.
+    const lockedNow = !!(activeStage?.deadlineTime && new Date() >= activeStage.deadlineTime);
+    let capStageId = activeStage?.stageId ?? null;
+    if (lockedNow && activeStage) {
+      const nextForCap = await prisma.stage.findFirst({
+        where: { order: { gt: activeStage.order }, isComplete: false },
+        orderBy: { order: 'asc' },
+        select: { stageId: true },
+      });
+      capStageId = nextForCap?.stageId ?? capStageId;
+    }
+    const rawCap = maxPerNationForStage(capStageId);
+    const maxPerNation = Number.isFinite(rawCap) ? rawCap : 99;
+
+    // True only when transfers are free because this is the auto-unlimited
+    // crossover stage (R32) and its window is open — lets the client show a
+    // "free rebuild" banner distinct from chip-driven or pre-tournament free
+    // transfers.
+    const autoUnlimitedTransferStage = !lockedNow && isAutoUnlimitedTransferStage(activeStage?.stageId);
 
     // Hydrate transfers queued for next round so the squad page can show a
     // "queued for next round" card with cancel buttons. Player lookups only
@@ -409,6 +435,12 @@ export async function GET(request: NextRequest) {
       // When true the squad page suppresses point-hit messaging since
       // transfers are effectively free.
       unlimitedTransfers,
+      // Effective nation cap for the picker (3 normally; 5 at SF/3rd; 99 = no
+      // cap at the Final). Client uses it instead of a hardcoded 3.
+      maxPerNation,
+      // True when transfers are free specifically because of the R32 free
+      // rebuild (open window), so the client can show a tailored banner.
+      autoUnlimitedTransferStage,
       // Transfers queued while the current round is locked; applied at the
       // next stage boundary. Empty array when nothing is queued.
       queuedTransfers,

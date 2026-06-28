@@ -13,16 +13,12 @@ import {
   serializePendingTransfers,
   type PendingTransfer,
 } from '@/lib/pending-transfers';
+import { maxPerNationForStage, isAutoUnlimitedTransferStage } from '@/lib/wc-constants';
 
 // This route is dynamic because it reads cookies for authentication
 export const dynamic = 'force-dynamic';
 
 const TRANSFER_HIT_COST = 4;
-
-// FIFA World Cup rule: max 3 players from any single nation in your 15-man
-// squad. Mirrors the UI check in /transfers and /squad, and matches what
-// /api/squad/route.ts already enforces on single-player adds.
-const MAX_PLAYERS_PER_NATION = 3;
 
 // Set to true for testing until first gameweek - allows unlimited free transfers
 const UNLIMITED_TRANSFERS = false;
@@ -250,13 +246,27 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Nation-limit check (3 max per nation). The UI in /transfers has always
-    // checked this client-side; we move it server-side so an attacker can't
-    // bypass the rule by hitting the API directly. We model the final squad
-    // as: (current squad minus players being sold or already queued out) +
-    // (new incoming players + players already queued in), then bucket by
-    // nation. Incoming players' nations need explicit lookups because
-    // team.squadPlayers doesn't include them.
+    // Nation-limit check. The cap is 3 by default but RELAXES in the late
+    // knockouts (5 at SF/3rd, no cap at the Final) so an XI stays fillable as
+    // the field shrinks — keyed on the stage these transfers form: the active
+    // stage when open, the next incomplete stage when queueing.
+    let capStageId: string | null = lockedStage?.stageId ?? null;
+    if (queueMode && lockedStage) {
+      const nextForCap = await prisma.stage.findFirst({
+        where: { order: { gt: lockedStage.order }, isComplete: false },
+        orderBy: { order: 'asc' },
+        select: { stageId: true },
+      });
+      capStageId = nextForCap?.stageId ?? capStageId;
+    }
+    const maxPerNation = maxPerNationForStage(capStageId);
+
+    // The UI in /transfers has always checked this client-side; we move it
+    // server-side so an attacker can't bypass the rule by hitting the API
+    // directly. We model the final squad as: (current squad minus players being
+    // sold or already queued out) + (new incoming players + players already
+    // queued in), then bucket by nation. Incoming players' nations need
+    // explicit lookups because team.squadPlayers doesn't include them.
     const allIncomingIds = [...playersIn, ...Array.from(pendingInIds)];
     const incomingPlayers = await prisma.player.findMany({
       where: { id: { in: allIncomingIds } },
@@ -284,10 +294,10 @@ export async function POST(request: NextRequest) {
     // newly-reported offender.
     for (const p of incomingPlayers) {
       if (!playersIn.includes(p.id)) continue;
-      if (finalNationCounts[p.nationId] > MAX_PLAYERS_PER_NATION) {
+      if (finalNationCounts[p.nationId] > maxPerNation) {
         return NextResponse.json(
           {
-            error: `Cannot have more than ${MAX_PLAYERS_PER_NATION} players from ${p.nation.name} (${p.displayName} would be the 4th).`,
+            error: `Cannot have more than ${maxPerNation} players from ${p.nation.name} (${p.displayName} would be the ${maxPerNation + 1}th).`,
           },
           { status: 400 },
         );
@@ -360,6 +370,12 @@ export async function POST(request: NextRequest) {
       // once GR1 kicks off, so reaching here during GR1 means we're
       // pre-kickoff.) From GR2 onward the normal per-stage allocation
       // applies.
+      unlimitedTransfers = true;
+    } else if (isAutoUnlimitedTransferStage(activeStage.stageId)) {
+      // Auto-unlimited crossover stage (R32): the whole field gets a free
+      // rebuild entering the knockouts — no chip consumed, no -4 hits. Not a
+      // wildcard (isWildcardActive stays false). Mercy is skipped at this
+      // boundary in stage-advance since the rebuild is free anyway.
       unlimitedTransfers = true;
     } else {
       const teamStage = await prisma.teamStage.findUnique({

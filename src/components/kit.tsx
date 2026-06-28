@@ -394,6 +394,9 @@ interface PlayerCardProps {
   status?: PlayerStatus;
   /** True when this player's nation is currently playing */
   isPlaying?: boolean;
+  /** True when this player's nation is knocked out of the tournament. Greys the
+   *  card and replaces the fixture strip with an "OUT" marker. */
+  eliminated?: boolean;
   isCaptain?: boolean;
   isViceCaptain?: boolean;
   /** Highlight when player is selected for substitution */
@@ -458,6 +461,7 @@ export function PlayerCard({
   form,
   status,
   isPlaying,
+  eliminated,
   isCaptain,
   isViceCaptain,
   selectedForSub,
@@ -502,16 +506,18 @@ export function PlayerCard({
       )}
 
       <div className="relative" style={{ overflow: 'visible' }}>
-        <PlayerFace
-          photoUrl={player.photoUrl}
-          primaryColor={player.nation?.kitColor1 || '#334155'}
-          secondaryColor={player.nation?.kitColor2 || '#0f172a'}
-          number={player.shirtNumber}
-          nationCode={player.nation?.code || ''}
-          size={kitSize}
-          isCaptain={isCaptain}
-          isViceCaptain={isViceCaptain}
-        />
+        <div className={eliminated ? 'grayscale opacity-60' : ''}>
+          <PlayerFace
+            photoUrl={player.photoUrl}
+            primaryColor={player.nation?.kitColor1 || '#334155'}
+            secondaryColor={player.nation?.kitColor2 || '#0f172a'}
+            number={player.shirtNumber}
+            nationCode={player.nation?.code || ''}
+            size={kitSize}
+            isCaptain={isCaptain}
+            isViceCaptain={isViceCaptain}
+          />
+        </div>
 
         {/* Status badge bottom-left */}
         {statusBadge(status)}
@@ -540,16 +546,18 @@ export function PlayerCard({
           {player.displayName}
         </div>
 
-        {/* Fixture run (FPL-style). The multi-game strip wins when provided;
-            otherwise fall back to the single opponent badge. Chips share the
-            plate width evenly so it stays phone-friendly even at xs; the
-            first chip (next game) gets a white ring to read as "up next". */}
-        {nextFixtures && nextFixtures.length > 0 ? (
+        {/* Eliminated marker — replaces the (now-meaningless) fixture strip
+            with a grey "OUT" chip. Driven by the nation's isEliminated. */}
+        {eliminated ? (
+          <div className="mt-0.5 px-1 py-[1px] rounded-sm bg-slate-700/90 text-slate-300 text-[7px] sm:text-[9px] font-extrabold tracking-wider uppercase leading-none">
+            ✕ Out
+          </div>
+        ) : nextFixtures && nextFixtures.length > 0 ? (
           <div className="mt-0.5 flex items-stretch justify-center gap-[2px]">
             {nextFixtures.map((fx, i) => (
               <div
                 key={i}
-                title={`${fx.isHome ? 'vs' : '@'} ${fx.opponent}`}
+                title={`vs ${fx.opponent}`}
                 className={`flex-1 min-w-0 px-[1px] py-[1px] rounded-sm text-[7px] sm:text-[9px] font-extrabold leading-none tracking-tight ${difficultyClasses(fx.difficulty)} ${
                   i === 0 && nextFixtures.length > 1 ? 'ring-1 ring-white/50' : ''
                 }`}

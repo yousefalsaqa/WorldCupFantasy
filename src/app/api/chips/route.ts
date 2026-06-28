@@ -11,6 +11,7 @@ import {
   type ChipType,
 } from '@/lib/chips-active';
 import { parsePendingTransfers } from '@/lib/pending-transfers';
+import { isAutoUnlimitedTransferStage } from '@/lib/wc-constants';
 
 export const dynamic = 'force-dynamic';
 
@@ -183,6 +184,7 @@ export async function GET() {
       whichWildcard: ChipType;
       armed: boolean; canArm: boolean; used: boolean;
       canCancel: boolean; queuedWildcardTransfers: number;
+      autoUnlimited: boolean;
     } | null = null;
     if (locked && activeStage) {
       const next = await prisma.stage.findFirst({
@@ -211,6 +213,9 @@ export async function GET() {
           used,
           canCancel: isArmed && queued === 0,
           queuedWildcardTransfers: queued,
+          // R32 gives everyone a free unlimited rebuild, so a Wildcard armed
+          // for it is wasted — the client warns the user.
+          autoUnlimited: isAutoUnlimitedTransferStage(next.stageId),
         };
       }
     }

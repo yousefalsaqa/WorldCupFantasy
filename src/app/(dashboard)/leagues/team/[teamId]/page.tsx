@@ -48,6 +48,7 @@ interface ApiPlayer {
     kitColor1: string;
     kitColor2: string;
     flagUrl: string;
+    isEliminated?: boolean;
   };
 }
 
@@ -271,6 +272,7 @@ export default function LeagueTeamViewPage({
         <PlayerCard
           player={toCardPlayer(p)}
           nextFixtures={nextFixtures}
+          eliminated={p.nation.isEliminated}
           livePoints={displayPoints}
           isCaptain={p.isCaptain}
           isViceCaptain={p.isViceCaptain}
@@ -424,6 +426,7 @@ export default function LeagueTeamViewPage({
                 <PlayerCard
                   player={toCardPlayer(p)}
                   nextFixtures={nextFixturesFor(p.nation.code, 1)}
+                  eliminated={p.nation.isEliminated}
                   livePoints={rawPoints}
                   isCaptain={p.isCaptain}
                   isViceCaptain={p.isViceCaptain}

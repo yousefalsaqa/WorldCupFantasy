@@ -17,6 +17,11 @@ interface GroupStanding {
   goalsAgainst: number;
   goalDifference: number;
   points: number;
+  /** Knocked out of the tournament (4th in a completed group, group
+   *  non-qualifier, or a knockout loser). Drives the grey "OUT" treatment. */
+  isEliminated: boolean;
+  /** This nation has a match in progress right now (live cue). */
+  isLive: boolean;
 }
 
 export async function GET(request: Request) {
@@ -32,8 +37,20 @@ export async function GET(request: Request) {
         name: true,
         code: true,
         group: true,
+        isEliminated: true,
       },
     });
+
+    // Nations with a match in progress right now (live cue on the table).
+    const liveMatches = await prisma.match.findMany({
+      where: { isStarted: true, isFinished: false },
+      select: { homeNationId: true, awayNationId: true },
+    });
+    const liveNationIds = new Set<string>();
+    for (const m of liveMatches) {
+      liveNationIds.add(m.homeNationId);
+      liveNationIds.add(m.awayNationId);
+    }
 
     // Get all finished matches
     const matches = await prisma.match.findMany({
@@ -67,6 +84,8 @@ export async function GET(request: Request) {
         goalsAgainst: 0,
         goalDifference: 0,
         points: 0,
+        isEliminated: nation.isEliminated,
+        isLive: liveNationIds.has(nation.id),
       });
     }
 

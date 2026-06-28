@@ -153,6 +153,7 @@ export async function GET(
           kitColor2: sp.player.nation.kitColor2,
           flagUrl: sp.player.nation.flagUrl
             || `https://flagcdn.com/24x18/${getFlagCode(sp.player.nation.code)}.png`,
+          isEliminated: sp.player.nation.isEliminated,
         },
       };
     });

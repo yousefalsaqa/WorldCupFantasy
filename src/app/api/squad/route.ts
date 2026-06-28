@@ -6,6 +6,7 @@ import { logAudit } from '@/lib/audit';
 // import { validateSquad, validateStartingXI } from '@/lib/validation';
 import { SQUAD_SIZE } from '@/lib/constants';
 import { calculateSellPrice, roundPrice } from '@/lib/utils';
+import { maxPerNationForStage } from '@/lib/wc-constants';
 
 // This route is dynamic because it reads cookies for authentication
 export const dynamic = 'force-dynamic';
@@ -118,7 +119,7 @@ export async function POST(request: NextRequest) {
     // Without this gate, remove-then-add here was a free transfer that
     // bypassed every rule. Also freeze partial builds during a live round
     // for anyone who already had players before the deadline.
-    const { locked } = await getStageLock();
+    const { stage: activeStage, locked } = await getStageLock();
     if (locked && team.squadPlayers.length > 0) {
       return NextResponse.json({ error: LOCKED_ERROR }, { status: 403 });
     }
@@ -173,16 +174,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check nation limit (max 3 per nation)
+    // Check nation limit — 3 by default, relaxes in late knockouts (5 at
+    // SF/3rd, none at the Final) keyed on the active stage.
+    const maxPerNation = maxPerNationForStage(activeStage?.stageId);
     const nationCounts: Record<string, number> = {};
     for (const sp of team.squadPlayers) {
       nationCounts[sp.player.nationId] = (nationCounts[sp.player.nationId] || 0) + 1;
     }
     nationCounts[player.nationId] = (nationCounts[player.nationId] || 0) + 1;
 
-    if (nationCounts[player.nationId] > 3) {
+    if (nationCounts[player.nationId] > maxPerNation) {
       return NextResponse.json(
-        { error: `Cannot have more than 3 players from the same nation` },
+        { error: `Cannot have more than ${maxPerNation} players from the same nation` },
         { status: 400 }
       );
     }

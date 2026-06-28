@@ -172,6 +172,12 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
     Array<{ matchId: string; opponent: string; isHome: boolean; kickoff: string; stageId: string; stageName: string }> | null
   >(null);
   const [adjustments, setAdjustments] = useState<PlayerAdjustmentPayload[]>([]);
+  // Nation tournament-progress state, captured from the performances fetch
+  // (player.nation carries isEliminated + eliminatedAt). Drives the journey track.
+  const [nationElim, setNationElim] = useState<{ isEliminated: boolean; eliminatedAt: string | null }>(
+    { isEliminated: false, eliminatedAt: null },
+  );
+  const [nationGroup, setNationGroup] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -202,6 +208,11 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
       setPerformances(data.performances || []);
       setUpcoming(data.upcoming || []);
       setAdjustments(data.adjustments || []);
+      setNationElim({
+        isEliminated: Boolean(data.player?.nation?.isEliminated),
+        eliminatedAt: data.player?.nation?.eliminatedAt ?? null,
+      });
+      setNationGroup(data.player?.nation?.group ?? null);
     } catch (err) {
       console.error('Failed to load performances:', err);
       setError('Failed to load match history');
@@ -288,6 +299,31 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
     difficulty: getFixtureDifficulty(nationCode, fx.opponent),
   }));
 
+  // ---- Tournament-journey track states (GR → R32 → … → 🏆) ----
+  const reached = new Set<number>([0]); // groups always reached
+  (performances || []).forEach((p) => {
+    const idx = toTrackIdx(p.match?.stageId);
+    if (idx >= 0) reached.add(idx);
+  });
+  (upcoming || []).forEach((u) => {
+    const idx = toTrackIdx(u.stageId);
+    if (idx >= 0) reached.add(idx);
+  });
+  const furthestIdx = Math.max(...Array.from(reached));
+  const upcomingIdxs = (upcoming || []).map((u) => toTrackIdx(u.stageId)).filter((i) => i >= 0);
+  const nextIdx = upcomingIdxs.length ? Math.min(...upcomingIdxs) : null;
+
+  const trackStates: PipState[] = (() => {
+    if (nationElim.isEliminated) {
+      const exit = nationElim.eliminatedAt;
+      const lastDone = exit && exit.startsWith('GR') ? 0 : (toTrackIdx(exit) >= 0 ? toTrackIdx(exit) : furthestIdx);
+      const outIdx = Math.min(lastDone + 1, TRACK_IDS.length - 1);
+      return TRACK_IDS.map((_, i) => (i <= lastDone ? 'done' : i === outIdx ? 'out' : 'future'));
+    }
+    const current = nextIdx != null ? nextIdx : furthestIdx;
+    return TRACK_IDS.map((_, i) => (i < current ? 'done' : i === current ? 'current' : 'future'));
+  })();
+
   return (
     <div
       className="fixed inset-0 bg-black/80 z-[9999] backdrop-blur-sm flex items-start sm:items-center justify-center"
@@ -366,6 +402,11 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
                   <img src={getFlagUrl(player.nation?.code || '')} alt="" className="w-3.5 h-2.5 rounded-[1px] object-cover" />
                   <span className="text-white text-[10px] font-bold">{player.nation?.code}</span>
                 </span>
+                {nationGroup && (
+                  <span className="px-1.5 py-[2px] rounded-md text-[10px] font-bold bg-white/10 ring-1 ring-white/15 text-white/80">
+                    Group {nationGroup}
+                  </span>
+                )}
                 <span className={`px-1.5 py-[2px] rounded-md text-[10px] font-black ${
                   player.position === 'GK' ? 'bg-amber-500/30 text-amber-200 ring-1 ring-amber-400/40' :
                   player.position === 'DEF' ? 'bg-sky-500/30 text-sky-200 ring-1 ring-sky-400/40' :
@@ -489,7 +530,7 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
                       i === 0 ? 'border-white/25 ring-1 ring-white/15' : 'border-white/10'
                     }`}
                   >
-                    <span className="text-white/40 text-[9px] font-bold">{fx.isHome ? 'vs' : '@'}</span>
+                    <span className="text-white/40 text-[9px] font-bold">vs</span>
                     <img src={getFlagUrl(fx.opponent)} alt="" className="w-3.5 h-2.5 rounded-[1px] object-cover" />
                     <span className="text-white text-[10px] font-bold">{fx.opponent}</span>
                     <span className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm text-[9px] font-black ${fdrPill(fx.difficulty)}`}>
@@ -501,20 +542,26 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
             </div>
           )}
 
+          {/* Tournament journey — the nation's run through the rounds. */}
+          <div>
+            <h3 className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-1.5">Run</h3>
+            <StageTrack states={trackStates} />
+          </div>
+
           {/* Season-aggregate stats — derived from the same per-match
               PlayerPerformance rows we fetch for the Match History
               table below. Labels mirror what the scoring engine
               actually stores; "DC" matches the column header used
               one row down for consistency. */}
           <div>
-            <h3 className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2">Stats</h3>
-            <div className="grid grid-cols-3 gap-2">
-              <StatTile label="Goals" value={statsLoading ? '—' : seasonStats.goals} />
-              <StatTile label="Assists" value={statsLoading ? '—' : seasonStats.assists} />
+            <h3 className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-1.5">Stats</h3>
+            <div className="grid grid-cols-6 gap-1.5">
+              <StatTile label="Gls" value={statsLoading ? '—' : seasonStats.goals} />
+              <StatTile label="Ast" value={statsLoading ? '—' : seasonStats.assists} />
               <StatTile label="Apps" value={statsLoading ? '—' : seasonStats.apps} />
-              <StatTile label="Minutes" value={statsLoading ? '—' : seasonStats.minutes} />
+              <StatTile label="Min" value={statsLoading ? '—' : seasonStats.minutes} />
               <StatTile label="DC" value={statsLoading ? '—' : seasonStats.defensiveActions} />
-              <StatTile label="Clean" value={statsLoading ? '—' : seasonStats.cleanSheets} />
+              <StatTile label="CS" value={statsLoading ? '—' : seasonStats.cleanSheets} />
             </div>
           </div>
 
@@ -563,7 +610,7 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
                             className="w-4 h-3 rounded-sm object-cover ring-1 ring-white/10 shrink-0 grayscale"
                           />
                           <span className="text-[10px] text-white/70 font-medium truncate">
-                            {isHome ? 'vs' : '@'} {opp.code}
+                            vs {opp.code}
                           </span>
                           <span className="text-[9px] text-white/40 ml-auto shrink-0">{score}</span>
                         </div>
@@ -589,7 +636,7 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
                             className="w-4 h-3 rounded-sm object-cover ring-1 ring-white/10 shrink-0"
                           />
                           <span className="text-[10px] text-white/80 font-medium truncate">
-                            {isHome ? 'vs' : '@'} {opp.code}
+                            vs {opp.code}
                           </span>
                           <span className="text-[9px] text-white/40 ml-auto shrink-0">{score}</span>
                           {perf.isLive && (
@@ -702,11 +749,49 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
   );
 }
 
+// Tournament-journey track: GR → R32 → R16 → QF → SF → 🏆. Completed rounds
+// filled, the current round glows, future rounds faint; an eliminated nation
+// caps with a grey "OUT" at the round it exited.
+const TRACK_IDS = ['GR', 'R32', 'R16', 'QF', 'SF', 'F'] as const;
+const TRACK_LABELS: Record<string, string> = { GR: 'GR', R32: 'R32', R16: 'R16', QF: 'QF', SF: 'SF', F: '🏆' };
+
+function toTrackIdx(stageId: string | null | undefined): number {
+  if (!stageId) return -1;
+  if (stageId.startsWith('GR')) return 0;
+  if (stageId === '3RD') return 4; // play-off sits at SF depth
+  return TRACK_IDS.indexOf(stageId as typeof TRACK_IDS[number]);
+}
+
+type PipState = 'done' | 'current' | 'out' | 'future';
+
+function StageTrack({ states }: { states: PipState[] }) {
+  const pip = (s: PipState) => {
+    switch (s) {
+      case 'done': return 'bg-emerald-500/25 text-emerald-200 ring-1 ring-emerald-500/40';
+      case 'current': return 'bg-emerald-500 text-white ring-2 ring-emerald-300/80 shadow-[0_0_10px_rgba(16,185,129,0.6)] animate-pulse';
+      case 'out': return 'bg-rose-500/15 text-rose-300/90 ring-1 ring-rose-500/30';
+      default: return 'bg-white/5 text-white/25 ring-1 ring-white/10';
+    }
+  };
+  return (
+    <div className="flex items-center gap-1">
+      {TRACK_IDS.map((id, i) => (
+        <div
+          key={id}
+          className={`flex-1 min-w-0 text-center rounded-md py-1 text-[9px] font-black tracking-tight ${pip(states[i])}`}
+        >
+          {states[i] === 'out' ? 'OUT' : TRACK_LABELS[id]}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function StatTile({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="bg-white/5 rounded-lg p-2 border border-white/5">
-      <p className="text-[9px] font-bold text-white/30 uppercase tracking-wider mb-0.5">{label}</p>
-      <p className="text-sm font-bold text-white">{value}</p>
+    <div className="bg-white/5 rounded-md px-1.5 py-1 border border-white/5 text-center">
+      <p className="text-sm font-black text-white leading-none">{value}</p>
+      <p className="text-[8px] font-bold text-white/35 uppercase tracking-wide mt-0.5">{label}</p>
     </div>
   );
 }
