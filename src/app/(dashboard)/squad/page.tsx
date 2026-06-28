@@ -42,6 +42,26 @@ interface ChipData {
   nextRoundName?: string;
 }
 
+// Gameweek-history payload (subset of /api/gameweek/[stageId]).
+interface HistPlayer {
+  playerId: string;
+  displayName: string;
+  position: string;
+  nation: { code: string; name: string; kitColor1: string; kitColor2: string; isEliminated?: boolean };
+  photoUrl?: string | null;
+  shirtNumber: number | null;
+  isStarting: boolean;
+  isCaptain: boolean;
+  isViceCaptain: boolean;
+  benchOrder: number | null;
+  totalPoints: number;
+}
+interface GameweekHistory {
+  stage: { stageId: string; name: string };
+  teamStage: { totalPoints: number; chipsUsed: string[] } | null;
+  players: HistPlayer[];
+}
+
 interface NextRoundChip {
   stageId: string;
   name: string;
@@ -228,6 +248,98 @@ function formatFixtureDate(dateStr: string, tz?: string): string {
 // Position limits
 const POSITION_LIMITS: Record<Position, number> = { GK: 2, DEF: 5, MID: 5, FWD: 3 };
 const MAX_PER_NATION = 3;
+// Gameweek-history slider — WIP, intentionally OFF in production. Flip to true
+// to finish/ship it (carousel + squad-page top section still pending). The code
+// (state/effects/overlay/HistoricalSquad) ships dormant while this is false.
+const SHOW_GW_HISTORY = false;
+
+// Read-only historical squad for the gameweek slider: that round's XI on the
+// pitch + bench, each card tappable (opens the read-only detail modal). Points
+// shown are that week's (captain doubled/tripled per the round's chip). Returns
+// a single stable <div> (never a fragment) to keep React DOM-tracking happy.
+function HistoricalSquad({
+  loading,
+  data,
+  onSelect,
+}: {
+  loading: boolean;
+  data: GameweekHistory | null;
+  onSelect: (p: HistPlayer) => void;
+}) {
+  if (loading || !data || !data.stage || !Array.isArray(data.players)) {
+    return (
+      <div className="rounded-2xl ring-1 ring-white/10 bg-white/[0.03] py-16 flex items-center justify-center mb-5">
+        <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+  const players = data.players;
+  if (players.length === 0) {
+    return (
+      <div className="rounded-2xl ring-1 ring-white/10 bg-white/[0.03] py-12 text-center text-white/40 mb-5">
+        No squad recorded for {data.stage.name}.
+      </div>
+    );
+  }
+  const mult = data.teamStage?.chipsUsed?.includes('TRIPLE_CAPTAIN') ? 3 : 2;
+  const xi = players.filter((p) => p.isStarting);
+  const bench = players.filter((p) => !p.isStarting).sort((a, b) => (a.benchOrder ?? 9) - (b.benchOrder ?? 9));
+  const byPos = (pos: string) => xi.filter((p) => p.position === pos);
+  const card = (p: HistPlayer) => (
+    <div key={p.playerId} className="flex-shrink-0">
+      <PlayerCard
+        player={{ id: p.playerId, displayName: p.displayName, position: p.position, shirtNumber: p.shirtNumber, photoUrl: p.photoUrl, nation: p.nation }}
+        livePoints={p.isCaptain ? p.totalPoints * mult : p.totalPoints}
+        isCaptain={p.isCaptain}
+        isViceCaptain={p.isViceCaptain}
+        eliminated={p.nation.isEliminated}
+        size="xs"
+        onClick={() => onSelect(p)}
+      />
+    </div>
+  );
+  return (
+    <div>
+      <div className="relative rounded-2xl mb-5 sm:mb-6 overflow-hidden shadow-[0_20px_60px_-20px_rgba(0,0,0,0.65)] ring-1 ring-white/10">
+        <PitchBg />
+        <div className="relative z-10 p-2 sm:p-6 space-y-4 sm:space-y-7 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div className="flex justify-center gap-1.5 sm:gap-6 min-w-max sm:min-w-0">{byPos('FWD').map(card)}</div>
+          <div className="flex justify-center gap-1 sm:gap-4 min-w-max sm:min-w-0">{byPos('MID').map(card)}</div>
+          <div className="flex justify-center gap-1 sm:gap-4 min-w-max sm:min-w-0">{byPos('DEF').map(card)}</div>
+          <div className="flex justify-center gap-2 sm:gap-6 min-w-max sm:min-w-0">{byPos('GK').map(card)}</div>
+        </div>
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 px-3 py-1 rounded-full bg-black/50 text-white text-[11px] font-black backdrop-blur-sm whitespace-nowrap">
+          {data.stage.name}{data.teamStage ? ` · ${data.teamStage.totalPoints} pts` : ''}
+        </div>
+      </div>
+      {bench.length > 0 && (
+        <div className="px-3 sm:px-0 mb-5">
+          <div className="rounded-2xl overflow-hidden shadow-xl bg-gradient-to-b from-slate-900 via-slate-950 to-black p-3 sm:p-4">
+            <h2 className="text-xs font-black text-white/70 uppercase tracking-widest mb-3 flex items-center gap-2">
+              <Users className="w-3.5 h-3.5" /> Bench
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+              {bench.map((p, i) => (
+                <div
+                  key={p.playerId}
+                  onClick={() => onSelect(p)}
+                  className="relative flex items-center gap-2 p-2 rounded-xl bg-white/[0.04] ring-1 ring-white/5 cursor-pointer hover:bg-white/[0.08]"
+                >
+                  <div className="flex items-center justify-center w-6 h-6 rounded-md bg-gradient-to-br from-pink-500 to-rose-600 text-white font-black text-xs shrink-0">{i + 1}</div>
+                  <PlayerFace photoUrl={p.photoUrl} primaryColor={p.nation.kitColor1} secondaryColor={p.nation.kitColor2} number={p.shirtNumber} nationCode={p.nation.code} size="xs" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-white text-xs font-bold truncate">{p.displayName}</div>
+                    <div className="text-white/40 text-[10px]">{p.position} · {p.totalPoints} pts</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function SquadPage() {
   const router = useRouter();
@@ -286,6 +398,12 @@ export default function SquadPage() {
   // user can arrange formation/captain around the players coming in next
   // round. Only meaningful when there are queued transfers; default "live".
   const [planView, setPlanView] = useState(false);
+  // Gameweek history slider state.
+  const [gwStages, setGwStages] = useState<Array<{ stageId: string; name: string; points: number | null; isActive: boolean; isComplete: boolean }>>([]);
+  const [historyStageId, setHistoryStageId] = useState<string | null>(null);
+  const [historyData, setHistoryData] = useState<GameweekHistory | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historySelected, setHistorySelected] = useState<HistPlayer | null>(null);
   const [showPoints, setShowPoints] = useState(false);
   // Current-round (this gameweek) points + stage label for the inline pill —
   // the tappable popup shows the cumulative total + per-week breakdown.
@@ -1767,11 +1885,35 @@ export default function SquadPage() {
     fetch('/api/team/stages-summary', { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (!cancelled && d) setRoundPoints({ points: d.currentRoundPoints ?? 0, stageId: d.currentStageId ?? null });
+        if (!cancelled && d) {
+          setRoundPoints({ points: d.currentRoundPoints ?? 0, stageId: d.currentStageId ?? null });
+          if (Array.isArray(d.stages)) {
+            // ALL stages (GS1 → Final). Future ones render disabled — no squad
+            // to preview yet — but stay visible for full-tournament context.
+            setGwStages(
+              d.stages.map((s: { stageId: string; name: string; points: { totalPoints: number } | null; isActive: boolean; isComplete: boolean }) => ({
+                stageId: s.stageId, name: s.name, points: s.points?.totalPoints ?? null, isActive: s.isActive, isComplete: s.isComplete,
+              })),
+            );
+          }
+        }
       })
       .catch(() => { /* non-fatal */ });
     return () => { cancelled = true; };
   }, []);
+
+  // Fetch a past gameweek's squad when the slider selects one (null = current).
+  useEffect(() => {
+    if (!historyStageId) { setHistoryData(null); return; }
+    let cancelled = false;
+    setHistoryLoading(true);
+    fetch(`/api/gameweek/${historyStageId}`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled) setHistoryData(d); })
+      .catch(() => { if (!cancelled) setHistoryData(null); })
+      .finally(() => { if (!cancelled) setHistoryLoading(false); });
+    return () => { cancelled = true; };
+  }, [historyStageId]);
 
   // Formation-only swap validity for the Planned lineup — NO current-round
   // played-locks, because next round hasn't kicked off.
@@ -3051,11 +3193,9 @@ export default function SquadPage() {
           />
         </div>
 
-        {/* Live ↔ Planned view toggle. Always visible. "Planned" overlays any
-            transfers queued for next round onto the pitch so the user can
-            arrange formation/captain around the incomers; the arrangement saves
-            to the current lineup and they inherit it when the round flips. With
-            nothing queued the two views show the same team. */}
+        {/* Live ↔ Planned view toggle. "Planned" overlays queued transfers onto
+            the pitch so the user can arrange around the incomers; the
+            arrangement saves to the current lineup for when the round flips. */}
         <div className="mt-3 inline-flex p-0.5 rounded-xl bg-white/5 ring-1 ring-white/10">
           <button
             type="button"
@@ -3139,27 +3279,18 @@ export default function SquadPage() {
         </div>
       )}
 
-      {/* Free Hit live banner – shown when the chip is currently active so the
-          user is reminded their squad will revert at end of stage. */}
+      {/* Free Hit live banner — one-liner reminder that the squad reverts. */}
       {chips.some(c => c.id === 'FREE_HIT' && c.active) && (
         <div className="px-3 sm:px-0 mb-3">
-          <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-transparent p-3 sm:p-4 flex items-start gap-3">
-            <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
-              <Wand2 className="w-5 h-5 text-amber-300" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-amber-200 font-black text-sm sm:text-base flex items-center gap-2 flex-wrap">
-                {transferOnPlanned ? 'Planning next round' : 'Free Hit Active'}
-                <span className="text-[10px] font-bold bg-amber-500/20 text-amber-200 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                  {transferOnPlanned ? 'Next round' : 'This stage only'}
-                </span>
-              </div>
-              <p className="text-amber-200/70 text-xs sm:text-sm mt-0.5 leading-snug">
-                {transferOnPlanned
-                  ? 'Your Free Hit reverts when this round ends, so transfers here apply to the team you get back — they queue for next round under the normal transfer rules.'
-                  : 'Make as many transfers as you like. Your squad will automatically revert to its previous lineup once this stage ends.'}
-              </p>
-            </div>
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 flex items-center gap-2">
+            <Wand2 className="w-4 h-4 text-amber-300 shrink-0" />
+            <p className="text-amber-100/90 text-xs leading-snug min-w-0">
+              <span className="font-bold text-amber-200">{transferOnPlanned ? 'Planning next round' : 'Free Hit active'}</span>
+              {' — '}
+              {transferOnPlanned
+                ? 'transfers here queue for the team you get back next round.'
+                : 'unlimited transfers; your squad reverts after this stage.'}
+            </p>
           </div>
         </div>
       )}
@@ -3224,8 +3355,8 @@ export default function SquadPage() {
           plain-English explanation and the activate/cancel actions. */}
       {chips.length > 0 && (
         <div className="px-3 sm:px-0 mb-4">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] font-black text-white/40 uppercase tracking-widest flex items-center gap-1 mr-1">
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <span className="shrink-0 text-[10px] font-black text-white/40 uppercase tracking-widest flex items-center gap-1 mr-1">
               <Sparkles className="w-3 h-3" />
               Chips
             </span>
@@ -3235,7 +3366,7 @@ export default function SquadPage() {
                 type="button"
                 onClick={() => setChipConfirm(chip)}
                 aria-label={`${chip.name}: ${chip.active ? 'active' : chip.used ? 'used' : chip.available ? 'available' : 'unavailable'}`}
-                className={`relative px-2.5 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap transition-all active:scale-95 ${
+                className={`relative shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap transition-all active:scale-95 ${
                   chip.active
                     ? 'bg-gradient-to-br from-emerald-500/40 to-emerald-700/30 ring-1 ring-emerald-400 text-emerald-100 shadow-[0_0_14px_rgba(16,185,129,0.45)]'
                     : chip.used
@@ -3472,6 +3603,38 @@ export default function SquadPage() {
       <p className="sm:hidden px-3 mb-2 text-center text-[10px] text-white/30 font-medium">
         Tap a player for details · hold to substitute
       </p>
+
+      {/* Gameweek slider — right above the pitch. WIP, gated off in prod. */}
+      {SHOW_GW_HISTORY && (
+      <div className="px-3 sm:px-0 mb-3 -mx-1 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div className="inline-flex gap-1.5 px-1">
+          {gwStages.map((s) => {
+            const isCurrent = s.isActive;
+            const future = !s.isComplete && !s.isActive;
+            const selected = isCurrent ? historyStageId === null : historyStageId === s.stageId;
+            const base = s.stageId.startsWith('GR') ? `GS${s.stageId.slice(2)}` : s.stageId;
+            const text = `${base}${isCurrent ? ' · now' : ''}${!future && s.points != null ? ` ${s.points}` : ''}`;
+            return (
+              <button
+                key={s.stageId}
+                type="button"
+                disabled={future}
+                onClick={() => { if (!future) setHistoryStageId(isCurrent ? null : s.stageId); }}
+                className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-black transition-colors whitespace-nowrap ${
+                  future
+                    ? 'bg-white/[0.03] text-white/25 cursor-not-allowed'
+                    : selected
+                      ? 'bg-emerald-500/90 text-emerald-950 shadow'
+                      : 'bg-white/5 text-white/60 ring-1 ring-white/10 hover:text-white'
+                }`}
+              >
+                {text}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      )}
 
       {/* Pitch */}
       <div className="relative rounded-2xl mb-5 sm:mb-6 overflow-hidden shadow-[0_20px_60px_-20px_rgba(0,0,0,0.65)] ring-1 ring-white/10">
@@ -3727,6 +3890,89 @@ export default function SquadPage() {
       )}
 
       {showPoints && <PointsBreakdownModal onClose={() => setShowPoints(false)} />}
+
+      {/* Past-gameweek squad — full-screen view on the app background so it
+          reads as the squad page swapping, not a popup. The live pitch stays
+          mounted underneath (overlay, never unmount/hide → no removeChild). The
+          slider lives inside too so you can slide between rounds or back to now. */}
+      {SHOW_GW_HISTORY && historyStageId && (
+        <div
+          className="fixed inset-0 z-[9999] bg-[#0a0e17] overflow-y-auto"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top) + 5.5rem)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.5rem)' }}
+        >
+          <div className="max-w-2xl mx-auto px-3">
+            {/* Header */}
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-lg font-black text-white truncate">
+                  {gwStages.find((s) => s.stageId === historyStageId)?.name ?? historyStageId}
+                </h2>
+                <p className="text-[11px] text-white/40 leading-tight">Your squad that round · read-only</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoryStageId(null)}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/10 text-white/80 text-xs font-bold hover:bg-white/15 active:scale-95"
+              >
+                <X className="w-3.5 h-3.5" /> Back to now
+              </button>
+            </div>
+
+            {/* Slider (inside the view) — switch rounds or tap "now" to close. */}
+            <div className="-mx-1 mb-3 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+              <div className="inline-flex gap-1.5 px-1">
+                {gwStages.map((s) => {
+                  const isCurrent = s.isActive;
+                  const future = !s.isComplete && !s.isActive;
+                  const selected = historyStageId === s.stageId;
+                  const base = s.stageId.startsWith('GR') ? `GS${s.stageId.slice(2)}` : s.stageId;
+                  const text = `${base}${isCurrent ? ' · now' : ''}${!future && s.points != null ? ` ${s.points}` : ''}`;
+                  return (
+                    <button
+                      key={s.stageId}
+                      type="button"
+                      disabled={future}
+                      onClick={() => { if (!future) setHistoryStageId(isCurrent ? null : s.stageId); }}
+                      className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-black transition-colors whitespace-nowrap ${
+                        future
+                          ? 'bg-white/[0.03] text-white/25 cursor-not-allowed'
+                          : selected
+                            ? 'bg-emerald-500/90 text-emerald-950 shadow'
+                            : 'bg-white/5 text-white/60 ring-1 ring-white/10 hover:text-white'
+                      }`}
+                    >
+                      {text}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <HistoricalSquad loading={historyLoading} data={historyData} onSelect={(p) => setHistorySelected(p)} />
+          </div>
+        </div>
+      )}
+
+      {/* Read-only detail for a player tapped on a past gameweek's pitch. */}
+      {historySelected && (
+        <PlayerDetailModal
+          player={{
+            id: historySelected.playerId,
+            displayName: historySelected.displayName,
+            position: historySelected.position,
+            shirtNumber: historySelected.shirtNumber,
+            photoUrl: historySelected.photoUrl,
+            points: historySelected.totalPoints,
+            nation: historySelected.nation,
+          }}
+          isCaptain={historySelected.isCaptain}
+          isViceCaptain={historySelected.isViceCaptain}
+          isStarting={historySelected.isStarting}
+          isAdmin={isAdmin}
+          readOnly
+          onClose={() => setHistorySelected(null)}
+        />
+      )}
 
       {/* Sub-off forfeit warning — fires when moving a player to the bench
           whose match has already kicked off this round. It's a one-way move:

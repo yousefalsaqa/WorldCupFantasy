@@ -48,6 +48,12 @@ export const metadata: Metadata = {
   formatDetection: {
     telephone: false,
   },
+  // Stop browser auto-translation (Chrome/Edge "Translate this page") from
+  // rewriting text nodes under React — that desyncs the DOM from React's tree
+  // and throws "Failed to execute 'removeChild'" runtime crashes.
+  other: {
+    google: 'notranslate',
+  },
 };
 
 // Separate viewport export (required by Next 14.x). themeColor here is what
@@ -67,8 +73,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={inter.className}>
+    <html lang="en" translate="no">
+      <body className={`${inter.className} notranslate`}>
         {/* Static splash – rendered as part of the initial HTML so it appears
          * the instant the page is parsed, long before the React bundle
          * finishes downloading and hydrating. <SplashRemover /> tears this

@@ -60,6 +60,10 @@ function FixturesContent() {
   const [roundOpen, setRoundOpen] = useState<Record<string, boolean>>({});
   const [scores, setScores] = useState<Record<string, MatchScore[]>>({});
   const [anyLive, setAnyLive] = useState(false);
+  // Knockout seed resolution: static KO fixtures only carry placeholders
+  // ("2A", "W M73"). /api/bracket resolves each tie (keyed by the same id,
+  // e.g. "M73") to the real nation codes once groups finish + fixtures sync.
+  const [bracketById, setBracketById] = useState<Record<string, { home: string | null; away: string | null }>>({});
   // Open fixture-detail modal (only fixtures that exist in the DB).
   const [openMatch, setOpenMatch] = useState<{ matchId: string; kickoffLabel: string } | null>(null);
   // Clock for the kickoff countdown. Starts null and is only set after
@@ -97,6 +101,29 @@ function FixturesContent() {
     loadScores();
   }, [loadScores]);
 
+  // Resolve knockout seeds → real teams once on mount (re-polled with scores
+  // below while live, so newly-decided ties fill in).
+  const loadBracket = useCallback(async () => {
+    try {
+      const res = await fetch('/api/bracket');
+      if (!res.ok) return;
+      const data = await res.json();
+      const map: Record<string, { home: string | null; away: string | null }> = {};
+      for (const round of (data.rounds ?? [])) {
+        for (const tie of (round.ties ?? [])) {
+          map[tie.id] = { home: tie.home?.code ?? null, away: tie.away?.code ?? null };
+        }
+      }
+      setBracketById(map);
+    } catch {
+      // placeholders remain — non-fatal
+    }
+  }, []);
+
+  useEffect(() => {
+    loadBracket();
+  }, [loadBracket]);
+
   // A kickoff is "imminent" from 1 min before scheduled time until 15 min
   // after (real first whistles run late). During that window we must poll
   // even though nothing is live yet — otherwise a page opened before
@@ -128,8 +155,16 @@ function FixturesContent() {
   // Find the DB match for a static fixture: same nation-code pair, closest
   // kickoff. Knockout placeholders ("1A", "W M73") never match a code pair
   // so they fall through to the plain time pill.
+  // Resolve a fixture's display codes — real teams for knockout ties once the
+  // bracket knows them, else the static (placeholder) codes.
+  const resolveCodes = (fixture: WorldCupFixture): { home: string; away: string } => {
+    const r = bracketById[fixture.id];
+    return { home: r?.home ?? fixture.home, away: r?.away ?? fixture.away };
+  };
+
   const scoreFor = (fixture: WorldCupFixture): MatchScore | null => {
-    const list = scores[`${fixture.home}|${fixture.away}`];
+    const { home, away } = resolveCodes(fixture);
+    const list = scores[`${home}|${away}`];
     if (!list || list.length === 0) return null;
     const t = parseFixtureDateTime(fixture.date, fixture.time).getTime();
     return list.reduce((best, m) =>
@@ -295,6 +330,7 @@ function FixturesContent() {
                 <div className="space-y-3 p-3">
                   {round.fixtures.map((fixture, i) => {
           const stadium = STADIUMS[fixture.stadium];
+          const { home: homeCode, away: awayCode } = resolveCodes(fixture);
           const score = scoreFor(fixture);
           const isLive = !!score && score.isStarted && !score.isFinished;
           const isFT = !!score && score.isFinished;
@@ -391,7 +427,7 @@ function FixturesContent() {
               <div className="flex items-center justify-between gap-2 mb-3">
                 {/* Home Team */}
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <TeamCell code={fixture.home} side="home" />
+                  <TeamCell code={homeCode} side="home" />
                 </div>
 
                 {/* Time / Score */}
@@ -419,7 +455,7 @@ function FixturesContent() {
 
                 {/* Away Team */}
                 <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
-                  <TeamCell code={fixture.away} side="away" />
+                  <TeamCell code={awayCode} side="away" />
                 </div>
               </div>
 

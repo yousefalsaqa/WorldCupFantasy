@@ -1,10 +1,78 @@
 # Live Points Feature — Handoff
 
-Last updated: 2026-06-27 (**LIVE** — GR3 winding down. Latest session: player-
-modal "Did not play" rows, Free-Hit-aware Planned view + transfers, DB-resolved
-next game (knockout-aware), and 4 more R32 fixtures synced (9/16). Earlier same
-day: captain-pill fix, NOR-FRA unbanked repair + safety-net sweep, KO deadlines
-+ R32 tooling. See sessions below.)
+Last updated: 2026-06-28 (**LIVE** — R32 active, open until Jun 28 19:00Z. This
+session: KO economy (elimination automation + R32 free-rebuild + cap relax),
+standings/bracket redesign, eliminated markers + player-card "Run" track, premium
+reprice. Gameweek-history slider is WIP (local, NOT shipped). See top session.)
+
+---
+
+## Session 2026-06-28 — KO ECONOMY + STANDINGS/BRACKET + CARD UX + REPRICE (DEPLOYED) · GW-HISTORY SLIDER (WIP, NOT SHIPPED)
+
+### DEPLOYED to main/prod (commits `101371d`, `ef9e9a6`)
+- **Elimination automation** — new `src/lib/mark-eliminations.ts` (shared by the
+  live cron, admin results route, and `scripts/apply-eliminations-mercy.ts`).
+  Marks: KO losers (finished KO w/ winnerId), group non-qualifiers (all groups
+  done + 16 R32 synced), and **4th-place in any COMPLETED group** (safe early
+  signal — 4th never advances). Cron runs it every tick BEFORE `maybeAdvanceStage`
+  so mercy reads fresh eliminations. **Confirmed live**: cron auto-marked the 7
+  third-place non-qualifiers after R32 sync (AuditLog `ELIMINATIONS_MARKED`).
+- **R32 = automatic unlimited free transfers** (no chip, no −4 hits) — the
+  group→knockout crossover gives everyone a free rebuild. `isAutoUnlimitedTransferStage`
+  in `wc-constants.ts`; wired into `unlimited-transfers.ts` + `/api/transfers`.
+  **Mercy is SKIPPED at the GR3→R32 boundary** (`stage-advance.ts`), resumes R16+.
+- **Nation cap relaxes late**: `maxPerNationForStage` — 3 default, **5 at SF/3rd,
+  uncapped at the Final**. Enforced in transfers/squad-save/squad routes + emitted
+  to the client picker via `/api/squad/get` (`maxPerNation`).
+- **Copy**: wildcard-wipes-banked/mercy warning + **wildcard-wasted-at-R32** red
+  warning (chip popup) + R32 "free rebuild" transfer banner.
+- **Standings redesign** (`/standings` + `/api/standings`): compact group-card
+  grid → tap = full-table bottom sheet; qualification zones + legend; live
+  cues/poll. **Groups ↔ Bracket toggle**; new `/api/bracket` resolves seeds from
+  standings + overlays synced DB scores (keyed by tie id M73…).
+- **Player cards/modal**: eliminated marker (grey + "✕ Out") on squad/builder/
+  bench/league (driven by `nation.isEliminated`); **"Run" stage-progress track**
+  (GR→R32→…→🏆, current glows, grey OUT cap) + **group chip** in the modal;
+  fixtures now read "vs" (no @); slimmed 6-up modal stat row.
+- **Transfer picker hides eliminated players** (can't score).
+
+### DB changes APPLIED to prod (this session)
+- **16 nations eliminated**: CZE QAT HAI TUR CUW TUN NZL KSA IRQ (4th) + JOR UZB
+  PAN + 4 more 3rd-place non-qualifiers (cron). `eliminatedAt='GR3'`.
+- **R32: all 16 fixtures synced** (`sync-knockout-from-api.ts --round=R32 --apply`).
+- **Premium reprice**: 11 players >£10m cut £1m (`scripts/lower-premium-prices.ts`);
+  **Ronaldo set to £9** manually. currentPrice only — £100 budget invariant intact.
+
+### ⚠ DEPLOY-READY but HELD (uncommitted, local only)
+- **`src/app/layout.tsx`** — `translate="no"` + `notranslate` + `google:notranslate`
+  meta. STOPS Chrome auto-translate from mutating text nodes → fixes
+  `NotFoundError: Failed to execute 'removeChild'` runtime crashes. **Should ship.**
+- **`fixtures/page.tsx`** — knockout ties now resolve to REAL teams via `/api/bracket`
+  (was placeholders "2A vs 2B"). Ready to ship.
+- **`squad/page.tsx`** — Free Hit banner → one line; chips bar → single scroll
+  line. (Bundled with the WIP slider below — that's why it's held.)
+
+### 🚧 GW-HISTORY SLIDER — WIP, **NOT a feature yet** (user's call), local only
+- Goal: a selector above the pitch to view PAST gameweek squads (read-only,
+  tappable). Built in `squad/page.tsx`: `gwStages`/`historyStageId`/`historyData`
+  state; `/api/gameweek/[stageId]` fetch; `HistoricalSquad` component; full-screen
+  **overlay** on the app bg (slider + that round's pitch + bench + per-player
+  points, captain ×mult). Tap a past stage → overlay; "Back to now" closes.
+- **Why an overlay, not in-place**: swapping the live pitch in place CRASHED React
+  (`removeChild`) — hiding/unmounting the live pitch desyncs the drag-drop-touch
+  DOM. The overlay keeps the live pitch mounted underneath = crash-free. Don't
+  reintroduce in-place hide/unmount of the live pitch.
+- Fixed: slider chip "[object Object]" (stages-summary `points` is an object →
+  use `.totalPoints`); overlay top-clip (paddingTop 5.5rem).
+- **TODO (tonight)**: (1) make the selector a true **swipeable carousel centered
+  on the current week** (currently a button row); (2) show the **regular
+  squad-page top section** (My Squad header + Total/Value/Bank stat cards) inside
+  the overlay so it reads as the squad page for that week; (3) then decide ship.
+
+### Run order / facts
+- Active stage **R32** (locked Jun 28 19:00Z). R32 economy is LIVE on prod.
+- Re-sync after R32 finishes (~Jul 4) for R16: `sync-knockout-from-api.ts
+  --round=R16 --apply`; cron auto-marks R32 losers + auto-fires R16 mercy.
 
 ---
 
