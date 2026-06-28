@@ -1188,6 +1188,8 @@ export default function SquadPage() {
     return allPlayers
       .filter((p) => {
         if (p.position !== selectingPosition) return false;
+        // Never offer players whose nation is knocked out — they can't score.
+        if (p.nation?.isEliminated) return false;
         // Accent-insensitive search ("goncalo" must find "Gonçalo"; iOS
         // keyboards also sneak in capitals and trailing spaces). Matches
         // nation name too so "brazil" lists the whole squad.

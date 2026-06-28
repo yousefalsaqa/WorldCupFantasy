@@ -33,6 +33,7 @@ export async function GET(request: Request) {
             code: true,
             kitColor1: true,
             kitColor2: true,
+            isEliminated: true,
           },
         },
       },
