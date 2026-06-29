@@ -44,6 +44,7 @@ interface TieSide {
 
 interface Tie {
   id: string;            // bracket fixture id (e.g. "M73")
+  matchId: string | null; // DB Match id once synced (for deep-linking to /fixtures)
   stageId: string;
   kickoff: string;       // ISO
   home: TieSide;
@@ -105,6 +106,7 @@ export async function GET() {
     const koMatches = await prisma.match.findMany({
       where: { stageId: { in: koStages.map((s) => s.id) } },
       select: {
+        id: true,
         stageId: true,
         homeScore: true, awayScore: true, isFinished: true, isStarted: true,
         kickoffTime: true, winnerId: true,
@@ -184,6 +186,7 @@ export async function GET() {
       const winnerCode = winnerByFixture.get(fx.id) ?? null;
       ties.push({
         id: fx.id,
+        matchId: db?.id ?? null,
         stageId,
         kickoff: new Date(`${fx.date}T${fx.time}:00-04:00`).toISOString(),
         home: { code: homeCode, label: fx.home, score: homeScore, winner: !!winnerCode && winnerCode === homeCode },

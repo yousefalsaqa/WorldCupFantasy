@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getFlagUrl } from '@/lib/flags';
 import { useUserTimezone } from '@/hooks/useTimezone';
@@ -182,6 +182,27 @@ function FixturesContent() {
       setFilter(groupParam as FilterOption);
     }
   }, [searchParams]);
+
+  // Deep link from the bracket: /fixtures?match=<dbMatchId> opens that game's
+  // detail once scores have loaded. Runs once so closing it doesn't re-open.
+  const handledMatchParam = useRef(false);
+  useEffect(() => {
+    if (handledMatchParam.current) return;
+    const matchParam = searchParams.get('match');
+    if (!matchParam) return;
+    for (const list of Object.values(scores)) {
+      const m = list.find((x) => x.id === matchParam);
+      if (m) {
+        handledMatchParam.current = true;
+        setFilter('knockout');
+        setOpenMatch({
+          matchId: m.id,
+          kickoffLabel: `${fmtTime(new Date(m.kickoff), timezone)} ${abbreviation}`,
+        });
+        return;
+      }
+    }
+  }, [scores, searchParams, timezone, abbreviation]);
 
   const allFixtures = [...GROUP_FIXTURES, ...KNOCKOUT_FIXTURES];
 

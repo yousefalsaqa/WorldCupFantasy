@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, Suspense, useCallback } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { getFlagUrl } from '@/lib/flags';
+import CircularBracket from '@/components/circular-bracket';
 
 interface GroupStanding {
   nationId: string;
@@ -26,34 +27,6 @@ interface StandingsData {
   groups: string[];
 }
 
-interface TieSide {
-  code: string | null;
-  label: string;
-  score: number | null;
-  winner: boolean;
-}
-interface BracketTie {
-  id: string;
-  stageId: string;
-  kickoff: string;
-  home: TieSide;
-  away: TieSide;
-  finished: boolean;
-  live: boolean;
-}
-interface BracketData {
-  rounds: { stageId: string; ties: BracketTie[] }[];
-}
-
-const ROUND_LABEL: Record<string, string> = {
-  R32: 'Round of 32',
-  R16: 'Round of 16',
-  QF: 'Quarter-finals',
-  SF: 'Semi-finals',
-  '3RD': '3rd place',
-  F: 'Final',
-};
-
 const ALL_GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 
 // Qualification zone by finishing position (0-indexed):
@@ -72,20 +45,12 @@ const ZONE_DOT: Record<string, string> = {
 
 function StandingsContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [standingsData, setStandingsData] = useState<StandingsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
-  const [view, setView] = useState<'groups' | 'bracket'>('groups');
-  const [bracket, setBracket] = useState<BracketData | null>(null);
-
-  const fetchBracket = useCallback(async () => {
-    try {
-      const res = await fetch('/api/bracket');
-      if (res.ok) setBracket(await res.json());
-    } catch (error) {
-      console.error('Failed to fetch bracket:', error);
-    }
-  }, []);
+  // Default to the knockout bracket — that's the live phase of the tournament.
+  const [view, setView] = useState<'groups' | 'bracket'>('bracket');
 
   const fetchStandings = useCallback(async () => {
     try {
@@ -108,23 +73,16 @@ function StandingsContent() {
     if (g && ALL_GROUPS.includes(g)) setOpenGroup(g);
   }, [searchParams]);
 
-  // Load the bracket the first time the user opens that view.
-  useEffect(() => {
-    if (view === 'bracket' && !bracket) fetchBracket();
-  }, [view, bracket, fetchBracket]);
-
-  // Light live-poll: only while a match is in progress somewhere.
+  // Light live-poll: only while a match is in progress somewhere. (The bracket
+  // view self-fetches + polls inside CircularBracket.)
   const anyLive = standingsData
     ? Object.values(standingsData.standings).some((rows) => rows.some((r) => r.isLive))
     : false;
   useEffect(() => {
     if (!anyLive) return;
-    const id = setInterval(() => {
-      fetchStandings();
-      if (view === 'bracket') fetchBracket();
-    }, 30000);
+    const id = setInterval(fetchStandings, 30000);
     return () => clearInterval(id);
-  }, [anyLive, view, fetchStandings, fetchBracket]);
+  }, [anyLive, fetchStandings]);
 
   if (loading) {
     return (
@@ -156,7 +114,7 @@ function StandingsContent() {
             {view === 'groups' ? 'Group Standings' : 'Knockout Bracket'}
           </h1>
           <p className="text-white/40 text-xs sm:text-sm">
-            {view === 'groups' ? 'Tap a group for the full table' : 'Swipe across the rounds'}
+            {view === 'groups' ? 'Tap a group for the full table' : 'Tap a game to see more details'}
           </p>
         </div>
         {anyLive && (
@@ -182,7 +140,9 @@ function StandingsContent() {
       </div>
 
       {view === 'bracket' ? (
-        <BracketView bracket={bracket} />
+        <div className="flex items-center justify-center min-h-[64vh] -mx-1">
+          <CircularBracket onOpenMatch={(matchId) => router.push(`/fixtures?match=${matchId}`)} />
+        </div>
       ) : (
       <>
       {/* Legend */}
@@ -328,77 +288,6 @@ function StandingsContent() {
       )}
       </>
       )}
-    </div>
-  );
-}
-
-// ============================================
-// BRACKET VIEW — horizontally-scrollable rounds R32 → Final
-// ============================================
-function TieChipSide({ side }: { side: TieSide }) {
-  return (
-    <div
-      className={`flex items-center gap-1.5 px-1.5 py-1 ${
-        side.winner ? 'bg-emerald-500/15' : ''
-      }`}
-    >
-      {side.code ? (
-        <img src={getFlagUrl(side.code, 'sm')} alt="" className="w-4 h-3 rounded-[2px] shrink-0" />
-      ) : (
-        <span className="w-4 h-3 rounded-[2px] bg-white/10 shrink-0" />
-      )}
-      <span
-        className={`text-[11px] truncate flex-1 min-w-0 ${
-          side.code
-            ? side.winner
-              ? 'font-black text-white'
-              : 'font-semibold text-white/85'
-            : 'font-medium text-white/40'
-        }`}
-      >
-        {side.code ?? side.label}
-      </span>
-      {side.score != null && (
-        <span className={`text-[11px] font-black tabular-nums ${side.winner ? 'text-emerald-300' : 'text-white/70'}`}>
-          {side.score}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function BracketView({ bracket }: { bracket: BracketData | null }) {
-  if (!bracket) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <div className="w-8 h-8 border-4 border-rose-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-  return (
-    <div className="overflow-x-auto -mx-1 px-1 pb-4 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-      <div className="flex gap-3 min-w-max">
-        {bracket.rounds.map((round) => (
-          <div key={round.stageId} className="w-[150px] shrink-0 flex flex-col gap-2">
-            <div className="text-[11px] font-black text-white/60 uppercase tracking-wide px-1 sticky left-0">
-              {ROUND_LABEL[round.stageId] ?? round.stageId}
-            </div>
-            {round.ties.map((tie) => (
-              <div
-                key={tie.id}
-                className={`rounded-lg border overflow-hidden divide-y divide-white/5 ${
-                  tie.live
-                    ? 'border-emerald-500/50 ring-1 ring-emerald-500/20'
-                    : 'border-white/10 bg-white/[0.03]'
-                }`}
-              >
-                <TieChipSide side={tie.home} />
-                <TieChipSide side={tie.away} />
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
