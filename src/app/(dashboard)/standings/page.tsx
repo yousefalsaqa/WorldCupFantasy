@@ -140,7 +140,7 @@ function StandingsContent() {
       </div>
 
       {view === 'bracket' ? (
-        <div className="flex items-center justify-center min-h-[64vh] -mx-1">
+        <div className="flex items-center justify-center min-h-[64vh] -mx-5">
           <CircularBracket onOpenMatch={(matchId) => router.push(`/fixtures?match=${matchId}`)} />
         </div>
       ) : (

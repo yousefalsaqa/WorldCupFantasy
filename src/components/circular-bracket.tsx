@@ -85,7 +85,7 @@ export default function CircularBracket({
   // next ring, then a short lateral hop to the shared winner node — the clean
   // "down, then into each other" look (not a straight diagonal).
   const TAU = Math.PI * 2;
-  const RAD = [41, 33, 25.5, 17.5, 9.5]; // radius by depth: teams, l1, l2, l3, finalists
+  const RAD = [43, 34.5, 26.5, 18, 9.5]; // radius by depth: teams, l1, l2, l3, finalists
   const l0 = Array.from({ length: 32 }, (_, t) => (t / 32) * TAU - Math.PI / 2);
   const l1 = avgPairs(l0); // 16
   const l2 = avgPairs(l1); // 8
@@ -185,7 +185,7 @@ function Crest({ x, y, side, live, onClick }: { x: number; y: number; side: TieS
       type="button"
       onClick={onClick}
       style={{ left: `${x}%`, top: `${y}%` }}
-      className="absolute -translate-x-1/2 -translate-y-1/2 z-10 p-1 active:scale-90 transition-transform"
+      className="absolute -translate-x-1/2 -translate-y-1/2 z-10 p-0.5 active:scale-90 transition-transform"
       aria-label={side.code ?? side.label}
     >
       {side.code ? (
