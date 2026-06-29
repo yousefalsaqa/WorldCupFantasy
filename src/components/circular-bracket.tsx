@@ -33,6 +33,48 @@ function winnerCode(tie?: Tie): string | null {
   return null;
 }
 
+// Lay the bracket out in TRUE tournament order. Each non-R32 tie names its two
+// feeders in its side labels ("W M73"/"W M75"), so the whole tree is encoded.
+// An in-order walk from the Final yields R32 leaves (and each inner round) in
+// bracket order — so consecutive pairing (R32 ties 2k & 2k+1 → R16 tie k, etc.)
+// matches reality, and the circle shows who could actually meet whom next.
+function orderByBracket(rounds: Round[]) {
+  const all = rounds.flatMap((r) => r.ties);
+  const byId = new Map(all.map((t) => [t.id, t]));
+  const feeders = (t: Tie): string[] => {
+    const ids: string[] = [];
+    for (const side of [t.home, t.away]) {
+      const m = /^[WL]\s+(M\d+)$/.exec(side.label);
+      if (m) ids.push(m[1]);
+    }
+    return ids;
+  };
+  const out: Record<string, Tie[]> = { R32: [], R16: [], QF: [], SF: [], F: [] };
+  const visit = (id: string) => {
+    const t = byId.get(id);
+    if (!t) return;
+    const f = feeders(t);
+    if (f.length < 2) {
+      if (t.stageId === 'R32') out.R32.push(t); // leaf
+      return;
+    }
+    visit(f[0]);
+    visit(f[1]);
+    out[t.stageId]?.push(t);
+  };
+  const finalTie = all.find((t) => t.stageId === 'F');
+  if (finalTie) visit(finalTie.id);
+  const stage = (id: string) => rounds.find((r) => r.stageId === id)?.ties ?? [];
+  // Fall back to raw API order if the tree didn't fully resolve (defensive).
+  return {
+    R32: out.R32.length === 16 ? out.R32 : stage('R32'),
+    R16: out.R16.length === 8 ? out.R16 : stage('R16'),
+    QF: out.QF.length === 4 ? out.QF : stage('QF'),
+    SF: out.SF.length === 2 ? out.SF : stage('SF'),
+    F: stage('F'),
+  };
+}
+
 export default function CircularBracket({
   onOpenMatch,
 }: {
@@ -72,12 +114,12 @@ export default function CircularBracket({
     );
   }
 
-  const byStage = (id: string) => rounds.find((r) => r.stageId === id)?.ties ?? [];
-  const r32 = byStage('R32'); // 16 ties → 32 teams
-  const r16 = byStage('R16'); // 8
-  const qf = byStage('QF');   // 4
-  const sf = byStage('SF');   // 2
-  const fin = byStage('F')[0];
+  const ordered = orderByBracket(rounds);
+  const r32 = ordered.R32; // 16 ties → 32 teams, in true bracket order
+  const r16 = ordered.R16; // 8
+  const qf = ordered.QF;   // 4
+  const sf = ordered.SF;   // 2
+  const fin = ordered.F[0];
 
   // ── Full-circle radial bracket ─────────────────────────────────────────
   // 32 teams evenly around the ring; each round's winners spiral inward to the
