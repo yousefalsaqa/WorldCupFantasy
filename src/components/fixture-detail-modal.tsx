@@ -374,7 +374,12 @@ function LineupsTab({ detail }: { detail: Detail }) {
       let idx = 0;
       rowSizes.forEach((count, r) => {
         for (let c = 0; c < count; c++) {
-          players[idx].grid = `${r + 1}:${c + 1}`;
+          // Descending columns: the renderer sorts col high→low (API cols
+          // count from the team's LEFT flank, and our pitches draw teams
+          // attacking down-screen, so high col = viewer-left). Predicted
+          // players are saved in the order they should read left→right on
+          // screen, so the first player of each row gets the highest col.
+          players[idx].grid = `${r + 1}:${count - c}`;
           idx++;
         }
       });
@@ -477,7 +482,13 @@ function groupByGridRow(players: LineupPlayer[]): LineupPlayer[][] {
     return Array.from(rows.keys())
       .sort((a, b) => a - b)
       .map((r) =>
-        rows.get(r)!.sort((a, b) => Number(a.grid!.split(':')[1]) - Number(b.grid!.split(':')[1])),
+        // Columns DESCENDING. API-Football numbers columns from the team's
+        // own left flank (col 1 = LB, max col = RB — verified against ARG
+        // v CPV: Molina RB 2:4, Medina LB 2:1). Our pitches draw each team
+        // attacking down-screen (GK row on top), so the team's right flank
+        // is the viewer's left: highest column renders first. Sorting
+        // ascending mirrored every row (RB shown in the LB spot).
+        rows.get(r)!.sort((a, b) => Number(b.grid!.split(':')[1]) - Number(a.grid!.split(':')[1])),
       );
   }
   // Fallback: G / D / M / F buckets
