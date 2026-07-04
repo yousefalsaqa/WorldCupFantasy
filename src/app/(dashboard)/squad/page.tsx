@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Fragment, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { PlayerCard, EmptySlot, PlayerFace } from '@/components/kit';
 import PlayerDetailModal from '@/components/player-detail-modal';
@@ -350,6 +350,8 @@ function GwSlider({
   onSelect,
   size = 'md',
   compact = false,
+  plannedStageId = null,
+  plannedActive = false,
 }: {
   stages: GwStage[];
   historyStageId: string | null;
@@ -358,6 +360,11 @@ function GwSlider({
   // compact = the in-pitch "center circle" carousel: a narrow fixed-width
   // track with a faint pill backdrop so it reads as sitting on the centre spot.
   compact?: boolean;
+  // The NEXT round's chip doubles as the Planned view (replaces the old
+  // Live/Planned pill): it's the one future chip that stays tappable, and
+  // selecting it means "show my planned next-round team".
+  plannedStageId?: string | null;
+  plannedActive?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const centeredRef = useRef<HTMLButtonElement | null>(null);
@@ -369,8 +376,9 @@ function GwSlider({
   // "opens" it instead of resting on the current round.
   const userDriven = useRef(false);
   const didInit = useRef(false);
-  // The chip we keep centered: the selected past round, else the live "now" one.
-  const centeredId = historyStageId ?? stages.find((s) => s.isActive)?.stageId ?? null;
+  // The chip we keep centered: the planned next round when that view is on,
+  // else the selected past round, else the live "now" one.
+  const centeredId = (plannedActive && plannedStageId) || historyStageId || (stages.find((s) => s.isActive)?.stageId ?? null);
 
   // Center on the current round on load, and re-center when the selection
   // changes. Deferred a frame so chip widths are laid out (fixes refresh
@@ -388,12 +396,15 @@ function GwSlider({
     return () => cancelAnimationFrame(raf);
   }, [centeredId, stages.length]);
 
-  const isFuture = (s: GwStage) => !s.isComplete && !s.isActive;
+  // "Dead" future = not playable AND not the planned next round. The planned
+  // chip behaves like a real destination; rounds beyond it stay disabled.
+  const isDeadFuture = (s: GwStage) => !s.isComplete && !s.isActive && s.stageId !== plannedStageId;
 
   // Slide-to-switch: once a swipe settles, snap to the nearest PLAYABLE round
-  // and select it. Future rounds are never snap targets (see snap-align below),
-  // so an over-shoot toward, say, the Final lands back on the last real round.
-  // The settle handler then locks it precisely there and switches the squad.
+  // and select it. Dead future rounds are never snap targets (see snap-align
+  // below), so an over-shoot toward, say, the Final lands back on the planned
+  // round. The settle handler then locks it precisely there and switches the
+  // squad.
   const handleScroll = () => {
     if (!userDriven.current) return; // ignore initial snap + our own re-centering
     if (settleTimer.current) clearTimeout(settleTimer.current);
@@ -405,7 +416,7 @@ function GwSlider({
       let bestDist = Infinity;
       chipEls.current.forEach((el, stageId) => {
         const stage = stages.find((s) => s.stageId === stageId);
-        if (!stage || isFuture(stage)) return; // only playable rounds are targets
+        if (!stage || isDeadFuture(stage)) return; // only playable rounds (+ planned) are targets
         const c = el.offsetLeft + el.clientWidth / 2;
         const d = Math.abs(c - mid);
         if (d < bestDist) { bestDist = d; bestId = stageId; }
@@ -419,7 +430,11 @@ function GwSlider({
       }
       const stage = stages.find((s) => s.stageId === bestId)!;
       const next = stage.isActive ? null : bestId;
-      if (next !== historyStageId) onSelect(next);
+      // Effective current selection: the planned round when that view is on
+      // (historyStageId is null there too, so comparing against it alone
+      // would swallow the "swipe back to now" transition).
+      const currentSel = plannedActive ? plannedStageId : historyStageId;
+      if (next !== currentSel) onSelect(next);
     }, 120);
   };
 
@@ -442,51 +457,84 @@ function GwSlider({
       }`}
       style={{ WebkitOverflowScrolling: 'touch', scrollPaddingLeft: '50%', scrollPaddingRight: '50%', touchAction: 'pan-x', overscrollBehaviorX: 'contain' }}
     >
-      <div className="inline-flex items-center gap-1.5">
+      <div className="inline-flex items-center">
         {/* leading spacer so the first chip can sit dead-center */}
         <div className={`shrink-0 ${spacer}`} aria-hidden />
-        {stages.map((s) => {
+        {stages.map((s, i) => {
           const isCurrent = s.isActive;
-          const future = !s.isComplete && !s.isActive;
-          const selected = isCurrent ? historyStageId === null : historyStageId === s.stageId;
+          const isPlanned = s.stageId === plannedStageId;
+          const dead = isDeadFuture(s);
+          // Timeline-rail connector to the NEXT chip: emerald through played
+          // rounds, dashed violet into the planned round, faint into the
+          // dead future. Rendered as flex items so they scroll with the
+          // chips — no position measuring needed.
+          const nextStage = stages[i + 1];
+          const connWidth = compact ? 'w-2' : 'w-2.5 sm:w-3.5';
+          const connector = nextStage ? (
+            nextStage.stageId === plannedStageId ? (
+              <div aria-hidden className={`shrink-0 ${connWidth} border-t-2 border-dashed border-violet-400/60`} />
+            ) : nextStage.isComplete || nextStage.isActive ? (
+              <div aria-hidden className={`shrink-0 ${connWidth} h-[2px] rounded-full bg-emerald-400/50`} />
+            ) : (
+              <div aria-hidden className={`shrink-0 ${connWidth} h-[2px] rounded-full bg-white/10`} />
+            )
+          ) : null;
+          const selected = isPlanned
+            ? plannedActive
+            : isCurrent
+              ? historyStageId === null && !plannedActive
+              : historyStageId === s.stageId;
           const isCentered = s.stageId === centeredId;
           const base = s.stageId.startsWith('GR') ? `GS${s.stageId.slice(2)}` : s.stageId;
           // compact = one slim line ("GS3 · 99", "R32 · now"); roomy = two lines.
           const label = compact
-            ? `${base}${isCurrent ? ' · now' : !future && s.points != null ? ` · ${s.points}` : ''}`
+            ? `${base}${isCurrent ? ' · now' : isPlanned ? ' · plan' : !dead && s.points != null ? ` · ${s.points}` : ''}`
             : null;
           return (
+            <Fragment key={s.stageId}>
             <button
-              key={s.stageId}
               ref={(el) => {
                 if (isCentered) centeredRef.current = el;
                 if (el) chipEls.current.set(s.stageId, el); else chipEls.current.delete(s.stageId);
               }}
               type="button"
-              disabled={future}
-              onClick={() => { if (!future) onSelect(isCurrent ? null : s.stageId); }}
-              style={{ scrollSnapAlign: future ? 'none' : 'center' }}
+              disabled={dead}
+              onClick={() => { if (!dead) onSelect(isCurrent ? null : s.stageId); }}
+              style={{ scrollSnapAlign: dead ? 'none' : 'center' }}
               className={`shrink-0 rounded-xl font-black transition-all whitespace-nowrap flex flex-col items-center leading-tight ${pad} ${
-                future
+                dead
                   ? 'bg-white/[0.03] text-white/25 cursor-not-allowed'
                   : selected
-                    ? 'bg-emerald-500/90 text-emerald-950 shadow-lg scale-105'
-                    : 'bg-white/5 text-white/55 ring-1 ring-white/10 hover:text-white active:scale-95'
+                    ? isPlanned
+                      ? 'bg-violet-500/90 text-white shadow-lg scale-105'
+                      : isCurrent
+                        ? 'bg-emerald-500/90 text-emerald-950 scale-105 shadow-[0_0_14px_rgba(16,185,129,0.5)]'
+                        : 'bg-emerald-500/90 text-emerald-950 shadow-lg scale-105'
+                    : isPlanned
+                      ? 'bg-violet-500/10 text-violet-200/80 ring-1 ring-violet-400/30 hover:text-white active:scale-95'
+                      : 'bg-white/5 text-white/55 ring-1 ring-white/10 hover:text-white active:scale-95'
               }`}
             >
               {compact ? (
                 <span className="text-[11px]">{label}</span>
               ) : (
                 <>
-                  <span className="text-[10px]">{base}{isCurrent ? ' · now' : ''}</span>
-                  {!future && s.points != null && (
+                  <span className="text-[10px]">{base}{isCurrent ? ' · now' : isPlanned ? ' · plan' : ''}</span>
+                  {!dead && !isPlanned && s.points != null && (
                     <span className={`tabular-nums text-[9px] leading-none ${selected ? 'text-emerald-900/80' : 'text-white/35'}`}>
                       {s.points} pts
+                    </span>
+                  )}
+                  {isPlanned && (
+                    <span className={`text-[9px] leading-none ${selected ? 'text-violet-100/80' : 'text-violet-300/50'}`}>
+                      next
                     </span>
                   )}
                 </>
               )}
             </button>
+            {connector}
+            </Fragment>
           );
         })}
         {/* trailing spacer so the last chip can sit dead-center */}
@@ -1925,7 +1973,8 @@ export default function SquadPage() {
     return m;
   }, [queuedTransfers]);
 
-  const hasPlannedTransfers = plannedInById.size > 0;
+  // (The old pill's queued-count badge went with it; plannedInById still
+  // drives the in-pitch "incoming" badges in the Planned view.)
 
   // In "Planned" view, resolve a slot to the INCOMING player coming in next
   // round so the card/detail show his real identity, fixtures and stats. This
@@ -2066,6 +2115,26 @@ export default function SquadPage() {
   useEffect(() => {
     if (planView || transferMode) setHistoryStageId(null);
   }, [planView, transferMode]);
+
+  // The round AFTER the active one — its slider chip doubles as the Planned
+  // view (replaced the old Live/Planned pill). Null once the Final is live.
+  const nextGwStageId = useMemo(() => {
+    const activeIdx = gwStages.findIndex((s) => s.isActive);
+    if (activeIdx < 0) return null;
+    return gwStages.slice(activeIdx + 1).find((s) => !s.isComplete && !s.isActive)?.stageId ?? null;
+  }, [gwStages]);
+
+  // Single entry point for slider selection: null = live "now", the next
+  // round's id = Planned view, anything else = past-round history.
+  const handleGwSelect = useCallback((stageId: string | null) => {
+    if (stageId !== null && stageId === nextGwStageId) {
+      setHistoryStageId(null);
+      setPlanView(true);
+    } else {
+      setPlanView(false);
+      setHistoryStageId(stageId);
+    }
+  }, [nextGwStageId]);
 
   // Fetch a past gameweek's squad when the slider selects one (null = current).
   useEffect(() => {
@@ -3359,34 +3428,8 @@ export default function SquadPage() {
           />
         </div>
 
-        {/* Live ↔ Planned view toggle. "Planned" overlays queued transfers onto
-            the pitch so the user can arrange around the incomers; the
-            arrangement saves to the current lineup for when the round flips. */}
-        <div className="mt-3 inline-flex p-0.5 rounded-xl bg-white/5 ring-1 ring-white/10">
-          <button
-            type="button"
-            onClick={() => { setHistoryStageId(null); setPlanView(false); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-black transition-colors ${
-              !planView ? 'bg-emerald-500/90 text-emerald-950 shadow' : 'text-white/60 hover:text-white'
-            }`}
-          >
-            Live team
-          </button>
-          <button
-            type="button"
-            onClick={() => { setHistoryStageId(null); setPlanView(true); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-black transition-colors inline-flex items-center gap-1 ${
-              planView ? 'bg-violet-500/90 text-white shadow' : 'text-white/60 hover:text-white'
-            }`}
-          >
-            Planned
-            {hasPlannedTransfers && (
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${planView ? 'bg-white/20' : 'bg-violet-500/20 text-violet-200'}`}>
-                {plannedInById.size}
-              </span>
-            )}
-          </button>
-        </div>
+        {/* The old Live ↔ Planned pill is gone: the Planned view now lives on
+            the gameweek slider as the next round's chip (violet, "· plan"). */}
       </div>
 
       {/* Transfers status — the TRANSFER deadline is the stage deadline (before
@@ -3754,7 +3797,7 @@ export default function SquadPage() {
           <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 px-3 py-2 flex items-center gap-2">
             <ArrowLeftRight className="w-3.5 h-3.5 text-violet-300 shrink-0" strokeWidth={2.5} />
             <p className="text-violet-200/80 text-xs leading-snug min-w-0">
-              <span className="font-bold text-violet-100">Planned team</span> — next round preview. Arrange it here; it applies when the round flips.
+              <span className="font-bold text-violet-100">Planned team</span> for next round.
               {plannedBaseSquad && (
                 <span className="block mt-0.5 text-violet-200/60">
                   Your Free Hit ends this round — this shows the squad it reverts to.
@@ -3774,12 +3817,18 @@ export default function SquadPage() {
 
       {/* Gameweek slider — its own full-width row right above the pitch. Swipe
           through rounds; it auto-switches the squad below to whichever round
-          snaps to centre (or "now"). Only in the live view — Planned/transfer
-          modes are their own thing, so past-week browsing is hidden there.
-          WIP, gated off in prod. */}
-      {SHOW_GW_HISTORY && gwStages.length > 0 && !planView && !transferMode && (
+          snaps to centre: "now", a past round, or the NEXT round's chip which
+          is the Planned view (this replaced the Live/Planned pill). Hidden
+          only in transfer mode, which is its own thing. */}
+      {SHOW_GW_HISTORY && gwStages.length > 0 && !transferMode && (
         <div className="px-2 sm:px-0 mb-3">
-          <GwSlider stages={gwStages} historyStageId={historyStageId} onSelect={setHistoryStageId} />
+          <GwSlider
+            stages={gwStages}
+            historyStageId={historyStageId}
+            onSelect={handleGwSelect}
+            plannedStageId={nextGwStageId}
+            plannedActive={planView}
+          />
         </div>
       )}
 
@@ -3948,7 +3997,13 @@ export default function SquadPage() {
                 scrolls/swaps. */}
             <div className="relative sticky top-0 z-10 bg-[#0a0e17]/95 backdrop-blur-sm pb-1.5">
               <div className="px-2 sm:px-0 mb-1.5">
-                <GwSlider stages={gwStages} historyStageId={historyStageId} onSelect={setHistoryStageId} />
+                <GwSlider
+                  stages={gwStages}
+                  historyStageId={historyStageId}
+                  onSelect={handleGwSelect}
+                  plannedStageId={nextGwStageId}
+                  plannedActive={planView}
+                />
               </div>
               {(() => {
                 const st = gwStages.find((s) => s.stageId === historyStageId);

@@ -2243,3 +2243,41 @@ Before declaring cron production-ready:
 - [ ] Run `/admin/live-test` once to capture API-Football rate-limit
       headroom; with cron at 2-min intervals you'll burn ~720 calls/day
       when matches are live (Pro plan API-Football is 7,500/day).
+
+---
+
+## OPEN DISCUSSION (Jul 4): merge the 3rd-place game into the Final round?
+
+Currently `3RD` is its own stage (deadline Jul 18 21:00Z) with the Final
+(`F`) after it (Jul 19 19:00Z). Problems with 3RD as a standalone round:
+
+- Only 2 nations play; nation cap for 3RD is 5, so users must transfer IN
+  players from the two SF losers just to field anyone — for a mostly
+  symbolic match.
+- `mark-eliminations` flags SF losers as eliminated the moment their semi
+  ends (any KO loser rule, src/lib/mark-eliminations.ts pass (a)). The
+  transfers picker hides eliminated players (ef9e9a6), so the two 3rd-place
+  teams are UNBUYABLE for their own round, and their players inflate
+  eliminatedCount in the mercy math at the SF→3RD boundary.
+- Every team gets a fresh allocation (AFTER_SF = 2) for a 2-nation round,
+  then ANOTHER for the Final a day later.
+
+Proposed merge (not decided — discuss before SF ends Jul 15):
+1. Delete the `3RD` Stage row (stage-advance picks "next stage by order",
+   so an empty 3RD stage would otherwise trap the advance: a stage with
+   zero matches never completes).
+2. Create BOTH the 3rd-place match and the Final in stage `F`; set `F`
+   deadline to the 3rd-place kickoff (Jul 18 21:00Z) via set-ko-deadlines.
+3. mark-eliminations: skip the SF-loser rule; instead mark both 3rd-place
+   participants eliminated when THAT match finishes (note: its winner never
+   "loses", so the generic KO-loser pass alone would miss them).
+4. Decide the Final-round nation cap: `maxPerNationForStage('F')` is
+   currently Infinity (rationale: only 2 nations left). With the merge, 4
+   nations play in the round — cap 5 (like SF) is enough to field an XI
+   without allowing an 11-from-one-nation stack. Infinity stays defensible
+   if we want the "go all-in on the final" fantasy.
+
+If we DON'T merge: at minimum fix (3) anyway, or the 3rd-place round is
+unplayable (see picker-hiding bug above). Deadline to decide + deploy:
+before the second semi final ends (~Jul 15 night), since the SF→next
+boundary allocates transfers using whatever structure exists then.

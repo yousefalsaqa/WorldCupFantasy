@@ -72,6 +72,32 @@ function stageIsLocked(deadline: Date | null | undefined): boolean {
   return new Date() >= new Date(deadline);
 }
 
+/**
+ * Display name of the captain OR vice-captain whose nation's match in this
+ * stage has already kicked off — null when both armbands are still unplayed.
+ * Gate for mid-round Triple Captain activation/cancel: the 3x must never
+ * touch points the user has already seen, and the vice counts because
+ * settlement moves the multiplier to him when the captain gets 0 minutes.
+ */
+async function armbandNationStarted(teamId: string, stageDbId: string): Promise<string | null> {
+  const armbands = await prisma.squadPlayer.findMany({
+    where: { teamId, OR: [{ isCaptain: true }, { isViceCaptain: true }] },
+    select: { player: { select: { displayName: true, nationId: true } } },
+  });
+  const now = new Date();
+  for (const sp of armbands) {
+    const match = await prisma.match.findFirst({
+      where: {
+        stageId: stageDbId,
+        OR: [{ homeNationId: sp.player.nationId }, { awayNationId: sp.player.nationId }],
+      },
+      select: { isStarted: true, kickoffTime: true },
+    });
+    if (match && (match.isStarted || match.kickoffTime <= now)) return sp.player.displayName;
+  }
+  return null;
+}
+
 export async function GET() {
   try {
     const session = await getSession();
@@ -134,11 +160,27 @@ export async function GET() {
       wildcardHasTransfers = wildcardTransferCount > 0;
     }
 
+    // Mid-round Triple Captain gate: while the round is in play, TC can be
+    // activated/cancelled for the CURRENT round only until either armband
+    // holder's match kicks off (no 3x on points the user already saw).
+    let tcBlockedBy: string | null = null;
+    if (locked && activeStage) {
+      tcBlockedBy = await armbandNationStarted(team.id, activeStage.id);
+    }
+
     // Determine if a given chip can be cancelled right now. Stacking-aware:
     // each chip cancels independently.
     const computeCancel = (chipId: ChipType): { canCancel: boolean; reason?: string } => {
       if (!activeChips.includes(chipId)) return { canCancel: false };
-      if (locked) return { canCancel: false, reason: 'Stage has already started' };
+      if (locked) {
+        if (chipId === 'TRIPLE_CAPTAIN' && !tcBlockedBy) return { canCancel: true };
+        return {
+          canCancel: false,
+          reason: chipId === 'TRIPLE_CAPTAIN' && tcBlockedBy
+            ? `${tcBlockedBy} has already played \u2014 the Triple Captain is locked in.`
+            : 'Stage has already started',
+        };
+      }
       if (chipId === 'WILDCARD_1' && wildcardHasTransfers) {
         return { canCancel: false, reason: 'Cannot cancel \u2013 transfers already made under Wildcard' };
       }
@@ -151,11 +193,13 @@ export async function GET() {
     // longer require `activeChip === null` — multiple chips can co-exist.
     const buildChip = (id: ChipType, used: boolean) => {
       const cancel = computeCancel(id);
+      // TC stays playable mid-round until an armband holder kicks off.
+      const tcLockedOut = id === 'TRIPLE_CAPTAIN' && locked && !!tcBlockedBy;
       return {
         id,
         ...CHIP_META[id],
         used,
-        available: !used && (id !== 'FREE_HIT' || activeStage !== null),
+        available: !used && (id !== 'FREE_HIT' || activeStage !== null) && !tcLockedOut,
         active: activeChips.includes(id),
         canCancel: cancel.canCancel,
         cancelBlockedReason: cancel.reason,
@@ -279,33 +323,48 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No active stage' }, { status: 400 });
     }
 
-    // Which stage does this chip apply to? Normally the active stage. But
-    // once the active round has kicked off (locked), ONLY a Wildcard can
-    // still be armed — and it arms for the NEXT round, so the unlimited free
-    // transfers it grants can be queued now. Triple Captain / Bench Boost /
-    // Free Hit stay locked until the next round actually opens (their effect
-    // is purely in-round, so there's no planning benefit to pre-arming, and
-    // Free Hit's snapshot/revert can't be expressed as queued transfers).
+    // Which stage does this chip apply to? Normally the active stage. Once
+    // the active round has kicked off (locked):
+    //   - a Wildcard can still be armed — for the NEXT round, so the
+    //     unlimited free transfers it grants can be queued now;
+    //   - TRIPLE CAPTAIN can still be played for the CURRENT round, but only
+    //     while neither armband holder's match has kicked off — otherwise the
+    //     3x would apply to points the user already saw (the vice matters too:
+    //     if the captain ends up with 0 minutes, settlement moves the
+    //     multiplier to the vice, so a played vice is the same hindsight).
+    //   - Bench Boost / Free Hit stay locked until the next round opens (BB
+    //     covers the whole bench — someone has always played — and Free
+    //     Hit's snapshot/revert can't be expressed as queued transfers).
     const locked = stageIsLocked(activeStage.deadlineTime);
     let targetStage = activeStage;
     let armingNextRound = false;
     if (locked) {
       const isWildcard = chipId === 'WILDCARD_1' || chipId === 'WILDCARD_2';
-      if (!isWildcard) {
+      if (chipId === 'TRIPLE_CAPTAIN') {
+        const blocked = await armbandNationStarted(team.id, activeStage.id);
+        if (blocked) {
+          return NextResponse.json(
+            { error: `${blocked} has already played this round — Triple Captain can't apply to points you've already seen. It unlocks again next round.` },
+            { status: 403 },
+          );
+        }
+        // Plays for the CURRENT round: targetStage stays the active stage.
+      } else if (!isWildcard) {
         return NextResponse.json(
-          { error: 'Only Wildcard can be armed while a round is being played. Other chips unlock when the next round opens.' },
+          { error: 'Only Wildcard (for next round) and Triple Captain (before your captain plays) can be activated while a round is in play. Other chips unlock when the next round opens.' },
           { status: 403 },
         );
+      } else {
+        const next = await prisma.stage.findFirst({
+          where: { order: { gt: activeStage.order }, isComplete: false },
+          orderBy: { order: 'asc' },
+        });
+        if (!next) {
+          return NextResponse.json({ error: 'No upcoming round to arm a Wildcard for.' }, { status: 400 });
+        }
+        targetStage = next;
+        armingNextRound = true;
       }
-      const next = await prisma.stage.findFirst({
-        where: { order: { gt: activeStage.order }, isComplete: false },
-        orderBy: { order: 'asc' },
-      });
-      if (!next) {
-        return NextResponse.json({ error: 'No upcoming round to arm a Wildcard for.' }, { status: 400 });
-      }
-      targetStage = next;
-      armingNextRound = true;
     }
 
     if (chipId === 'WILDCARD_2') {
@@ -467,12 +526,31 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'No active stage' }, { status: 400 });
     }
 
-    // While the active round is locked, the only cancellable chip is a
-    // Wildcard armed for the NEXT round (mirrors the POST arming path).
-    // Everything else stays locked until that round opens.
+    // Which chip? Parsed up-front because it decides WHICH stage's chip row
+    // we're cancelling while locked. Accept query string (?chipId=) or JSON
+    // body; absent = resolved below once we know what's active.
+    const url = new URL(request.url);
+    const queryChipId = url.searchParams.get('chipId') as ChipType | null;
+    let bodyChipId: ChipType | null = null;
+    try {
+      // request.body might be empty for a "cancel my only chip" call
+      const body = await request.clone().json().catch(() => null);
+      if (body && typeof body === 'object' && body !== null && 'chipId' in body) {
+        bodyChipId = (body as { chipId?: ChipType }).chipId ?? null;
+      }
+    } catch {
+      // empty body is fine
+    }
+    const explicitChipId: ChipType | null = queryChipId ?? bodyChipId;
+
+    // While the active round is locked, two cancels are possible (mirroring
+    // the POST paths): a Wildcard armed for the NEXT round, and a Triple
+    // Captain played mid-round on the CURRENT one \u2014 cancellable only while
+    // both armband holders are still unplayed (same no-hindsight gate as
+    // activation).
     const locked = stageIsLocked(activeStage.deadlineTime);
     let targetStage = activeStage;
-    if (locked) {
+    if (locked && explicitChipId !== 'TRIPLE_CAPTAIN') {
       const next = await prisma.stage.findFirst({
         where: { order: { gt: activeStage.order }, isComplete: false },
         orderBy: { order: 'asc' },
@@ -497,23 +575,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'No active chip to cancel' }, { status: 400 });
     }
 
-    // Figure out which chip to cancel. Accept it from query string
-    // (?chipId=) or from JSON body. If absent and exactly one chip is
-    // active, default to that one.
-    const url = new URL(request.url);
-    const queryChipId = url.searchParams.get('chipId') as ChipType | null;
-    let bodyChipId: ChipType | null = null;
-    try {
-      // request.body might be empty for a "cancel my only chip" call
-      const body = await request.clone().json().catch(() => null);
-      if (body && typeof body === 'object' && body !== null && 'chipId' in body) {
-        bodyChipId = (body as { chipId?: ChipType }).chipId ?? null;
-      }
-    } catch {
-      // empty body is fine
-    }
-
-    let chipId: ChipType | null = queryChipId ?? bodyChipId;
+    let chipId: ChipType | null = explicitChipId;
     if (!chipId) {
       if (currentChips.length === 1) {
         chipId = currentChips[0];
@@ -529,9 +591,19 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: `${chipId} is not active for this stage` }, { status: 400 });
     }
 
-    // While arming the next round, only a Wildcard can be cancelled.
+    // While a round is in play: next-round Wildcard is always cancellable;
+    // a mid-round Triple Captain only while neither armband has played.
     if (locked && chipId !== 'WILDCARD_1' && chipId !== 'WILDCARD_2') {
-      return NextResponse.json({ error: 'Only a next-round Wildcard can be cancelled while a round is being played.' }, { status: 400 });
+      if (chipId !== 'TRIPLE_CAPTAIN') {
+        return NextResponse.json({ error: 'Only a next-round Wildcard or an unplayed Triple Captain can be cancelled while a round is being played.' }, { status: 400 });
+      }
+      const blocked = await armbandNationStarted(team.id, activeStage.id);
+      if (blocked) {
+        return NextResponse.json(
+          { error: `${blocked} has already played this round \u2014 the Triple Captain is locked in now.` },
+          { status: 400 },
+        );
+      }
     }
 
     // Wildcard cancel safety: refuse if transfers were already made under it.
