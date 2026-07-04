@@ -78,8 +78,8 @@ export async function POST(request: NextRequest) {
         data: {
           userId: session.userId,
           name: `${user?.username || 'Unknown'}'s Team`,
-          initialBudget: 100,
-          bankBalance: 100,
+          initialBudget: 105,
+          bankBalance: 105,
           teamValue: 0,
         },
       });

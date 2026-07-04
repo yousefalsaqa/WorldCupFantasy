@@ -2255,7 +2255,7 @@ export default function SquadPage() {
             </div>
             <div>
               <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">Build Your Squad</h1>
-              <p className="text-white/50 text-xs sm:text-sm">Pick 15 players within your £100m budget</p>
+              <p className="text-white/50 text-xs sm:text-sm">Pick 15 players within your £105m budget</p>
             </div>
           </div>
 

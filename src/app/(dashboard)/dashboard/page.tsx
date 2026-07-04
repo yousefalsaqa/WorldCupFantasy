@@ -268,7 +268,7 @@ export default function DashboardPage() {
                   <p className="text-rose-300 text-xs font-bold uppercase tracking-widest mb-1.5">Get Started</p>
                   <h2 className="text-xl sm:text-2xl font-black text-white mb-1">Pick your 15 players</h2>
                   <p className="text-white/50 text-sm">
-                    £100m budget · 48 nations
+                    £105m budget · 48 nations
                     {currentStage?.deadlineTime
                       ? ` · deadline ${formatDateShort(new Date(currentStage.deadlineTime), timezone)}`
                       : ''}

@@ -243,7 +243,7 @@ export default function Home() {
         <div className="flex justify-center gap-8 mb-8">
           <StatBadge value="48" label="Nations" />
           <StatBadge value="104" label="Matches" />
-          <StatBadge value="£100M" label="Budget" />
+          <StatBadge value="£105M" label="Budget" />
         </div>
 
         {/* Features */}

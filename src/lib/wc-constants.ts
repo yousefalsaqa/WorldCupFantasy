@@ -43,8 +43,9 @@ export const SQUAD = {
   // maxPerNationForStage)
   maxPerNation: 3,
   
-  // Budget
-  initialBudget: 100.0,
+  // Budget (raised 100 → 105 mid-tournament, Jul 4 2026 — every existing
+  // team's bank got +5.0 via scripts/increase-budget-105.ts)
+  initialBudget: 105.0,
   minPlayerPrice: 4.0,
   maxPlayerPrice: 15.0,
   priceStep: 0.5,

@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import DashboardNav from '@/components/dashboard-nav';
+import AnnouncementBanner from '@/components/announcement-banner';
 import { UnsavedChangesProvider } from '@/contexts/unsaved-changes';
 import AuthInterceptor from '@/components/auth-interceptor';
 import { verifyToken } from '@/lib/auth';
@@ -76,6 +77,7 @@ export default async function DashboardLayout({
             />
           </div>
           <DashboardNav />
+          <AnnouncementBanner />
           <main className="relative z-10 px-4 md:px-6 py-6">
             {children}
           </main>

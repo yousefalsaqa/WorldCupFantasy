@@ -87,8 +87,8 @@ export async function POST(request: Request) {
       data: {
         userId: user.id,
         name: name.trim(),
-        initialBudget: 100.0,
-        bankBalance: 100.0,
+        initialBudget: 105.0,
+        bankBalance: 105.0,
         freeTransfers: 2,
       },
     });
