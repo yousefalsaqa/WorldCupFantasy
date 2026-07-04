@@ -3,17 +3,20 @@
 // ============================================================================
 // CIRCULAR (RADIAL) KNOCKOUT BRACKET
 //
-// 32 teams on the outer ring; each round's winners spiral inward toward a
-// centre trophy: R32(32 crests) → R16(16) → QF(8) → SF(4) → Final(2) → 🏆.
-// Connector lines follow consecutive pairing (R32 ties 2k & 2k+1 feed R16 tie
-// k, etc.), which is how KNOCKOUT_FIXTURES is authored, so the lines match the
-// real bracket. Data comes from /api/bracket (seeds resolved from standings +
-// real DB scores/winners overlaid). Tapping a tie calls onOpenTie with the
-// resolved codes; the page maps that to the DB match and opens the detail modal.
+// Radial bracket: teams around an outer ring, each round's winners spiralling
+// inward to a centre trophy. Connector lines follow consecutive pairing (ties
+// 2k & 2k+1 feed the next round's tie k), which is how KNOCKOUT_FIXTURES is
+// authored, so the lines match the real bracket. Data comes from /api/bracket
+// (seeds resolved from standings + real DB scores/winners overlaid). Tapping a
+// tie calls onOpenMatch with the DB match id; the page deep-links it to the
+// read-only fixture modal. Ties without a DB match yet (future rounds) are
+// no-ops.
 //
-// Phone-first caveat (accepted): 32 crests on a square is tight — crests are
-// small and the centre rounds are compact. Tap targets are padded past the
-// visible crest so they stay hittable.
+// The DEFAULT view zooms to the CURRENT round: once R32 is done there's no
+// point spending the outer ring on 16 dead crests, so the live round's teams
+// take the ring (16 at R16, 8 at QF, …) at much bigger sizes. The complete
+// R32→Final circle stays available in a full-screen overlay via the
+// "Full bracket" pill. While R32 itself is live the default IS the full view.
 // ============================================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -75,6 +78,167 @@ function orderByBracket(rounds: Round[]) {
   };
 }
 
+const START_LABEL: Record<number, string> = {
+  0: 'Round of 32',
+  1: 'Round of 16',
+  2: 'Quarter-finals',
+  3: 'Semi-finals',
+};
+
+// Visual tier by how many teams sit on the outer ring. Fewer teams → bigger
+// crests, thicker lines. Class lists (not template strings) so Tailwind sees
+// every literal.
+const TIERS: Record<number, {
+  crest: string; empty: string; nodes: string[]; pip: string; line: number;
+}> = {
+  32: {
+    crest: 'w-6 h-[18px] sm:w-8 sm:h-6',
+    empty: 'w-6 h-[18px] sm:w-8 sm:h-6 text-[7px]',
+    nodes: ['w-5 h-[15px]', 'w-5 h-[15px]', 'w-4 h-3', 'w-4 h-3'],
+    pip: 'w-2 h-2',
+    line: 0.4,
+  },
+  16: {
+    crest: 'w-9 h-[27px] sm:w-12 sm:h-9',
+    empty: 'w-9 h-[27px] sm:w-12 sm:h-9 text-[8px]',
+    nodes: ['w-7 h-[21px]', 'w-6 h-[18px]', 'w-5 h-[15px]'],
+    pip: 'w-2.5 h-2.5',
+    line: 0.5,
+  },
+  8: {
+    crest: 'w-12 h-9 sm:w-16 sm:h-12',
+    empty: 'w-12 h-9 sm:w-16 sm:h-12 text-[9px]',
+    nodes: ['w-9 h-[27px]', 'w-7 h-[21px]'],
+    pip: 'w-3 h-3',
+    line: 0.6,
+  },
+  4: {
+    crest: 'w-16 h-12 sm:w-20 sm:h-[60px]',
+    empty: 'w-16 h-12 sm:w-20 sm:h-[60px] text-[10px]',
+    nodes: ['w-10 h-[30px]'],
+    pip: 'w-3.5 h-3.5',
+    line: 0.7,
+  },
+};
+
+// One rendered radial bracket starting at round index `start`
+// (0=R32, 1=R16, 2=QF, 3=SF). The rounds from `start` onward supply:
+// outer ring = that round's teams, then one winner ring per round, then the
+// centre trophy (the Final tie).
+function RadialView({
+  ordered,
+  start,
+  onOpenTie,
+}: {
+  ordered: ReturnType<typeof orderByBracket>;
+  start: number;
+  onOpenTie: (tie?: Tie) => void;
+}) {
+  const roundTies = [ordered.R32, ordered.R16, ordered.QF, ordered.SF].slice(start);
+  const fin = ordered.F[0];
+  const outer = roundTies[0];
+  const slots = outer.length * 2;
+  const tier = TIERS[slots] ?? TIERS[32];
+
+  // Ring radii: outer teams at 43, innermost winner ring at 9.5, evenly spaced.
+  const nRings = roundTies.length + 1; // teams ring + one winner ring per round
+  const RAD = Array.from({ length: nRings }, (_, i) => 43 - (i * (43 - 9.5)) / (nRings - 1));
+
+  const TAU = Math.PI * 2;
+  const angles: number[][] = [Array.from({ length: slots }, (_, t) => (t / slots) * TAU - Math.PI / 2)];
+  for (let i = 1; i < nRings; i++) angles.push(avgPairs(angles[i - 1]));
+
+  const lines: Array<{ a: { x: number; y: number }; b: { x: number; y: number }; live: boolean }> = [];
+  const push = (a: { x: number; y: number }, b: { x: number; y: number }, live: boolean) => lines.push({ a, b, live });
+  // Child runs radially in to the parent's ring, then laterally to the node.
+  const elbow = (childA: number, childR: number, parentA: number, parentR: number, live: boolean) => {
+    push(polar(childA, childR), polar(childA, parentR), live);   // radial in ("down")
+    push(polar(childA, parentR), polar(parentA, parentR), live); // lateral to the node ("into")
+  };
+  for (let lvl = 0; lvl < roundTies.length; lvl++) {
+    const parents = roundTies[lvl]; // winner ring lvl+1 belongs to this round's ties
+    for (let k = 0; k < parents.length; k++) {
+      const live = !!parents[k]?.live;
+      elbow(angles[lvl][2 * k], RAD[lvl], angles[lvl + 1][k], RAD[lvl + 1], live);
+      elbow(angles[lvl][2 * k + 1], RAD[lvl], angles[lvl + 1][k], RAD[lvl + 1], live);
+    }
+  }
+  // Finalists (last winner ring, 2 nodes) run straight in to the trophy.
+  const finalRing = angles[nRings - 1];
+  if (finalRing.length === 2) {
+    push(polar(finalRing[0], RAD[nRings - 1]), { x: 50, y: 50 }, !!fin?.live);
+    push(polar(finalRing[1], RAD[nRings - 1]), { x: 50, y: 50 }, !!fin?.live);
+  }
+
+  const champion = winnerCode(fin);
+
+  return (
+    <div className="relative w-full max-w-[44rem] mx-auto aspect-square select-none">
+      {/* soft glow behind the trophy */}
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 rounded-full bg-amber-400/10 blur-2xl pointer-events-none" />
+
+      {/* Connector lines */}
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden>
+        {lines.map((ln, i) => (
+          <line
+            key={i}
+            x1={ln.a.x} y1={ln.a.y} x2={ln.b.x} y2={ln.b.y}
+            stroke={ln.live ? 'rgba(16,185,129,0.75)' : 'rgba(255,255,255,0.22)'}
+            strokeWidth={ln.live ? tier.line + 0.15 : tier.line}
+            strokeLinecap="round"
+          />
+        ))}
+      </svg>
+
+      {/* Outer ring — the starting round's teams (each tie's home then away). */}
+      {outer.map((tie, j) => (
+        [tie.home, tie.away].map((side, s) => {
+          const { x, y } = polar(angles[0][2 * j + s], RAD[0]);
+          return (
+            <Crest
+              key={`t-${j}-${s}`} x={x} y={y} side={side} live={tie.live}
+              crestClass={tier.crest} emptyClass={tier.empty}
+              onClick={() => onOpenTie(tie)}
+            />
+          );
+        })
+      ))}
+
+      {/* Winner nodes per round (crest if decided, else faint pip). */}
+      {roundTies.map((ties, lvl) =>
+        ties.map((tie, k) => {
+          const p = polar(angles[lvl + 1][k], RAD[lvl + 1]);
+          return (
+            <Node
+              key={`n-${lvl}-${k}`} x={p.x} y={p.y}
+              code={winnerCode(tie)} live={tie.live}
+              flagClass={tier.nodes[Math.min(lvl, tier.nodes.length - 1)]} pipClass={tier.pip}
+              onClick={() => onOpenTie(tie)}
+            />
+          );
+        }),
+      )}
+
+      {/* Centre trophy / champion */}
+      <button
+        type="button"
+        onClick={() => onOpenTie(fin)}
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex items-center justify-center"
+        aria-label="Final"
+      >
+        {champion ? (
+          <span className="relative">
+            <Flag code={champion} className="w-11 h-8 ring-2 ring-amber-400 shadow-[0_0_18px_rgba(251,191,36,0.6)]" />
+            <span className="absolute -bottom-2 -right-2 text-sm">🏆</span>
+          </span>
+        ) : (
+          <span className="text-3xl drop-shadow-[0_0_12px_rgba(251,191,36,0.6)]">🏆</span>
+        )}
+      </button>
+    </div>
+  );
+}
+
 export default function CircularBracket({
   onOpenMatch,
 }: {
@@ -85,6 +249,7 @@ export default function CircularBracket({
   const openTie = (tie?: Tie) => { if (tie?.matchId) onOpenMatch(tie.matchId); };
   const [rounds, setRounds] = useState<Round[] | null>(null);
   const [anyLive, setAnyLive] = useState(false);
+  const [showFull, setShowFull] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -115,112 +280,66 @@ export default function CircularBracket({
   }
 
   const ordered = orderByBracket(rounds);
-  const r32 = ordered.R32; // 16 ties → 32 teams, in true bracket order
-  const r16 = ordered.R16; // 8
-  const qf = ordered.QF;   // 4
-  const sf = ordered.SF;   // 2
-  const fin = ordered.F[0];
 
-  // ── Full-circle radial bracket ─────────────────────────────────────────
-  // 32 teams evenly around the ring; each round's winners spiral inward to the
-  // trophy. Connectors use an "elbow": each child runs radially INWARD to the
-  // next ring, then a short lateral hop to the shared winner node — the clean
-  // "down, then into each other" look (not a straight diagonal).
-  const TAU = Math.PI * 2;
-  const RAD = [43, 34.5, 26.5, 18, 9.5]; // radius by depth: teams, l1, l2, l3, finalists
-  const l0 = Array.from({ length: 32 }, (_, t) => (t / 32) * TAU - Math.PI / 2);
-  const l1 = avgPairs(l0); // 16
-  const l2 = avgPairs(l1); // 8
-  const l3 = avgPairs(l2); // 4
-  const l4 = avgPairs(l3); // 2
-
-  const lines: Array<{ a: { x: number; y: number }; b: { x: number; y: number }; live: boolean }> = [];
-  const push = (a: { x: number; y: number }, b: { x: number; y: number }, live: boolean) => lines.push({ a, b, live });
-  // Child runs radially in to the parent's ring, then laterally to the node.
-  const elbow = (childA: number, childR: number, parentA: number, parentR: number, live: boolean) => {
-    push(polar(childA, childR), polar(childA, parentR), live);   // radial in ("down")
-    push(polar(childA, parentR), polar(parentA, parentR), live); // lateral to the node ("into")
-  };
-  for (let j = 0; j < 16; j++) {
-    const live = !!r32[j]?.live;
-    elbow(l0[2 * j], RAD[0], l1[j], RAD[1], live);
-    elbow(l0[2 * j + 1], RAD[0], l1[j], RAD[1], live);
-  }
-  for (let k = 0; k < 8; k++) {
-    const live = !!r16[k]?.live;
-    elbow(l1[2 * k], RAD[1], l2[k], RAD[2], live);
-    elbow(l1[2 * k + 1], RAD[1], l2[k], RAD[2], live);
-  }
-  for (let m = 0; m < 4; m++) {
-    const live = !!qf[m]?.live;
-    elbow(l2[2 * m], RAD[2], l3[m], RAD[3], live);
-    elbow(l2[2 * m + 1], RAD[2], l3[m], RAD[3], live);
-  }
-  for (let n = 0; n < 2; n++) {
-    const live = !!sf[n]?.live;
-    elbow(l3[2 * n], RAD[3], l4[n], RAD[4], live);
-    elbow(l3[2 * n + 1], RAD[3], l4[n], RAD[4], live);
-  }
-  // Finalists run straight in to the trophy.
-  push(polar(l4[0], RAD[4]), { x: 50, y: 50 }, !!fin?.live);
-  push(polar(l4[1], RAD[4]), { x: 50, y: 50 }, !!fin?.live);
-
-  const champion = winnerCode(fin);
+  // Zoom to the current round: the first one that isn't fully finished.
+  // (Clamped to SF — a "Final only" ring is just 2 teams, SF start shows it
+  // better.) While R32 is live this resolves to 0 = the full bracket anyway.
+  const seq = [ordered.R32, ordered.R16, ordered.QF, ordered.SF];
+  let start = 0;
+  while (start < 3 && seq[start].length > 0 && seq[start].every((t) => t.finished)) start++;
 
   return (
-    <div className="relative w-full max-w-[44rem] mx-auto aspect-square select-none">
-      {/* soft glow behind the trophy */}
-      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 rounded-full bg-amber-400/10 blur-2xl pointer-events-none" />
-
-      {/* Connector lines */}
-      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden>
-        {lines.map((ln, i) => (
-          <line
-            key={i}
-            x1={ln.a.x} y1={ln.a.y} x2={ln.b.x} y2={ln.b.y}
-            stroke={ln.live ? 'rgba(16,185,129,0.75)' : 'rgba(255,255,255,0.22)'}
-            strokeWidth={ln.live ? 0.55 : 0.4}
-            strokeLinecap="round"
-          />
-        ))}
-      </svg>
-
-      {/* Outer ring — 32 team crests (each R32 tie's home then away). */}
-      {r32.map((tie, j) => (
-        [tie.home, tie.away].map((side, s) => {
-          const { x, y } = polar(l0[2 * j + s], RAD[0]);
-          return <Crest key={`t-${j}-${s}`} x={x} y={y} side={side} live={tie.live} onClick={() => openTie(tie)} />;
-        })
-      ))}
-
-      {/* Winner nodes per round (small crest if decided, else faint pip). */}
-      {r32.map((tie, j) => { const p = polar(l1[j], RAD[1]); return <Node key={`n1-${j}`} x={p.x} y={p.y} code={winnerCode(tie)} live={tie.live} onClick={() => openTie(tie)} size="md" />; })}
-      {r16.map((tie, k) => { const p = polar(l2[k], RAD[2]); return <Node key={`n2-${k}`} x={p.x} y={p.y} code={winnerCode(tie)} live={tie.live} onClick={() => openTie(tie)} size="md" />; })}
-      {qf.map((tie, m) => { const p = polar(l3[m], RAD[3]); return <Node key={`n3-${m}`} x={p.x} y={p.y} code={winnerCode(tie)} live={tie.live} onClick={() => openTie(tie)} size="sm" />; })}
-      {sf.map((tie, n) => { const p = polar(l4[n], RAD[4]); return <Node key={`n4-${n}`} x={p.x} y={p.y} code={winnerCode(tie)} live={tie.live} onClick={() => openTie(tie)} size="sm" />; })}
-
-      {/* Centre trophy / champion */}
-      <button
-        type="button"
-        onClick={() => openTie(fin)}
-        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex items-center justify-center"
-        aria-label="Final"
-      >
-        {champion ? (
-          <span className="relative">
-            <Flag code={champion} className="w-11 h-8 ring-2 ring-amber-400 shadow-[0_0_18px_rgba(251,191,36,0.6)]" />
-            <span className="absolute -bottom-2 -right-2 text-sm">🏆</span>
-          </span>
-        ) : (
-          <span className="text-3xl drop-shadow-[0_0_12px_rgba(251,191,36,0.6)]">🏆</span>
+    <div className="w-full">
+      {/* Header: current-round label + full-bracket toggle */}
+      <div className="flex items-center justify-between max-w-[44rem] mx-auto px-4 mb-1">
+        <span className="text-xs font-bold uppercase tracking-widest text-white/40">{START_LABEL[start]}</span>
+        {start > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowFull(true)}
+            className="px-3 py-1 rounded-full text-xs font-bold bg-white/[0.06] text-white/70 ring-1 ring-white/10 hover:bg-white/10 hover:text-white transition-colors"
+          >
+            Full bracket
+          </button>
         )}
-      </button>
+      </div>
+
+      <RadialView ordered={ordered} start={start} onOpenTie={openTie} />
+
+      {/* Full-bracket overlay: the complete R32→Final circle, read-only feel
+          (taps still open match details). */}
+      {showFull && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-6"
+          onClick={() => setShowFull(false)}
+        >
+          <div
+            className="relative w-full max-w-3xl max-h-full overflow-auto rounded-2xl bg-[#0d1220] ring-1 ring-white/10 p-3 sm:p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-bold uppercase tracking-widest text-white/40">Full bracket · Round of 32 → Final</span>
+              <button
+                type="button"
+                onClick={() => setShowFull(false)}
+                aria-label="Close full bracket"
+                className="px-2.5 py-1 rounded-full text-xs font-bold bg-white/[0.06] text-white/70 ring-1 ring-white/10 hover:bg-white/10 hover:text-white transition-colors"
+              >
+                ✕ Close
+              </button>
+            </div>
+            <RadialView ordered={ordered} start={0} onOpenTie={openTie} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// One outer team slot: flag + tiny score, dimmed if it lost the tie.
-function Crest({ x, y, side, live, onClick }: { x: number; y: number; side: TieSide; live: boolean; onClick: () => void }) {
+// One outer team slot: flag, dimmed if it lost the tie.
+function Crest({ x, y, side, live, crestClass, emptyClass, onClick }: {
+  x: number; y: number; side: TieSide; live: boolean; crestClass: string; emptyClass: string; onClick: () => void;
+}) {
   const lost = (side.score != null || side.winner) && !side.winner && (side.code != null);
   return (
     <button
@@ -233,10 +352,10 @@ function Crest({ x, y, side, live, onClick }: { x: number; y: number; side: TieS
       {side.code ? (
         <Flag
           code={side.code}
-          className={`w-6 h-[18px] sm:w-8 sm:h-6 ${live ? 'ring-2 ring-emerald-400 rounded-[1px]' : side.winner ? 'ring-1 ring-amber-300/70 rounded-[1px]' : ''} ${lost ? 'opacity-35 grayscale' : ''}`}
+          className={`${crestClass} ${live ? 'ring-2 ring-emerald-400 rounded-[1px]' : side.winner ? 'ring-1 ring-amber-300/70 rounded-[1px]' : ''} ${lost ? 'opacity-35 grayscale' : ''}`}
         />
       ) : (
-        <span className="block w-6 h-[18px] sm:w-8 sm:h-6 rounded-[2px] bg-white/[0.05] text-[7px] font-bold text-white/40 flex items-center justify-center text-center leading-tight">
+        <span className={`block ${emptyClass} rounded-[2px] bg-white/[0.05] font-bold text-white/40 flex items-center justify-center text-center leading-tight`}>
           {side.label.length <= 3 ? side.label : ''}
         </span>
       )}
@@ -244,10 +363,10 @@ function Crest({ x, y, side, live, onClick }: { x: number; y: number; side: TieS
   );
 }
 
-// Inner winner pip.
-function Node({ x, y, code, live, onClick, size }: { x: number; y: number; code: string | null; live: boolean; onClick: () => void; size: 'sm' | 'md' }) {
-  const dim = size === 'md' ? 'w-5 h-[15px]' : 'w-4 h-3';
-  const pip = size === 'md' ? 'w-2 h-2' : 'w-1.5 h-1.5';
+// Inner winner node: crest if decided, else pip.
+function Node({ x, y, code, live, flagClass, pipClass, onClick }: {
+  x: number; y: number; code: string | null; live: boolean; flagClass: string; pipClass: string; onClick: () => void;
+}) {
   return (
     <button
       type="button"
@@ -257,9 +376,9 @@ function Node({ x, y, code, live, onClick, size }: { x: number; y: number; code:
       aria-label={code ?? 'Undecided tie'}
     >
       {code ? (
-        <Flag code={code} className={`${dim} ${live ? 'ring-2 ring-emerald-400 rounded-[1px]' : ''}`} />
+        <Flag code={code} className={`${flagClass} ${live ? 'ring-2 ring-emerald-400 rounded-[1px]' : ''}`} />
       ) : (
-        <span className={`block ${pip} rounded-full ${live ? 'bg-emerald-400/80 animate-pulse' : 'bg-white/15 ring-1 ring-white/10'}`} />
+        <span className={`block ${pipClass} rounded-full ${live ? 'bg-emerald-400/80 animate-pulse' : 'bg-white/15 ring-1 ring-white/10'}`} />
       )}
     </button>
   );
