@@ -9,7 +9,7 @@ import { Megaphone, X } from 'lucide-react';
 // Set ANNOUNCEMENT to null to hide the strip entirely.
 const ANNOUNCEMENT_ID = 'budget-105';
 const ANNOUNCEMENT: string | null =
-  'Budget increased to £105m — every team’s bank just got +£5.0m for the knockout rounds. Spend it well!';
+  'Budget increased to £105m — every team’s bank just got +£5.0m for the knockout rounds.';
 
 export default function AnnouncementBanner() {
   // Start hidden and reveal after the localStorage check so a dismissed
@@ -39,18 +39,16 @@ export default function AnnouncementBanner() {
   };
 
   return (
-    <div className="relative z-10 px-4 md:px-6 pt-4">
-      <div className="max-w-6xl mx-auto flex items-start sm:items-center gap-3 rounded-xl border border-emerald-400/25 bg-gradient-to-r from-emerald-500/15 to-teal-500/10 px-4 py-3">
-        <div className="w-8 h-8 shrink-0 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-          <Megaphone className="w-4 h-4 text-emerald-300" />
-        </div>
-        <p className="flex-1 text-sm text-emerald-100/90 font-medium">{ANNOUNCEMENT}</p>
+    <div className="relative z-10 px-4 md:px-6 pt-3">
+      <div className="max-w-6xl mx-auto flex items-center gap-2 rounded-lg border border-emerald-400/25 bg-gradient-to-r from-emerald-500/15 to-teal-500/10 px-3 py-1.5">
+        <Megaphone className="w-3.5 h-3.5 shrink-0 text-emerald-300" />
+        <p className="flex-1 text-xs text-emerald-100/90 font-medium">{ANNOUNCEMENT}</p>
         <button
           onClick={dismiss}
           aria-label="Dismiss announcement"
-          className="shrink-0 p-1.5 rounded-lg text-emerald-200/60 hover:text-white hover:bg-white/10 transition-colors"
+          className="shrink-0 p-1 rounded-md text-emerald-200/60 hover:text-white hover:bg-white/10 transition-colors"
         >
-          <X className="w-4 h-4" />
+          <X className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>
