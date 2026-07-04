@@ -1054,7 +1054,7 @@ export default function SquadPage() {
 
   // Calculate squad stats
   const squadValue = useMemo(() => squad.reduce((sum, p) => sum + p.currentPrice, 0), [squad]);
-  const remainingBudget = useMemo(() => 100 - squadValue, [squadValue]);
+  const remainingBudget = useMemo(() => 105 - squadValue, [squadValue]);
   
   const positionCounts = useMemo(() => {
     const counts: Record<Position, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
@@ -1485,7 +1485,9 @@ export default function SquadPage() {
         } else {
           if (squadIds.has(p.id)) return false;
         }
-        if (p.currentPrice > effectiveBudget) return false;
+        // Float tolerance: bank/refund sums accumulate FP error (5.1 can be
+        // 5.099999…), which hid exactly-affordable players from the picker.
+        if (p.currentPrice > effectiveBudget + 0.001) return false;
         if ((counts[p.nation?.id || ''] || 0) >= maxPerNation) return false;
         return true;
       })

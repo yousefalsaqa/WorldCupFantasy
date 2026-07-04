@@ -108,7 +108,9 @@ export async function POST(request: NextRequest) {
     // which an attacker could set to anything.
     const priceById = new Map(submittedPlayers.map((p) => [p.id, p.currentPrice]));
     const totalCost = players.reduce((sum, p) => sum + (priceById.get(p.playerId) ?? Infinity), 0);
-    if (totalCost > 100) {
+    // 105 = raised budget (was hardcoded 100 and missed the Jul 4 raise);
+    // +0.001 float tolerance, prices step in 0.1s.
+    if (totalCost > 105.001) {
       return NextResponse.json({ error: 'Squad exceeds budget' }, { status: 400 });
     }
     if (submittedPlayers.length !== players.length) {

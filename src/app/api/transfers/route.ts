@@ -240,7 +240,11 @@ export async function POST(request: NextRequest) {
     // temporary Free Hit team's bank.
     const netCost = totalCost - moneyBack;
     const availableBank = (fhBank ?? team.bankBalance) - pendingNetCost;
-    if (netCost > availableBank) {
+    // 0.001 tolerance: both sides are sums of 0.1-step floats, so an
+    // exactly-affordable move can compute as e.g. 5.1000000000000005 vs
+    // 5.099999999999999 and bounce. Prices step in 0.1s — nothing real
+    // lives inside the epsilon.
+    if (netCost > availableBank + 0.001) {
       return NextResponse.json({
         error: `Insufficient funds. Need £${netCost.toFixed(1)}m but only have £${availableBank.toFixed(1)}m`
       }, { status: 400 });
