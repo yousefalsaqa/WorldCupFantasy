@@ -26,11 +26,11 @@ function FormationDots({ formation }: { formation: string }) {
     { count: 1, color: 'bg-amber-400' },
   ];
   return (
-    <div className="flex flex-col items-center gap-[3px] w-7 h-9 justify-center">
+    <div className="flex flex-col items-center gap-[2px] w-6 h-7 justify-center">
       {rows.map((row, i) => (
-        <div key={i} className="flex gap-[3px]">
+        <div key={i} className="flex gap-[2px]">
           {Array.from({ length: row.count }).map((_, j) => (
-            <span key={j} className={`w-[5px] h-[5px] rounded-full ${row.color}`} />
+            <span key={j} className={`w-[4px] h-[4px] rounded-full ${row.color}`} />
           ))}
         </div>
       ))}
@@ -58,7 +58,7 @@ export default function FormationPicker({ formations, current, onChange }: Forma
   useEffect(() => {
     if (!open || !ref.current) return;
     const rect = ref.current.getBoundingClientRect();
-    const panelWidth = Math.min(288, window.innerWidth - 24); // mirrors the style width
+    const panelWidth = Math.min(240, window.innerWidth - 24); // mirrors the style width
     setAlign(rect.right - panelWidth < 12 ? 'left' : 'right');
   }, [open]);
 
@@ -66,34 +66,34 @@ export default function FormationPicker({ formations, current, onChange }: Forma
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(o => !o)}
-        className="group flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 border border-white/20 text-white text-sm font-bold hover:bg-white/15 hover:border-white/30 transition-all"
+        className="group flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 border border-white/20 text-white text-xs font-bold hover:bg-white/15 hover:border-white/30 transition-all"
       >
         <FormationDots formation={current} />
         <span className="tracking-wider">{current}</span>
-        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
         <div
-          className={`absolute top-full mt-2 ${align === 'right' ? 'right-0' : 'left-0'} z-50 p-2 rounded-xl bg-slate-900/95 backdrop-blur-md border border-white/15 shadow-2xl animate-fade-in max-h-[70vh] overflow-y-auto`}
-          style={{ width: 'min(18rem, calc(100vw - 24px))' }}
+          className={`absolute top-full mt-1.5 ${align === 'right' ? 'right-0' : 'left-0'} z-50 p-1.5 rounded-lg bg-slate-900/95 backdrop-blur-md border border-white/15 shadow-2xl animate-fade-in max-h-[70vh] overflow-y-auto`}
+          style={{ width: 'min(15rem, calc(100vw - 24px))' }}
         >
-          <p className="px-2 pt-1 pb-2 text-[10px] font-bold text-white/40 uppercase tracking-wider">Choose Formation</p>
-          <div className="grid grid-cols-3 gap-1.5">
+          <p className="px-1.5 pt-0.5 pb-1.5 text-[9px] font-bold text-white/40 uppercase tracking-wider">Choose Formation</p>
+          <div className="grid grid-cols-3 gap-1">
             {formations.map(f => {
               const active = f === current;
               return (
                 <button
                   key={f}
                   onClick={() => { onChange(f); setOpen(false); }}
-                  className={`flex flex-col items-center gap-1 p-2 rounded-lg border transition-all ${
+                  className={`flex flex-col items-center gap-0.5 py-1.5 rounded-lg border transition-all ${
                     active
                       ? 'bg-emerald-500/15 border-emerald-500/60 ring-1 ring-emerald-500/40'
                       : 'bg-white/5 border-white/5 hover:border-white/20 hover:bg-white/10'
                   }`}
                 >
                   <FormationDots formation={f} />
-                  <span className={`text-[11px] font-bold ${active ? 'text-emerald-400' : 'text-white/80'}`}>{f}</span>
+                  <span className={`text-[10px] font-bold ${active ? 'text-emerald-400' : 'text-white/80'}`}>{f}</span>
                 </button>
               );
             })}

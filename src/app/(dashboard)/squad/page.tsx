@@ -10,12 +10,11 @@ import PointsBreakdownModal from '@/components/points-breakdown-modal';
 import { getFlagUrl } from '@/lib/flags';
 import { getFixtureDifficulty, type FDR } from '@/lib/fdr';
 import { useUnsavedChanges } from '@/contexts/unsaved-changes';
-import { ArrowLeftRight, RotateCcw, ArrowLeft } from 'lucide-react';
+import { ArrowLeftRight, RotateCcw, ArrowLeft, ChevronRight } from 'lucide-react';
 import { useUserTimezone, useNow } from '@/hooks/useTimezone';
 import {
   formatDateShort,
   formatTime,
-  formatCountdown as fmtCountdown,
   formatDuration,
   deadlineFor,
   parseFixtureDateTime,
@@ -608,9 +607,6 @@ export default function SquadPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historySelected, setHistorySelected] = useState<HistPlayer | null>(null);
   const [showPoints, setShowPoints] = useState(false);
-  // Current-round (this gameweek) points + stage label for the inline pill —
-  // the tappable popup shows the cumulative total + per-week breakdown.
-  const [roundPoints, setRoundPoints] = useState<{ points: number; stageId: string | null }>({ points: 0, stageId: null });
   // The next-round lineup the user has saved (raw JSON from the server), and
   // the live, editable Planned-view lineup state. The Planned view edits these
   // — fully independent of the live startingXI/bench so rearranging next round
@@ -720,6 +716,9 @@ export default function SquadPage() {
   // next round. Drives the "losing points" indicator.
   const [queuedHit, setQueuedHit] = useState(0);
   const [queueCancelling, setQueueCancelling] = useState<string | null>(null);
+  // Queued-transfers card starts collapsed to a one-line summary; tapping it
+  // opens the full list in a modal instead of pushing the page content down.
+  const [showQueuedModal, setShowQueuedModal] = useState(false);
   // The squad player the user just tapped Replace on. Drives the picker
   // modal's position filter and refund math. Distinct from `selectedPlayer`
   // (view-mode player detail) and `selectingPosition` (builder slot).
@@ -2086,14 +2085,13 @@ export default function SquadPage() {
     [upcomingByNation],
   );
 
-  // Load the current-round points for the inline pill (cheap summary call).
+  // Load the round timeline (cheap summary call) for the GwSlider strip.
   useEffect(() => {
     let cancelled = false;
     fetch('/api/team/stages-summary', { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!cancelled && d) {
-          setRoundPoints({ points: d.currentRoundPoints ?? 0, stageId: d.currentStageId ?? null });
           if (Array.isArray(d.stages)) {
             // ALL stages (GS1 → Final). Future ones render disabled — no squad
             // to preview yet — but stay visible for full-tournament context.
@@ -2772,13 +2770,11 @@ export default function SquadPage() {
   // matchdays. Once the tournament is in full swing we may want to anchor
   // this on the Stage record's `deadline` field instead.
   let deadlineDateShort = '—';
-  let deadlineHint = '';
+  let deadlineTimeStr = '';
   if (nextFixture) {
     const dl = deadlineFor(nextFixture.dt);
     deadlineDateShort = formatDateShort(dl, timezone);
-    const timeStr = formatTime(dl, timezone);
-    const countdown = fmtCountdown(dl.getTime(), now, 'Locked');
-    deadlineHint = `${timeStr} · ${countdown}`;
+    deadlineTimeStr = formatTime(dl, timezone);
   }
 
   // ============================================
@@ -3161,11 +3157,11 @@ export default function SquadPage() {
             className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-start sm:items-center justify-center z-50 p-3 sm:p-4 animate-fade-in"
             style={{ paddingTop: 'calc(env(safe-area-inset-top) + 4.5rem)' }}
           >
-            <div className="bg-slate-900 rounded-2xl w-full max-w-2xl max-h-[82dvh] overflow-hidden border border-white/10 shadow-2xl">
-              <div className="p-4 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-800">
-                <div className="flex items-center gap-3 min-w-0">
+            <div className="bg-slate-900 rounded-2xl w-full max-w-lg max-h-[78dvh] overflow-hidden border border-white/10 shadow-2xl">
+              <div className="p-3 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-800">
+                <div className="flex items-center gap-2 min-w-0">
                   <div
-                    className={`w-9 h-9 rounded-lg flex items-center justify-center font-black text-sm flex-shrink-0 ${
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-[11px] flex-shrink-0 ${
                       selectingPosition === 'GK'
                         ? 'bg-amber-500/20 text-amber-300'
                         : selectingPosition === 'DEF'
@@ -3178,26 +3174,17 @@ export default function SquadPage() {
                     {selectingPosition}
                   </div>
                   <div className="min-w-0">
-                    <h2 className="text-base sm:text-lg font-bold text-white truncate">
+                    <h2 className="text-sm font-bold text-white truncate">
                       Replace {transferReplacingFor?.displayName}
                     </h2>
-                    {/* Show ONE clear number — the most this single pick can
-                        cost — with a plain-English breakdown underneath. The
-                        old "Bank … + refund … · max … per pick" line read like
-                        an unfinished formula. */}
-                    <p className="text-xs sm:text-sm text-white/70 leading-tight">
-                      Spend up to{' '}
-                      <span className="font-black text-emerald-300">
-                        £{transferPickMax.toFixed(1)}m
-                      </span>
-                    </p>
-                    <p className="text-[11px] text-white/40 leading-tight mt-0.5">
-                      £{projectedBank.toFixed(1)}m in the bank
+                    {/* One line: the max spend, then where it comes from — the
+                        old 3-line breakdown (title, spend, bank+refund) ate
+                        too much header height. */}
+                    <p className="text-[11px] text-white/50 leading-tight truncate">
+                      Spend up to <span className="font-black text-emerald-300">£{transferPickMax.toFixed(1)}m</span>
+                      {' · £'}{projectedBank.toFixed(1)}m bank
                       {!fillingEmptySlot && transferReplacingFor && (
-                        <>
-                          {' '}+ £{(transferReplacingFor.currentPrice ?? 0).toFixed(1)}m from
-                          selling {transferReplacingFor.displayName}
-                        </>
+                        <> + £{(transferReplacingFor.currentPrice ?? 0).toFixed(1)}m sale</>
                       )}
                     </p>
                   </div>
@@ -3208,15 +3195,15 @@ export default function SquadPage() {
                     setSelectingPosition(null);
                     setTransferReplacingFor(null);
                   }}
-                  className="text-white/60 hover:text-white p-2 rounded-lg hover:bg-white/5 flex-shrink-0"
+                  className="text-white/60 hover:text-white p-1.5 rounded-lg hover:bg-white/5 flex-shrink-0"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="p-4 border-b border-white/10 flex gap-3">
+              <div className="p-2.5 border-b border-white/10 flex gap-2">
                 <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/40" />
                   <input
                     type="text"
                     placeholder="Search players..."
@@ -3226,20 +3213,20 @@ export default function SquadPage() {
                     enterKeyHint="search"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-white/30 focus:bg-white/10 transition-colors"
+                    className="w-full pl-8 pr-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-white/40 focus:outline-none focus:border-white/30 focus:bg-white/10 transition-colors"
                   />
                 </div>
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as 'price' | 'name')}
-                  className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm cursor-pointer"
+                  className="px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-xs cursor-pointer"
                 >
                   <option value="price">By Price</option>
                   <option value="name">By Name</option>
                 </select>
               </div>
 
-              <div className="h-[50dvh] sm:h-auto sm:max-h-[55dvh] overflow-y-auto">
+              <div className="h-[45dvh] sm:h-auto sm:max-h-[48dvh] overflow-y-auto">
                 {availablePlayers.length === 0 ? (
                   <div className="p-8 text-center text-white/40">
                     No players available within budget for this slot.
@@ -3249,7 +3236,7 @@ export default function SquadPage() {
                     <button
                       key={player.id}
                       onClick={() => addPlayer(player)}
-                      className="w-full px-3 py-2 sm:px-4 sm:py-2.5 flex items-center gap-3 hover:bg-white/5 border-b border-white/5 text-left group transition-colors"
+                      className="w-full px-3 py-1.5 flex items-center gap-2.5 hover:bg-white/5 border-b border-white/5 text-left group transition-colors"
                     >
                       <PlayerFace
                         photoUrl={player.photoUrl}
@@ -3390,6 +3377,11 @@ export default function SquadPage() {
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[10px] sm:text-xs uppercase tracking-wider text-white/40 font-bold">Next match in</span>
                 <span className="text-[11px] sm:text-xs text-amber-300 font-black">{countdownStr}</span>
+                {nextFixture && (
+                  <span className="text-[10px] sm:text-xs text-white/30 font-medium">
+                    · locks {deadlineDateShort}, {deadlineTimeStr}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -3412,20 +3404,20 @@ export default function SquadPage() {
           </div>
         </div>
 
-        {/* Stats strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <button type="button" onClick={() => setShowPoints(true)} className="w-full text-left active:scale-[0.98] transition-transform">
-            <StatCard icon={<Trophy className="w-4 h-4" />} label={`${roundPoints.stageId ?? 'Round'} Pts ›`} value={`${roundPoints.points}`} accent="text-emerald-400" highlight hint={queuedHit > 0 ? `−${queuedHit} pts next round` : 'Tap for total'} />
-          </button>
-          <StatCard icon={<Coins className="w-4 h-4" />} label="Value" value={`£${teamValue.toFixed(1)}m`} accent="text-white" />
-          <StatCard icon={<Wallet className="w-4 h-4" />} label="Bank" value={`£${bankBalance.toFixed(1)}m`} accent="text-emerald-300" />
-          <StatCard
-            icon={<Zap className="w-4 h-4" />}
-            label="Lineup locks"
-            value={deadlineDateShort}
-            hint={deadlineHint}
-            accent="text-amber-300"
-          />
+        {/* Stats strip — Round Pts and Lineup Locks used to have their own
+            cards here, but that info is already shown elsewhere (the Total
+            pts pill + round timeline strip, and the "Next match in" line
+            above), so this collapsed to just the two numbers that aren't
+            duplicated anywhere: team Value and Bank. */}
+        <div className="flex items-center gap-2">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10">
+            <Coins className="w-3.5 h-3.5 text-white/60" />
+            <span className="text-white font-black text-sm tabular-nums">£{teamValue.toFixed(1)}m</span>
+          </div>
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10">
+            <Wallet className="w-3.5 h-3.5 text-emerald-300" />
+            <span className="text-emerald-300 font-black text-sm tabular-nums">£{bankBalance.toFixed(1)}m</span>
+          </div>
         </div>
 
         {/* The old Live ↔ Planned pill is gone: the Planned view now lives on
@@ -3438,12 +3430,11 @@ export default function SquadPage() {
           locked (round in play → changes queue for next round). The locked
           state is a slim one-liner to save vertical space. */}
       {stageLocked ? (
-        <div className="px-3 sm:px-0 mb-3">
-          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 flex items-center gap-2">
-            <Lock className="w-3.5 h-3.5 text-white/50 shrink-0" strokeWidth={2.5} />
-            <p className="text-white/70 text-xs leading-snug min-w-0">
-              <span className="font-bold text-white">Transfers locked</span> — round in play. Changes
-              <span className="font-bold text-white/80"> queue for next round</span>.
+        <div className="px-3 sm:px-0 mb-2">
+          <div className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 flex items-center gap-1.5">
+            <Lock className="w-3 h-3 text-white/50 shrink-0" strokeWidth={2.5} />
+            <p className="text-white/60 text-[11px] leading-tight min-w-0 truncate">
+              <span className="font-bold text-white/90">Transfers locked</span> — changes queue for next round
             </p>
           </div>
         </div>
@@ -3504,20 +3495,51 @@ export default function SquadPage() {
         </div>
       )}
 
-      {/* Queued-transfers card — swaps confirmed while the round was locked.
-          They execute automatically at the next stage boundary; until then
-          each row can be cancelled (which refunds the free transfer). */}
+      {/* Queued-transfers summary — swaps confirmed while the round was
+          locked. Collapsed to a single dense row by default (a full card per
+          swap ate too much of the phone screen); tapping it opens the full
+          list in a modal instead of expanding inline, so it never pushes the
+          rest of the page around. */}
       {queuedTransfers.length > 0 && (
         <div className="px-3 sm:px-0 mb-3">
-          <div className="rounded-2xl border border-violet-500/30 bg-gradient-to-r from-violet-500/15 via-violet-500/10 to-transparent p-3 sm:p-4">
-            <div className="flex items-center gap-2 mb-2">
+          <button
+            type="button"
+            onClick={() => setShowQueuedModal(true)}
+            className="w-full flex items-center gap-2 rounded-xl border border-violet-500/30 bg-gradient-to-r from-violet-500/15 via-violet-500/10 to-transparent px-3 py-2 text-left hover:from-violet-500/20 transition-colors"
+          >
+            <div className="w-6 h-6 rounded-full bg-violet-500/20 flex items-center justify-center flex-shrink-0">
+              <ArrowLeftRight className="w-3.5 h-3.5 text-violet-300" />
+            </div>
+            <p className="min-w-0 flex-1 text-violet-200 text-xs font-bold truncate">
+              {queuedTransfers.length} transfer{queuedTransfers.length > 1 ? 's' : ''} queued for next round
+            </p>
+            {queuedHit > 0 && (
+              <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-500/15 ring-1 ring-red-500/40 text-red-300 text-[10px] font-black">
+                −{queuedHit} pts
+              </span>
+            )}
+            <ChevronRight className="w-4 h-4 text-violet-300/60 flex-shrink-0" />
+          </button>
+        </div>
+      )}
+
+      {/* Queued-transfers modal — the full list, each row cancellable (which
+          refunds the free transfer). Closes itself once the list empties. */}
+      {showQueuedModal && queuedTransfers.length > 0 && (
+        <div
+          className="fixed inset-0 bg-black/80 z-[9999] backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setShowQueuedModal(false)}
+        >
+          <div
+            className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl max-h-[80dvh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 p-3 border-b border-white/10">
               <div className="w-8 h-8 rounded-full bg-violet-500/20 flex items-center justify-center flex-shrink-0">
                 <ArrowLeftRight className="w-4 h-4 text-violet-300" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-violet-200 font-black text-sm">
-                  Queued for next round
-                </p>
+                <p className="text-violet-200 font-black text-sm">Queued for next round</p>
                 <p className="text-violet-200/60 text-[11px] leading-snug">
                   These swaps happen automatically when the next round starts.
                 </p>
@@ -3527,14 +3549,22 @@ export default function SquadPage() {
                   −{queuedHit} pts
                 </span>
               )}
+              <button
+                type="button"
+                onClick={() => setShowQueuedModal(false)}
+                aria-label="Close"
+                className="flex-shrink-0 text-white/50 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <ul className="space-y-1.5">
+            <ul className="p-2.5 space-y-1">
               {queuedTransfers.map((t) => (
                 <li
                   key={`${t.playerOut?.id}-${t.playerIn?.id}`}
-                  className="flex items-center justify-between gap-2 rounded-xl bg-white/5 border border-white/10 px-2.5 py-2"
+                  className="flex items-center justify-between gap-2 rounded-xl bg-white/5 border border-white/10 px-2 py-1.5"
                 >
-                  <div className="flex items-center gap-2 min-w-0 text-xs sm:text-sm">
+                  <div className="flex items-center gap-1.5 min-w-0 text-xs">
                     <span className="text-white/60 truncate">{t.playerOut?.displayName ?? 'Unknown'}</span>
                     <span className="text-violet-300 font-bold flex-shrink-0">→</span>
                     <span className="text-white font-semibold truncate">{t.playerIn?.displayName ?? 'Unknown'}</span>
@@ -3547,7 +3577,7 @@ export default function SquadPage() {
                       type="button"
                       onClick={() => cancelQueuedTransfer(t.playerIn!.id)}
                       disabled={queueCancelling === t.playerIn.id}
-                      className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-red-500/15 border border-red-500/30 text-red-300 hover:bg-red-500/25 text-[10px] font-bold disabled:opacity-50 transition-colors"
+                      className="flex-shrink-0 px-2 py-1 rounded-lg bg-red-500/15 border border-red-500/30 text-red-300 hover:bg-red-500/25 text-[10px] font-bold disabled:opacity-50 transition-colors"
                     >
                       {queueCancelling === t.playerIn.id ? '…' : 'Cancel'}
                     </button>
