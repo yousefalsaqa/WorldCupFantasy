@@ -20,6 +20,7 @@ import {
   parseFixtureDateTime,
 } from '@/lib/format-time';
 import { Trophy, Wallet, Coins, Sparkles, Zap, RefreshCw, Crown, Users, Save, X, Search, Wand2, Lock } from 'lucide-react';
+import { SQUAD } from '@/lib/wc-constants';
 import {
   ALL_WC_FIXTURES,
   NATION_NAMES as WC_NATION_NAMES,
@@ -1101,7 +1102,7 @@ export default function SquadPage() {
 
   // Calculate squad stats
   const squadValue = useMemo(() => squad.reduce((sum, p) => sum + p.currentPrice, 0), [squad]);
-  const remainingBudget = useMemo(() => 105 - squadValue, [squadValue]);
+  const remainingBudget = useMemo(() => SQUAD.initialBudget - squadValue, [squadValue]);
   
   const positionCounts = useMemo(() => {
     const counts: Record<Position, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
@@ -2324,7 +2325,7 @@ export default function SquadPage() {
             </div>
             <div>
               <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">Build Your Squad</h1>
-              <p className="text-white/50 text-xs sm:text-sm">Pick 15 players within your £105m budget</p>
+              <p className="text-white/50 text-xs sm:text-sm">Pick 15 players within your £{SQUAD.initialBudget}m budget</p>
             </div>
           </div>
 

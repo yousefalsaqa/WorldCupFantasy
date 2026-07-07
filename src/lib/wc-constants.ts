@@ -44,8 +44,9 @@ export const SQUAD = {
   maxPerNation: 3,
   
   // Budget (raised 100 → 105 mid-tournament, Jul 4 2026 — every existing
-  // team's bank got +5.0 via scripts/increase-budget-105.ts)
-  initialBudget: 105.0,
+  // team's bank got +5.0 via scripts/increase-budget-105.ts; raised again
+  // 105 → 108 for the QF, Jul 6 2026 — +3.0 via scripts/increase-budget-108.ts)
+  initialBudget: 108.0,
   minPlayerPrice: 4.0,
   maxPlayerPrice: 15.0,
   priceStep: 0.5,
@@ -209,13 +210,16 @@ export type StageId = keyof typeof STAGES;
 // 3-per-nation cap and only 2 nations in the Final, you could own at most 6
 // finalists but need 11 starters — an XI becomes impossible to field. So the
 // cap loosens as the field shrinks:
-//   • Default (groups → QF): 3 per nation.
+//   • Default (groups → R16): 3 per nation.
+//   • Quarter Finals (8 nations): 4 per nation.
 //   • SF / 3rd-place play-off (4 nations): 5 per nation.
 //   • Final (2 nations): no cap (Infinity) so a full XI is fillable.
 // Returned as a number; `Infinity` means "no limit". Callers that need a
 // finite display value should special-case Infinity.
 export function maxPerNationForStage(stageId: string | null | undefined): number {
   switch (stageId) {
+    case 'QF':
+      return 4;
     case 'SF':
     case '3RD':
       return 5;

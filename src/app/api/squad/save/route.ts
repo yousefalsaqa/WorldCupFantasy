@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyToken, JWTPayload } from '@/lib/auth';
 import { getStageLock, LOCKED_ERROR } from '@/lib/deadline';
-import { maxPerNationForStage } from '@/lib/wc-constants';
+import { maxPerNationForStage, SQUAD } from '@/lib/wc-constants';
 
 // This route is dynamic because it reads cookies for authentication
 export const dynamic = 'force-dynamic';
@@ -78,8 +78,8 @@ export async function POST(request: NextRequest) {
         data: {
           userId: session.userId,
           name: `${user?.username || 'Unknown'}'s Team`,
-          initialBudget: 105,
-          bankBalance: 105,
+          initialBudget: SQUAD.initialBudget,
+          bankBalance: SQUAD.initialBudget,
           teamValue: 0,
         },
       });
@@ -108,9 +108,9 @@ export async function POST(request: NextRequest) {
     // which an attacker could set to anything.
     const priceById = new Map(submittedPlayers.map((p) => [p.id, p.currentPrice]));
     const totalCost = players.reduce((sum, p) => sum + (priceById.get(p.playerId) ?? Infinity), 0);
-    // 105 = raised budget (was hardcoded 100 and missed the Jul 4 raise);
-    // +0.001 float tolerance, prices step in 0.1s.
-    if (totalCost > 105.001) {
+    // SQUAD.initialBudget is the single source of truth (was hardcoded and
+    // missed a budget raise before); +0.001 float tolerance, prices step in 0.1s.
+    if (totalCost > SQUAD.initialBudget + 0.001) {
       return NextResponse.json({ error: 'Squad exceeds budget' }, { status: 400 });
     }
     if (submittedPlayers.length !== players.length) {
