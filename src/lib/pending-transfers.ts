@@ -21,6 +21,7 @@
 // ============================================
 
 import { prisma } from './db';
+import { roundPrice } from './utils';
 
 export interface PendingTransfer {
   playerOutId: string;
@@ -216,7 +217,7 @@ export async function applyPendingTransfers(
     });
     // Team value = sum of purchasePrice (what was paid), matching the sell +
     // bank accounting so bank+value stays £100 regardless of admin reprices.
-    const newTeamValue = updatedSquad.reduce((sum, sp) => sum + sp.purchasePrice, 0);
+    const newTeamValue = roundPrice(updatedSquad.reduce((sum, sp) => sum + sp.purchasePrice, 0));
 
     // Apply the planned (next-round) lineup over the inherited slots, if the
     // user saved one and it's still valid against the final 15. Invalid or
@@ -262,7 +263,7 @@ export async function applyPendingTransfers(
     await tx.team.update({
       where: { id: teamId },
       data: {
-        bankBalance: team.bankBalance + bankDelta,
+        bankBalance: roundPrice(team.bankBalance + bankDelta),
         teamValue: newTeamValue,
         pendingTransfers: null,
         plannedLineup: null,

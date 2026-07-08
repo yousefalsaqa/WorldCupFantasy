@@ -14,6 +14,7 @@ import {
   type PendingTransfer,
 } from '@/lib/pending-transfers';
 import { maxPerNationForStage, isAutoUnlimitedTransferStage } from '@/lib/wc-constants';
+import { roundPrice } from '@/lib/utils';
 
 // This route is dynamic because it reads cookies for authentication
 export const dynamic = 'force-dynamic';
@@ -455,7 +456,11 @@ export async function POST(request: NextRequest) {
       }
 
       const newFreeTransfers = unlimitedTransfers ? team.freeTransfers : Math.max(0, team.freeTransfers - transfers.length);
-      const newBankBalance = team.bankBalance - netCost;
+      // Rounded to the price step — otherwise float drift accumulates across
+      // many transfer batches (each is a subtraction on the PREVIOUS stored
+      // value) until the bank reads something like -0.00000000003, which
+      // displays as "£-0.0m" even though the team is exactly at budget.
+      const newBankBalance = roundPrice(team.bankBalance - netCost);
 
       // Recalculate team value
       const updatedSquad = await tx.squadPlayer.findMany({
@@ -466,7 +471,7 @@ export async function POST(request: NextRequest) {
       // bank accounting. Using live currentPrice here would silently bake in
       // admin price changes to held players and break the bank+value=£100
       // invariant.
-      const newTeamValue = updatedSquad.reduce((sum, sp) => sum + sp.purchasePrice, 0);
+      const newTeamValue = roundPrice(updatedSquad.reduce((sum, sp) => sum + sp.purchasePrice, 0));
 
       await tx.team.update({
         where: { id: team.id },

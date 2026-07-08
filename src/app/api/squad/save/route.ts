@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { verifyToken, JWTPayload } from '@/lib/auth';
 import { getStageLock, LOCKED_ERROR } from '@/lib/deadline';
 import { maxPerNationForStage, SQUAD } from '@/lib/wc-constants';
+import { roundPrice } from '@/lib/utils';
 
 // This route is dynamic because it reads cookies for authentication
 export const dynamic = 'force-dynamic';
@@ -171,8 +172,8 @@ export async function POST(request: NextRequest) {
     await prisma.team.update({
       where: { id: team.id },
       data: {
-        bankBalance: 100 - totalCost,
-        teamValue: totalCost,
+        bankBalance: roundPrice(SQUAD.initialBudget - totalCost),
+        teamValue: roundPrice(totalCost),
         ...(team.firstSquadSavedAt ? {} : { firstSquadSavedAt: new Date() }),
       },
     });
