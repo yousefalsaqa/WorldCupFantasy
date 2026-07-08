@@ -21,6 +21,7 @@ import {
 } from '@/lib/format-time';
 import { Trophy, Wallet, Coins, Sparkles, Zap, RefreshCw, Crown, Users, Save, X, Search, Wand2, Lock } from 'lucide-react';
 import { SQUAD } from '@/lib/wc-constants';
+import { roundPrice } from '@/lib/utils';
 import {
   ALL_WC_FIXTURES,
   NATION_NAMES as WC_NATION_NAMES,
@@ -1102,7 +1103,7 @@ export default function SquadPage() {
 
   // Calculate squad stats
   const squadValue = useMemo(() => squad.reduce((sum, p) => sum + p.currentPrice, 0), [squad]);
-  const remainingBudget = useMemo(() => SQUAD.initialBudget - squadValue, [squadValue]);
+  const remainingBudget = useMemo(() => roundPrice(SQUAD.initialBudget - squadValue), [squadValue]);
   
   const positionCounts = useMemo(() => {
     const counts: Record<Position, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
@@ -1225,7 +1226,7 @@ export default function SquadPage() {
     [queuedTransfers],
   );
 
-  const projectedBank = transferBaseBank - queuedNetCost + transferBudgetImpact;
+  const projectedBank = roundPrice(transferBaseBank - queuedNetCost + transferBudgetImpact);
 
   // Filling an EMPTY slot (out already banked, no incoming yet)? Its refund is
   // ALREADY part of projectedBank, so the per-pick budget is just projectedBank.
