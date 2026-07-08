@@ -89,6 +89,8 @@ export async function POST(request: Request) {
             result.errors.push(`Unknown round: ${fixture.league.round}`);
             continue;
           }
+          // 3rd-place play-off shares stage "F" with the Final — flag it.
+          const isThirdPlace = fixture.league.round === '3rd Place Final';
 
           const stage = await prisma.stage.findFirst({
             where: { stageId },
@@ -118,6 +120,7 @@ export async function POST(request: Request) {
               data: {
                 apiFootballId: fixture.fixture.id,
                 kickoffTime,
+                isThirdPlace,
               },
             });
           } else {
@@ -129,6 +132,7 @@ export async function POST(request: Request) {
                 awayNationId: awayNation.id,
                 kickoffTime,
                 apiFootballId: fixture.fixture.id,
+                isThirdPlace,
               },
             });
           }

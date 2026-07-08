@@ -109,18 +109,22 @@ export async function GET() {
         id: true,
         stageId: true,
         homeScore: true, awayScore: true, isFinished: true, isStarted: true,
-        kickoffTime: true, winnerId: true,
+        kickoffTime: true, winnerId: true, isThirdPlace: true,
         homeNation: { select: { code: true } },
         awayNation: { select: { code: true } },
       },
     });
+    // The 3rd-place play-off and the Final share the real "F" Stage row
+    // (3RD/F merge) — split them back into separate display buckets ('3RD'
+    // vs 'F') via isThirdPlace so the bracket still renders them as two ties.
     const dbByStage = new Map<string, typeof koMatches>();
     for (const m of koMatches) {
       const sid = stageIdByDbId.get(m.stageId);
       if (!sid) continue;
-      const arr = dbByStage.get(sid) ?? [];
+      const bucket = sid === 'F' && m.isThirdPlace ? '3RD' : sid;
+      const arr = dbByStage.get(bucket) ?? [];
       arr.push(m);
-      dbByStage.set(sid, arr);
+      dbByStage.set(bucket, arr);
     }
 
     const winnerByFixture = new Map<string, string>();

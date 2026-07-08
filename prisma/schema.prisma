@@ -145,6 +145,10 @@ model Match {
   homePenalties Int?     // Penalty shootout
   awayPenalties Int?
   winnerId      String?  // Nation that won (for knockouts)
+  // The 3rd-place play-off and the Final now share Stage "F" (see the
+  // 3RD/F merge) — this flags which of the two a Match row is, since both
+  // have the same stageId. false/default = the Final.
+  isThirdPlace  Boolean  @default(false)
   
   // API-Football integration
   apiFootballId Int?     @unique  // External fixture ID from API-Football

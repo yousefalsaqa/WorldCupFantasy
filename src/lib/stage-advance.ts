@@ -48,7 +48,8 @@ const TRANSFERS_FOR_STAGE: Record<string, number> = {
   R16: TRANSFERS.AFTER_R16,
   QF: TRANSFERS.AFTER_QF,
   SF: TRANSFERS.AFTER_SF,
-  '3RD': TRANSFERS.AFTER_SF,
+  // F covers both the 3rd-place play-off and the Final now (3RD/F merge) —
+  // one allocation entering F instead of a separate one for each.
   F: TRANSFERS.AFTER_SF,
 };
 
@@ -57,7 +58,7 @@ const TRANSFERS_FOR_STAGE: Record<string, number> = {
 // the user can use them across the knockout phase, on top of WC2 which
 // unlocks at R32). WC1 is intentionally NOT refreshed — it's the "group
 // stage" wildcard; WC2 is the "knockout" wildcard.
-const KNOCKOUT_STAGE_IDS = new Set(['R32', 'R16', 'QF', 'SF', '3RD', 'F']);
+const KNOCKOUT_STAGE_IDS = new Set(['R32', 'R16', 'QF', 'SF', 'F']);
 
 interface FreeHitSnapshotPlayer {
   playerId: string;

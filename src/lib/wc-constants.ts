@@ -45,8 +45,9 @@ export const SQUAD = {
   
   // Budget (raised 100 → 105 mid-tournament, Jul 4 2026 — every existing
   // team's bank got +5.0 via scripts/increase-budget-105.ts; raised again
-  // 105 → 108 for the QF, Jul 6 2026 — +3.0 via scripts/increase-budget-108.ts)
-  initialBudget: 108.0,
+  // 105 → 108 for the QF, Jul 6 2026 — +3.0 via scripts/increase-budget-108.ts;
+  // raised again 108 → 109, Jul 8 2026 — +1.0 via scripts/increase-budget-109.ts)
+  initialBudget: 109.0,
   minPlayerPrice: 4.0,
   maxPlayerPrice: 15.0,
   priceStep: 0.5,
@@ -197,7 +198,9 @@ export const STAGES = {
   ROUND_OF_16: { id: 'R16', name: 'Round of 16', order: 5 },
   QUARTER_FINALS: { id: 'QF', name: 'Quarter Finals', order: 6 },
   SEMI_FINALS: { id: 'SF', name: 'Semi Finals', order: 7 },
-  THIRD_PLACE: { id: '3RD', name: 'Third Place Play-off', order: 8 },
+  // 3rd-place play-off shares this stage with the Final (3RD/F merge) —
+  // there is no standalone "3RD" Stage row anymore. isThirdPlace on the
+  // Match row distinguishes the two.
   FINAL: { id: 'F', name: 'Final', order: 9 },
 } as const;
 
@@ -212,8 +215,10 @@ export type StageId = keyof typeof STAGES;
 // cap loosens as the field shrinks:
 //   • Default (groups → R16): 3 per nation.
 //   • Quarter Finals (8 nations): 4 per nation.
-//   • SF / 3rd-place play-off (4 nations): 5 per nation.
-//   • Final (2 nations): no cap (Infinity) so a full XI is fillable.
+//   • SF (4 nations): 5 per nation.
+//   • Final round (4 nations — 2 finalists + the 3rd-place pair, merged):
+//     no cap (Infinity), so a full XI from one finalist is fillable — the
+//     "go all-in on the final" design intent, deliberately kept uncapped.
 // Returned as a number; `Infinity` means "no limit". Callers that need a
 // finite display value should special-case Infinity.
 export function maxPerNationForStage(stageId: string | null | undefined): number {
@@ -221,7 +226,6 @@ export function maxPerNationForStage(stageId: string | null | undefined): number
     case 'QF':
       return 4;
     case 'SF':
-    case '3RD':
       return 5;
     case 'F':
       return Infinity;

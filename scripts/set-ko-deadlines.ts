@@ -13,13 +13,16 @@ import { KNOCKOUT_FIXTURES } from '../src/lib/world-cup-fixtures';
 const prisma = new PrismaClient();
 const APPLY = process.argv.includes('--apply');
 
-// Schedule `stage` label (from the lib) -> our Stage.stageId.
+// Schedule `stage` label (from the lib) -> our Stage.stageId. The 3rd-place
+// play-off now shares stage "F" with the Final (3RD/F merge) — mapping both
+// labels to 'F' means the "earliest kickoff wins" loop below naturally pins
+// F's deadline to the 3rd-place kickoff, which is always the earlier one.
 const LABEL_TO_STAGE_ID: Record<string, string> = {
   'Round of 32': 'R32',
   'Round of 16': 'R16',
   'Quarter Final': 'QF',
   'Semi Final': 'SF',
-  '3rd Place': '3RD',
+  '3rd Place': 'F',
   'Final': 'F',
 };
 
@@ -44,7 +47,7 @@ async function main() {
   }
 
   const rollback: Record<string, string | null> = {};
-  for (const stageId of ['R32', 'R16', 'QF', 'SF', '3RD', 'F']) {
+  for (const stageId of ['R32', 'R16', 'QF', 'SF', 'F']) {
     const want = firstKickoff.get(stageId);
     if (!want) {
       console.log(`${stageId.padEnd(4)} no schedule entry — SKIPPED`);

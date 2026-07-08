@@ -25,7 +25,7 @@
 
 import { prisma } from './db';
 
-const KO_STAGE_IDS = ['R32', 'R16', 'QF', 'SF', '3RD', 'F'];
+const KO_STAGE_IDS = ['R32', 'R16', 'QF', 'SF', 'F'];
 const GROUP_STAGE_IDS = ['GR1', 'GR2', 'GR3'];
 
 export interface MarkEliminationsResult {
@@ -79,6 +79,7 @@ export async function markEliminations(
       awayScore: true,
       isFinished: true,
       winnerId: true,
+      isThirdPlace: true,
     },
   });
 
@@ -87,10 +88,27 @@ export async function markEliminations(
   const toEliminate = new Map<string, string>();
 
   // ---- a) Knockout losers ----
+  // SF is excluded here: its loser doesn't leave the tournament, they play
+  // the 3rd-place match (which now shares stage "F" with the Final — see
+  // the 3RD/F merge). They're marked eliminated by pass (a2) below instead,
+  // once that specific match finishes.
   for (const m of allMatches) {
     if (!koDbStageIds.has(m.stageId) || !m.isFinished || !m.winnerId) continue;
+    if (stageIdById.get(m.stageId) === 'SF') continue;
     const loserId = m.winnerId === m.homeNationId ? m.awayNationId : m.homeNationId;
     toEliminate.set(loserId, stageIdById.get(m.stageId) ?? 'KO');
+  }
+
+  // ---- a2) 3rd-place play-off participants ----
+  // Both sides are out of the tournament the moment this match finishes,
+  // win or lose — there's no next round for either of them. Labeled '3RD'
+  // for eliminatedAt even though there's no longer a Stage row with that
+  // id (it's a free-text display label, e.g. player-detail-modal's stage
+  // track reads it to place the "OUT" pip at SF depth).
+  for (const m of allMatches) {
+    if (!m.isThirdPlace || !m.isFinished) continue;
+    toEliminate.set(m.homeNationId, '3RD');
+    toEliminate.set(m.awayNationId, '3RD');
   }
   const koLoserIds = new Set(toEliminate.keys());
 

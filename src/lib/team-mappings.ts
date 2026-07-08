@@ -210,7 +210,7 @@ export const ROUND_TO_STAGE: Record<string, string> = {
   'Round of 16': 'R16',
   'Quarter-finals': 'QF',
   'Semi-finals': 'SF',
-  '3rd Place Final': '3RD',
+  '3rd Place Final': 'F', // shares stage "F" with the Final — see the 3RD/F merge
   'Final': 'F',
 };
 

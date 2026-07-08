@@ -12,7 +12,6 @@ const STAGES = [
   { id: 'R16', name: 'Round of 16' },
   { id: 'QF', name: 'Quarter Finals' },
   { id: 'SF', name: 'Semi Finals' },
-  { id: '3RD', name: 'Third Place' },
   { id: 'F', name: 'Final' },
 ];
 

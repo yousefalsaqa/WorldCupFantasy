@@ -27,17 +27,19 @@ const roundArg = process.argv.find((a) => a.startsWith('--round='))?.split('=')[
 
 // API-Football `league.round` label -> our Stage.stageId. Ordered: more
 // specific patterns first so "Final" doesn't swallow "Semi-finals".
-const ROUND_TO_STAGE: { re: RegExp; stageId: string }[] = [
+// The 3rd-place play-off shares stage "F" with the Final (3RD/F merge) —
+// isThirdPlace on the Match row is what tells them apart.
+const ROUND_TO_STAGE: { re: RegExp; stageId: string; isThirdPlace?: boolean }[] = [
   { re: /round of 32/i, stageId: 'R32' },
   { re: /round of 16/i, stageId: 'R16' },
   { re: /quarter/i, stageId: 'QF' },
   { re: /semi/i, stageId: 'SF' },
-  { re: /3rd place|third place|play-?off for third/i, stageId: '3RD' },
+  { re: /3rd place|third place|play-?off for third/i, stageId: 'F', isThirdPlace: true },
   { re: /final/i, stageId: 'F' },
 ];
 
-function stageForRound(round: string): string | null {
-  for (const { re, stageId } of ROUND_TO_STAGE) if (re.test(round)) return stageId;
+function stageForRound(round: string): { stageId: string; isThirdPlace: boolean } | null {
+  for (const { re, stageId, isThirdPlace } of ROUND_TO_STAGE) if (re.test(round)) return { stageId, isThirdPlace: !!isThirdPlace };
   return null;
 }
 
@@ -48,7 +50,7 @@ async function main() {
   const nationByApiId = new Map<number, { id: string; code: string }>();
   for (const n of nations) if (n.apiFootballId) nationByApiId.set(n.apiFootballId, { id: n.id, code: n.code });
 
-  const stages = await prisma.stage.findMany({ where: { stageId: { in: ['R32', 'R16', 'QF', 'SF', '3RD', 'F'] } } });
+  const stages = await prisma.stage.findMany({ where: { stageId: { in: ['R32', 'R16', 'QF', 'SF', 'F'] } } });
   const stageByKey = new Map(stages.map((s) => [s.stageId, s]));
 
   const fixtures = await apiFootball.getWorldCupFixtures();
@@ -58,13 +60,15 @@ async function main() {
 
   // Group by KO round for tidy output.
   const koFixtures = fixtures
-    .map((f) => ({ f, stageId: stageForRound(f.league.round) }))
-    .filter((x) => x.stageId && (!roundArg || x.stageId === roundArg))
+    .map((f) => ({ f, resolved: stageForRound(f.league.round) }))
+    .filter((x) => x.resolved && (!roundArg || x.resolved.stageId === roundArg))
     .sort((a, b) => (a.f.fixture.date < b.f.fixture.date ? -1 : 1));
 
-  for (const { f, stageId } of koFixtures) {
-    const stage = stageByKey.get(stageId!);
-    if (!stage) { console.log(`  ${stageId} stage row missing — SKIP ${f.fixture.id}`); continue; }
+  for (const { f, resolved } of koFixtures) {
+    const { stageId, isThirdPlace } = resolved!;
+    const label = isThirdPlace ? '3RD' : stageId; // display only — real Stage.stageId is 'F' for both
+    const stage = stageByKey.get(stageId);
+    if (!stage) { console.log(`  ${label} stage row missing — SKIP ${f.fixture.id}`); continue; }
 
     const home = nationByApiId.get(f.teams.home.id);
     const away = nationByApiId.get(f.teams.away.id);
@@ -73,7 +77,7 @@ async function main() {
     if (!home && !away) { skippedTbd++; continue; } // both TBD — nothing to do yet
     if (!home || !away) {
       skippedPartial++;
-      console.log(`  ${stageId} SKIP (one side unmapped): ${f.teams.home.name} vs ${f.teams.away.name} (fxId ${f.fixture.id})`);
+      console.log(`  ${label} SKIP (one side unmapped): ${f.teams.home.name} vs ${f.teams.away.name} (fxId ${f.fixture.id})`);
       continue;
     }
 
@@ -83,25 +87,25 @@ async function main() {
       (await prisma.match.findFirst({ where: { stageId: stage.id, homeNationId: home.id, awayNationId: away.id } }));
 
     if (existing) {
-      const needs = existing.apiFootballId !== f.fixture.id || existing.kickoffTime.getTime() !== kickoff.getTime() || existing.stageId !== stage.id;
-      console.log(`  ${stageId} ${home.code} vs ${away.code}  ko=${kickoff.toISOString()} fxId=${f.fixture.id} — ${needs ? 'UPDATE' : 'unchanged'}`);
+      const needs = existing.apiFootballId !== f.fixture.id || existing.kickoffTime.getTime() !== kickoff.getTime() || existing.stageId !== stage.id || existing.isThirdPlace !== isThirdPlace;
+      console.log(`  ${label} ${home.code} vs ${away.code}  ko=${kickoff.toISOString()} fxId=${f.fixture.id} — ${needs ? 'UPDATE' : 'unchanged'}`);
       if (needs) {
         updated++;
-        touchedStages.add(stageId!);
+        touchedStages.add(label);
         if (APPLY) {
           await prisma.match.update({
             where: { id: existing.id },
-            data: { stageId: stage.id, homeNationId: home.id, awayNationId: away.id, kickoffTime: kickoff, apiFootballId: f.fixture.id },
+            data: { stageId: stage.id, homeNationId: home.id, awayNationId: away.id, kickoffTime: kickoff, apiFootballId: f.fixture.id, isThirdPlace },
           });
         }
       }
     } else {
-      console.log(`  ${stageId} ${home.code} vs ${away.code}  ko=${kickoff.toISOString()} fxId=${f.fixture.id} — CREATE`);
+      console.log(`  ${label} ${home.code} vs ${away.code}  ko=${kickoff.toISOString()} fxId=${f.fixture.id} — CREATE`);
       created++;
-      touchedStages.add(stageId!);
+      touchedStages.add(label);
       if (APPLY) {
         await prisma.match.create({
-          data: { stageId: stage.id, homeNationId: home.id, awayNationId: away.id, kickoffTime: kickoff, apiFootballId: f.fixture.id },
+          data: { stageId: stage.id, homeNationId: home.id, awayNationId: away.id, kickoffTime: kickoff, apiFootballId: f.fixture.id, isThirdPlace },
         });
       }
     }
