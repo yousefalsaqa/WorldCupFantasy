@@ -49,6 +49,10 @@ export async function GET(request: NextRequest) {
     // Private leagues are members-only: you must be logged in and have a
     // team in the league to view its table (or be an admin).
     const session = await getSession();
+    if (session) {
+      // Fire-and-forget activity marker — never blocks or fails the response.
+      prisma.user.update({ where: { id: session.userId }, data: { lastLeagueViewAt: new Date() } }).catch(() => {});
+    }
     if (!league.isGlobal) {
       if (!session) {
         return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });

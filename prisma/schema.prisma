@@ -23,6 +23,13 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   lastLoginAt   DateTime?
+  // Read-only activity — updated (best-effort, fire-and-forget) whenever the
+  // user's client hits the squad or league-standings GET routes, so "has he
+  // even looked at his team" is answerable without a mutating action.
+  // lastLoginAt alone undercounts activity: JWT sessions persist for days,
+  // so a user can transfer/view without ever hitting /login again.
+  lastSquadViewAt  DateTime?
+  lastLeagueViewAt DateTime?
   isAdmin       Boolean   @default(false)
   
   team          Team?

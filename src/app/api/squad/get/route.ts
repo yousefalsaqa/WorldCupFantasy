@@ -101,6 +101,9 @@ export async function GET(request: NextRequest) {
 
     const userId = decoded.userId;
 
+    // Fire-and-forget activity marker — never blocks or fails the response.
+    prisma.user.update({ where: { id: userId }, data: { lastSquadViewAt: new Date() } }).catch(() => {});
+
     const team = await prisma.team.findUnique({
       where: { userId },
     });
