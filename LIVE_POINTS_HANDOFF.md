@@ -1,9 +1,134 @@
 # Live Points Feature — Handoff
 
-Last updated: 2026-06-28 (**LIVE** — R32 active, open until Jun 28 19:00Z. This
-session: KO economy (elimination automation + R32 free-rebuild + cap relax),
-standings/bracket redesign, eliminated markers + player-card "Run" track, premium
-reprice. Gameweek-history slider is WIP (local, NOT shipped). See top session.)
+Last updated: 2026-07-09 (**LIVE** — QF active, deadline Jul 9 20:00Z (first
+kickoff already passed as of this update — round is live). This session: QF
+budget/nation-cap economy, 3rd-place/Final stage merge, float-drift hardening
+across every money write path, a live penalty-save scoring bug found + fixed,
+read-only activity tracking. See top session.)
+
+---
+
+## Session 2026-07-09 — QF ECONOMY + 3RD/F MERGE + FLOAT-DRIFT HARDENING + PENALTY-SAVE FIX + ACTIVITY TRACKING (DEPLOYED)
+
+### DEPLOYED to main/prod (commits `1207944` → `6b903c1`, chronological)
+- **QF budget → £108m, nation cap → 4** (`1207944`): every team credited
+  +£3.0m (`scripts/increase-budget-108.ts`); `maxPerNationForStage` gets a
+  QF step (3 → QF:4 → SF:5 → F:uncapped). Also fixed a second hardcoded
+  £105 that the original 105-raise missed (squad builder's client-side
+  remaining-budget calc + its copy text) — same bug class as `8a900e1`,
+  wired to `SQUAD.initialBudget` this time instead of a literal so it
+  can't silently drift again on the next raise.
+- **Squad-builder float-dust fix** (`024b922`): `remainingBudget` /
+  `projectedBank` now round to the nearest 0.1 before the `< 0` check.
+  Summing 15+ float prices can land a hair off zero (e.g.
+  `108.00000000000001`), which was showing red and disabling Save at
+  exactly full budget.
+- **3rd-place/Final merge + budget → £109m** (`be95c6e`): see the RESOLVED
+  writeup further down for the merge; budget raised again (+£1.0m,
+  `scripts/increase-budget-109.ts`).
+- **bankBalance/teamValue float-drift fix at every write site** (`c72c076`):
+  `/api/transfers`, the pending-transfers stage-boundary rollover, and
+  squad/save all now round through `roundPrice()` on write (squad/save
+  also still had a stale hardcoded `100` instead of the live budget —
+  missed even the very first 100→105 raise). One-off cleanup
+  (`scripts/round-team-money.ts`) rounded 6 teams' already-drifted prod
+  values (chimbohimbo had drifted to `-8.4e-15`, which displays as the
+  literal bug report that kicked this off: **"£-0.0m" in the bank**).
+- **penaltiesSaved regression fix** (`e4b5cf6`): API-Football's live
+  `penalty.saved` stat can regress to 0 mid-match before self-correcting —
+  confirmed live on Bounou vs Morocco (showed 0 for over an hour after a
+  real penalty save, then corrected). Every poll fully overwrote
+  `PlayerPerformance`, so a poll landing in that regression window
+  silently erased an already-recorded save — **permanently**, if the
+  match reached FT before the API self-corrected. Now floors against the
+  last-known-good DB value (`penaltiesSavedOverride` in
+  `LiveScoringCalculator`) across all three write paths: the live poll,
+  `rescore-pending.ts`, `heal-unbanked.ts`. Goals/assists already had an
+  analogous fix (floor against the events feed); saves needed a
+  cross-poll floor instead since there's no reliable same-poll second
+  source (the events feed's "Missed Penalty" doesn't distinguish a save
+  from an off-target/post miss).
+  Audited all 97 finished matches' goalkeeper rows directly against the
+  live API (585 rows total, deliberately NOT gated on the events feed —
+  that feed can suffer the identical flakiness and would hide exactly the
+  cases being searched for): found **one** pre-existing mismatch —
+  Mostafa Shobeir (Egypt), R32 vs Iran, missing his save credit (DB has
+  `penaltiesSaved=0`/3 pts, API confirms `penalty.saved=1`/should be 8
+  pts). **Left uncorrected** — owner's explicit call was "just fix the
+  cause", not a backfill. Confirmed it never affected any team's actual
+  points (both current owners had him bench-only, neither had Bench Boost
+  active that stage).
+- **Read-only activity tracking** (`6b903c1`): `User.lastLoginAt` only
+  updates on an actual `/login` hit — JWT sessions persist for days, so a
+  team can transfer/browse for a long stretch without it moving (caught
+  live mid-session: a team's `lastLoginAt` was 3.5 days stale despite
+  same-day transfers and a Free Hit activation). Added
+  `lastSquadViewAt`/`lastLeagueViewAt` on `User`, touched fire-and-forget
+  (unawaited, errors swallowed, single-row PK update — cannot add latency
+  or fail the response) from the squad-get and league-standings GET
+  routes.
+
+### DB changes APPLIED to prod this session (owner requests, not all tied to a commit)
+- **GR3 hit waived for chimbohimbo**: the -8 transferHits charged for 2
+  paid transfers beyond his free allowance was a legitimate game mechanic,
+  not a bug, but owner asked for it waived anyway (`refund-chimbo-gr3-hit.ts`)
+  — GR3 stage total +8, `Team.totalPoints` +8, both paid Transfer rows
+  flipped free so the audit trail stays consistent.
+- **R16 admin override for chimbohimbo**: forced M. Olise into the live
+  R16 XI for Nuno Mendes, explicitly bypassing the app's hindsight-block
+  (both nations had already played) — an owner override, not something
+  the normal UI allows. First pass (`admin-swap-chimbo-r16.ts`) only
+  forfeited Mendes's already-banked point; a follow-up
+  (`fix-chimbo-r16-swap-credit.ts`) corrected the oversight that Olise,
+  having been a non-bench-boost bench player, banked 0 for his own
+  already-finished match — bringing him into the XI needed to credit
+  those points too. Net effect vs. pre-swap: +1 (Olise's 2 in, Mendes's 1
+  out).
+- **QF fixtures synced + deadline verified**: all 4 QF matches created via
+  `sync-knockout-from-api.ts --round=QF --apply` (ARG v SUI needed one
+  retry — brief API publish lag on that pairing); `set-ko-deadlines.ts`
+  confirmed the QF deadline was already correctly pinned (Jul 9 20:00Z,
+  first kickoff).
+- **Injuries synced** for the 8 QF-alive nations (`sync-injuries.ts --apply`).
+- Several **retroactive, non-transfer squad corrections for chimbohimbo**
+  (owner's explicit framing each time: "treat as if I'd always had him" —
+  no free transfer spent, no hit, bank/value adjusted by the net price
+  difference so bank+value stays conserved at the current budget): Xhaka
+  → Nico Paz → Charles De Ketelaere; Ørjan Nyland → Yassine Bounou; Achraf
+  Hakimi → Lisandro Martínez. All logged as
+  `ADMIN_RETROACTIVE_SQUAD_CORRECTION` audit entries — grep those if
+  reconstructing the sequence matters later.
+- **Free-transfer top-ups for chimbohimbo**: several manual bumps through
+  the session per owner request (each logged as `MANUAL_FT_ADJUSTMENT`).
+  Final value at end of session: **1**. Verify against `Team.freeTransfers`
+  directly rather than trusting this number if picking this back up later
+  — it moved several times in one sitting.
+
+### Discussed, deliberately NOT applied
+- **R16 historical points correction for chimbohimbo**: swap J. Manzambi
+  → Jude Bellingham in the frozen R16 squad snapshot. Manzambi scored 0
+  that round (didn't get on the pitch for Switzerland); Bellingham would
+  have scored 16 (2 goals, 100 mins, MEX v ENG). Net effect if applied:
+  R16 stage total 69 → 85, `Team.totalPoints` +16. The math was presented
+  and confirmed coherent (Bellingham being on the CURRENT squad via a real
+  later transfer doesn't conflict with also crediting him retroactively
+  for R16 — independent records), but **owner had not said "yes" by end
+  of session**. Do not apply without an explicit go-ahead, and re-verify
+  the point values haven't shifted (re-run the equivalent of
+  `PlayerPerformance` lookups for both players' R16 match) before running
+  anything if this comes back up.
+- Shobeir's penalty-save data point (see above) — deliberately left wrong
+  by owner's choice, since it never affected real standings and the ask
+  was explicitly "fix the cause", not "fix the history."
+
+### Also touched this session, not deploy-relevant
+- Two one-off statistical-model scripts (`qf-defender-analysis.ts` /
+  `qf-midfielder-analysis.ts`) for a "best pick this week" request —
+  ranked every QF-alive DEF/MID by a weighted composite (points/match,
+  value, form, clean sheets, opponent weakness, reliability), published as
+  Artifacts, then deleted from the repo (one-off analysis, not reusable
+  tooling). Top picks at the time: Pedro Porro (DEF, ESP) and Ousmane
+  Dembélé (MID, FRA, with Bellingham a near-identical #2).
 
 ---
 
@@ -2246,7 +2371,21 @@ Before declaring cron production-ready:
 
 ---
 
-## OPEN DISCUSSION (Jul 4): merge the 3rd-place game into the Final round?
+## RESOLVED (Jul 9): 3rd-place game merged into the Final round
+
+Owner approved the merge proposed below (was OPEN since Jul 4). Shipped in
+commit `be95c6e` — see the Jul 9 session section at the top of this doc for
+the full change list. Summary: `3RD` Stage row deleted; the 3rd-place
+play-off and the Final now both live in stage `F`, distinguished by new
+`Match.isThirdPlace`; F's deadline pinned to the earlier (3rd-place)
+kickoff; mark-eliminations no longer auto-outs SF losers (eliminated only
+when the 3rd-place match itself finishes, both sides); nation cap for the
+merged stage decided as **uncapped** (owner's call — "go all-in on the
+final" stays the design intent, now covering all 4 remaining nations, not
+just 2).
+
+<details>
+<summary>Original Jul 4 proposal (for reference)</summary>
 
 Currently `3RD` is its own stage (deadline Jul 18 21:00Z) with the Final
 (`F`) after it (Jul 19 19:00Z). Problems with 3RD as a standalone round:
@@ -2281,3 +2420,5 @@ If we DON'T merge: at minimum fix (3) anyway, or the 3rd-place round is
 unplayable (see picker-hiding bug above). Deadline to decide + deploy:
 before the second semi final ends (~Jul 15 night), since the SF→next
 boundary allocates transfers using whatever structure exists then.
+
+</details>
