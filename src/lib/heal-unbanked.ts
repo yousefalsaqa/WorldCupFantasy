@@ -114,6 +114,18 @@ export async function healUnbankedFinishedMatches(): Promise<UnbankedHealOutcome
         }
       }
 
+      // Floor for penalty saves — see live/update/route.ts's identical block
+      // for why this cross-poll floor is needed.
+      const existingPerfs = await prisma.playerPerformance.findMany({
+        where: { matchId: match.id, playerId: { in: dbPlayers.map((p) => p.id) } },
+        select: { playerId: true, penaltiesSaved: true },
+      });
+      const previousPenaltiesSaved = new Map<number, number>();
+      for (const perf of existingPerfs) {
+        const apiId = dbPlayers.find((p) => p.id === perf.playerId)?.apiFootballId;
+        if (apiId != null) previousPenaltiesSaved.set(apiId, perf.penaltiesSaved);
+      }
+
       const calc = new LiveScoringCalculator(match.stage.stageId);
       const perfs = calc.processFixtureData(
         teamsData,
@@ -123,6 +135,7 @@ export async function healUnbankedFinishedMatches(): Promise<UnbankedHealOutcome
         match.homeNation.apiFootballId!,
         match.awayNation.apiFootballId!,
         overrides,
+        previousPenaltiesSaved,
       );
 
       const freshMaxMinutes = perfs.reduce((m, p) => Math.max(m, p.minutesPlayed), 0);

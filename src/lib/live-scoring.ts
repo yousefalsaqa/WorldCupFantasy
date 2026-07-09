@@ -359,6 +359,18 @@ export class LiveScoringCalculator {
        *  goalsOverride — guards against the stats feed lagging on a late
        *  assist (see countAssistsFromEvents). */
       assistsOverride?: number;
+      /** Floored penalty-save count, pre-computed by the caller as
+       *  max(this poll's stats.penalty.saved, whatever was already stored
+       *  for this player+match). Unlike goals/assists there's no reliable
+       *  same-poll second source for saves (the events feed's "Missed
+       *  Penalty" doesn't distinguish a save from an off-target/post miss),
+       *  so the floor is against our own last-known-good value instead —
+       *  API-Football's live penalty.saved has been observed to regress to
+       *  0 mid-match before self-correcting; without this floor a poll
+       *  landing in that window silently erases an already-recorded save
+       *  (permanently, if the match reaches FT before it self-corrects).
+       *  See src/app/api/live/update/route.ts where this is computed. */
+      penaltiesSavedOverride?: number;
     },
   ): PointsBreakdown {
     const minutes = stats.games.minutes || 0;
@@ -367,7 +379,7 @@ export class LiveScoringCalculator {
     const saves = stats.goals.saves || 0;
     const yellowCards = stats.cards.yellow || 0;
     const redCards = stats.cards.red || 0;
-    const penaltiesSaved = stats.penalty.saved || 0;
+    const penaltiesSaved = context.penaltiesSavedOverride ?? (stats.penalty.saved || 0);
     const penaltiesMissed = stats.penalty.missed || 0;
 
     const defensiveActions = this.countDefensiveActions(stats);
@@ -462,6 +474,12 @@ export class LiveScoringCalculator {
     homeTeamId: number,
     awayTeamId: number,
     positionOverrides?: Map<number, PlayerPerformanceData['position']>,
+    /** apiFootballId -> penaltiesSaved already stored for this match, used
+     *  as a floor so a transient regression in the live feed can never
+     *  erase an already-recorded save. See calculatePlayerPoints' context
+     *  doc for why this needs a cross-poll floor rather than an events-feed
+     *  override like goals/assists get. */
+    previousPenaltiesSaved?: Map<number, number>,
   ): PlayerPerformanceData[] {
     const results: PlayerPerformanceData[] = [];
 
@@ -510,12 +528,20 @@ export class LiveScoringCalculator {
         const eventAssists = this.countAssistsFromEvents(events, playerData.player.id);
         const effectiveAssists = Math.max(stats.goals.assists || 0, eventAssists);
 
+        // Penalty saves: floor against whatever we already have stored for
+        // this player+match (see calculatePlayerPoints' context doc).
+        const effectivePenaltiesSaved = Math.max(
+          stats.penalty.saved || 0,
+          previousPenaltiesSaved?.get(playerData.player.id) ?? 0,
+        );
+
         // Base scoring with on-pitch context
         const points = this.calculatePlayerPoints(stats, position, {
           inWindowConceded,
           isCleanSheet,
           goalsOverride: effectiveGoals,
           assistsOverride: effectiveAssists,
+          penaltiesSavedOverride: effectivePenaltiesSaved,
         });
 
         // Add own goals from events
@@ -549,7 +575,7 @@ export class LiveScoringCalculator {
           yellowCards: stats.cards.yellow || 0,
           redCards: stats.cards.red || 0,
           saves: stats.goals.saves || 0,
-          penaltiesSaved: stats.penalty.saved || 0,
+          penaltiesSaved: effectivePenaltiesSaved,
           penaltiesMissed: stats.penalty.missed || 0,
           // We report the in-window count rather than the team total so
           // the field matches the value that drove the penalty math.

@@ -294,13 +294,29 @@ async function handleUpdate(request: NextRequest) {
         );
         const dbPlayers = await prisma.player.findMany({
           where: { apiFootballId: { in: apiPlayerIds } },
-          select: { apiFootballId: true, position: true },
+          select: { id: true, apiFootballId: true, position: true },
         });
         const positionOverrides = new Map<number, 'GK' | 'DEF' | 'MID' | 'FWD'>();
         for (const p of dbPlayers) {
           if (p.apiFootballId != null) {
             positionOverrides.set(p.apiFootballId, p.position as 'GK' | 'DEF' | 'MID' | 'FWD');
           }
+        }
+
+        // Floor for penalty saves: whatever's already stored for this
+        // match, keyed by apiFootballId so the calculator can compare
+        // against the live feed without touching Prisma itself. See
+        // LiveScoringCalculator.calculatePlayerPoints' penaltiesSavedOverride
+        // doc for why this cross-poll floor exists.
+        const existingPerfs = await prisma.playerPerformance.findMany({
+          where: { matchId: match.id, playerId: { in: dbPlayers.map((p) => p.id) } },
+          select: { playerId: true, penaltiesSaved: true },
+        });
+        const dbIdToApiId = new Map(dbPlayers.filter((p) => p.apiFootballId != null).map((p) => [p.id, p.apiFootballId!]));
+        const previousPenaltiesSaved = new Map<number, number>();
+        for (const perf of existingPerfs) {
+          const apiId = dbIdToApiId.get(perf.playerId);
+          if (apiId != null) previousPenaltiesSaved.set(apiId, perf.penaltiesSaved);
         }
 
         // Calculate points using our scoring system
@@ -313,6 +329,7 @@ async function handleUpdate(request: NextRequest) {
           match.homeNation.apiFootballId!,
           match.awayNation.apiFootballId!,
           positionOverrides,
+          previousPenaltiesSaved,
         );
 
         let playersUpdated = 0;
