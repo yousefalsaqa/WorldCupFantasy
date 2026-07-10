@@ -5,6 +5,7 @@ import { computeUnlimitedTransfers } from '@/lib/unlimited-transfers';
 import { parsePendingTransfers } from '@/lib/pending-transfers';
 import { liveTeamDeltas } from '@/lib/live-team-totals';
 import { maxPerNationForStage, isAutoUnlimitedTransferStage } from '@/lib/wc-constants';
+import { logActivity } from '@/lib/activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -101,8 +102,9 @@ export async function GET(request: NextRequest) {
 
     const userId = decoded.userId;
 
-    // Fire-and-forget activity marker — never blocks or fails the response.
+    // Fire-and-forget activity markers — never block or fail the response.
     prisma.user.update({ where: { id: userId }, data: { lastSquadViewAt: new Date() } }).catch(() => {});
+    logActivity(userId, 'VIEW_OWN_SQUAD');
 
     const team = await prisma.team.findUnique({
       where: { userId },

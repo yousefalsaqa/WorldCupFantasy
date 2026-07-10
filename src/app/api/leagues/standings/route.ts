@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { liveTeamDeltas, stageTeamTotals } from '@/lib/live-team-totals';
+import { logActivity } from '@/lib/activity';
 
 // This route is dynamic to ensure fresh data
 export const dynamic = 'force-dynamic';
@@ -50,8 +51,9 @@ export async function GET(request: NextRequest) {
     // team in the league to view its table (or be an admin).
     const session = await getSession();
     if (session) {
-      // Fire-and-forget activity marker — never blocks or fails the response.
+      // Fire-and-forget activity markers — never block or fail the response.
       prisma.user.update({ where: { id: session.userId }, data: { lastLeagueViewAt: new Date() } }).catch(() => {});
+      logActivity(session.userId, 'VIEW_LEAGUE', { leagueId: league.id, leagueName: league.name, isGlobal: league.isGlobal });
     }
     if (!league.isGlobal) {
       if (!session) {

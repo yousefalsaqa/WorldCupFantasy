@@ -8,6 +8,8 @@ import {
 } from '@/lib/chips-active';
 import { getFlagCode } from '@/lib/flags';
 import { liveTeamDeltas } from '@/lib/live-team-totals';
+import { getSession } from '@/lib/auth';
+import { logActivity } from '@/lib/activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,6 +52,15 @@ export async function GET(
     if (!team) {
       return NextResponse.json({ error: 'Team not found' }, { status: 404 });
     }
+
+    // Fire-and-forget activity marker — never blocks or fails the response.
+    // Skipped when viewing your own team (that's VIEW_OWN_SQUAD, logged by
+    // /api/squad/get) so this stays specifically "looked at someone else's".
+    getSession().then((session) => {
+      if (session && session.userId !== team.userId) {
+        logActivity(session.userId, 'VIEW_TEAM', { teamId: team.id, teamName: team.name });
+      }
+    }).catch(() => {});
 
     // Per-player pill = ACTIVE-STAGE points (this round only), mirroring
     // /api/squad/get. We deliberately do NOT read the cumulative

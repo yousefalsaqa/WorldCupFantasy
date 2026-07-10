@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { createLeagueSchema } from '@/lib/validation';
 import { logAudit } from '@/lib/audit';
+import { logActivity } from '@/lib/activity';
 import { generateLeagueCode } from '@/lib/utils';
 import { ZodError } from 'zod';
 
@@ -116,6 +117,9 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   try {
     const session = await requireAuth();
+
+    // Fire-and-forget activity marker — never blocks or fails the response.
+    logActivity(session.userId, 'VIEW_LEAGUES_LIST');
 
     const team = await prisma.team.findUnique({
       where: { userId: session.userId },

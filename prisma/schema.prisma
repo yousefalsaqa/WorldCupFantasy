@@ -34,11 +34,33 @@ model User {
   
   team          Team?
   sessions      Session[]
+  activityEvents ActivityEvent[]
   leaguesOwned  League[]  @relation("LeagueOwner")
   leagueMemberships LeagueMembership[]
-  
+
   @@index([email])
   @@index([username])
+}
+
+// Fine-grained, read-oriented activity feed — distinct from AuditLog (which
+// already covers successful mutations: transfers made, chips activated,
+// squad edits). This covers what AuditLog doesn't: page views (own squad,
+// another team's squad, a league's standings) and TRANSFER_ATTEMPT (fired
+// unconditionally on every /api/transfers POST, success or fail, so a
+// rejected attempt — insufficient funds, over nation cap, locked round —
+// still shows up; cross-reference against AuditLog's TRANSFERS_MADE to see
+// which attempts actually went through).
+model ActivityEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // VIEW_OWN_SQUAD | VIEW_TEAM | VIEW_LEAGUE | VIEW_LEAGUES_LIST | TRANSFER_ATTEMPT
+  details   String?  // JSON — context varies by type (teamId viewed, leagueId, attempted transfer players…)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model Session {

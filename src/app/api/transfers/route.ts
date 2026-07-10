@@ -15,6 +15,7 @@ import {
 } from '@/lib/pending-transfers';
 import { maxPerNationForStage, isAutoUnlimitedTransferStage } from '@/lib/wc-constants';
 import { roundPrice } from '@/lib/utils';
+import { logActivity } from '@/lib/activity';
 
 // This route is dynamic because it reads cookies for authentication
 export const dynamic = 'force-dynamic';
@@ -61,6 +62,13 @@ export async function POST(request: NextRequest) {
     if (!transfers || !Array.isArray(transfers) || transfers.length === 0) {
       return NextResponse.json({ error: 'No transfers provided' }, { status: 400 });
     }
+
+    // Fire-and-forget activity marker for every attempt — success or fail.
+    // Unlike AuditLog's TRANSFERS_MADE (written only on success), this
+    // fires unconditionally so a rejected attempt (insufficient funds, over
+    // nation cap, locked round, etc.) still shows up somewhere. Logged
+    // before validation on purpose — captures intent even if it fails.
+    logActivity(session.userId, 'TRANSFER_ATTEMPT', { transfers, queueMode });
 
     // Get user's team
     const team = await prisma.team.findUnique({
