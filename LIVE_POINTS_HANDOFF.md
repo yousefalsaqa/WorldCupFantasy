@@ -1,16 +1,19 @@
 # Live Points Feature — Handoff
 
-Last updated: 2026-07-09 (**LIVE** — QF active, deadline Jul 9 20:00Z (first
-kickoff already passed as of this update — round is live). This session: QF
-budget/nation-cap economy, 3rd-place/Final stage merge, float-drift hardening
-across every money write path, a live penalty-save scoring bug found + fixed,
-read-only activity tracking. See top session.)
+Last updated: 2026-07-11 (**LIVE** — QF active, deadline Jul 9 20:00Z (long
+since passed — round is live/in progress). Jul 9 session: QF budget/nation-cap
+economy, 3rd-place/Final stage merge, float-drift hardening across every money
+write path, a live penalty-save scoring bug found + fixed, read-only activity
+tracking, then upgraded to a detailed ActivityEvent log (team/league views,
+transfer attempts). Jul 9-11 follow-up: GR1 retroactive Raya→Simón correction
+(points + lineup-display fix via Transfer relabeling); R16 Manzambi→Bellingham
+correction was discussed, priced out, and explicitly DECLINED. See top session.)
 
 ---
 
 ## Session 2026-07-09 — QF ECONOMY + 3RD/F MERGE + FLOAT-DRIFT HARDENING + PENALTY-SAVE FIX + ACTIVITY TRACKING (DEPLOYED)
 
-### DEPLOYED to main/prod (commits `1207944` → `6b903c1`, chronological)
+### DEPLOYED to main/prod (commits `1207944` → `bada56a`, chronological)
 - **QF budget → £108m, nation cap → 4** (`1207944`): every team credited
   +£3.0m (`scripts/increase-budget-108.ts`); `maxPerNationForStage` gets a
   QF step (3 → QF:4 → SF:5 → F:uncapped). Also fixed a second hardcoded
@@ -67,6 +70,21 @@ read-only activity tracking. See top session.)
   (unawaited, errors swallowed, single-row PK update — cannot add latency
   or fail the response) from the squad-get and league-standings GET
   routes.
+- **Detailed ActivityEvent log** (`bada56a`, later same day — owner wanted
+  more than two timestamps: "did he press on certain teams, open private
+  leagues, try a transfer"): new `ActivityEvent` table, distinct from
+  `AuditLog` (which already covers successful mutations). Covers what
+  AuditLog can't: `VIEW_TEAM` (viewing another team's squad, which team),
+  `VIEW_LEAGUE` (which league), `VIEW_LEAGUES_LIST`, `VIEW_OWN_SQUAD`, and
+  `TRANSFER_ATTEMPT` (fired unconditionally before validation, so a
+  rejected attempt still shows up, not just successful ones). All writes
+  fire-and-forget. Scoped deliberately to server-hitting actions only —
+  in-progress client-side drag/drop before Save was explicitly ruled out
+  (owner picked "server actions only" over "everything" when asked,
+  given the network-chatter/complexity tradeoff of the latter).
+  `scripts/user-activity-timeline.ts` merges AuditLog + ActivityEvent into
+  one chronological feed for a team's user — go here first for any
+  "what has X actually done" question instead of writing a fresh script.
 
 ### DB changes APPLIED to prod this session (owner requests, not all tied to a commit)
 - **GR3 hit waived for chimbohimbo**: the -8 transferHits charged for 2
@@ -105,21 +123,42 @@ read-only activity tracking. See top session.)
   — it moved several times in one sitting.
 
 ### Discussed, deliberately NOT applied
-- **R16 historical points correction for chimbohimbo**: swap J. Manzambi
-  → Jude Bellingham in the frozen R16 squad snapshot. Manzambi scored 0
-  that round (didn't get on the pitch for Switzerland); Bellingham would
-  have scored 16 (2 goals, 100 mins, MEX v ENG). Net effect if applied:
-  R16 stage total 69 → 85, `Team.totalPoints` +16. The math was presented
-  and confirmed coherent (Bellingham being on the CURRENT squad via a real
-  later transfer doesn't conflict with also crediting him retroactively
-  for R16 — independent records), but **owner had not said "yes" by end
-  of session**. Do not apply without an explicit go-ahead, and re-verify
-  the point values haven't shifted (re-run the equivalent of
-  `PlayerPerformance` lookups for both players' R16 match) before running
-  anything if this comes back up.
+- **R16 historical points correction for chimbohimbo — DECLINED**: swap
+  J. Manzambi → Jude Bellingham in the frozen R16 squad snapshot would have
+  been +16 (R16 stage total 69→85). Math was presented and confirmed
+  coherent, but owner explicitly chose not to do it. **Closed, not
+  pending** — don't resurface this one unless asked again fresh.
 - Shobeir's penalty-save data point (see above) — deliberately left wrong
   by owner's choice, since it never affected real standings and the ask
   was explicitly "fix the cause", not "fix the history."
+
+### DB changes APPLIED (follow-up session, same day)
+- **GR1 (week 1) retroactive correction for chimbohimbo**: David Raya →
+  Unai Simón, analogous to the R16 ask but for GR1 — and this one WAS
+  applied (owner said go). Raya has zero minutes recorded for GR1 (0 pts);
+  Simón's actual GR1 game (ESP vs CPV, Jun 15) was 92 mins, clean sheet,
+  6 pts. Two-part fix, both needed:
+  1. Points: GR1 `TeamStage.rawPoints`/`totalPoints` and `Team.totalPoints`
+     bumped by the +6 delta directly (`chimbo-gr1-raya-to-simon.ts`, since
+     deleted — one-off).
+  2. Lineup DISPLAY: GR1 has no `squadSnapshot` (predates that feature), so
+     the history page's gameweek route falls back to rewinding the CURRENT
+     squad backward through real `Transfer` rows (see
+     `src/app/api/gameweek/[stageId]/route.ts` ~L134-190 — walks
+     transfers newest-first, re-tagging each "in" player's slot as the
+     "out" player). That was still correctly showing the real Raya, since
+     Simón wasn't actually transferred in until Jun 24. Fixed with a
+     single-field edit instead of rebuilding a snapshot: relabeled the one
+     `Transfer` row that took Raya out (for Shobeir, Jun 18)'s
+     `playerOutId` from Raya to Simón. The rewind algorithm means this one
+     edit fixes every snapshot-less stage before Jun 18, not just GR1.
+     Verified by replicating the rewind logic in a script before
+     confirming — GR1's GK slot now resolves to Simón (starting).
+  **Reusable pattern**: for any future "make an early snapshot-less round
+  show player X instead of player Y" ask, check first whether relabeling
+  a `Transfer.playerOutId`/`playerInId` achieves it before reaching for a
+  full snapshot rebuild — much cheaper when there's a single clean pivot
+  transfer to retarget.
 
 ### Also touched this session, not deploy-relevant
 - Two one-off statistical-model scripts (`qf-defender-analysis.ts` /
