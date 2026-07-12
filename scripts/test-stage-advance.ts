@@ -226,6 +226,52 @@ check(
   0,
 );
 
+console.log('\n=== Transfer allocation: SF additive mercy (stacks on top of banked) ===\n');
+
+function allocSF(leftover: number, base: number, eliminated: number) {
+  return computeNextFreeTransfers({
+    leftover,
+    baseAllocation: base,
+    eliminatedCount: eliminated,
+    mercyEnabled: TRANSFERS.MERCY_RULE_ENABLED,
+    additiveMercy: true,
+  });
+}
+
+check(
+  'additive: 0 eliminated → just banked (0 + 2 = 2)',
+  allocSF(0, 2, 0).freeTransfers,
+  2,
+);
+check(
+  'additive: banked 2 + 4 eliminated → 6 (stacks, not replaced)',
+  allocSF(0, 2, 4).freeTransfers,
+  6,
+);
+check(
+  'additive: mercyTransfers stamp = full eliminated count',
+  allocSF(0, 2, 4).mercyTransfers,
+  4,
+);
+check(
+  'additive: leftover 2 + base 2 (banked 4) + 1 eliminated → 5',
+  allocSF(2, 2, 1).freeTransfers,
+  5,
+);
+check(
+  'additive: banked hits FREE_TRANSFER_BANK_CAP but mercy still adds on top (leftover 4 + base 2 → banked capped 5, +3 eliminated → 8)',
+  allocSF(4, 2, 3).freeTransfers,
+  8,
+);
+check(
+  'additive vs normal mercy: same inputs, additive gives MORE (banked 2, 1 eliminated → normal=2, additive=3)',
+  [
+    computeNextFreeTransfers({ leftover: 0, baseAllocation: 2, eliminatedCount: 1, mercyEnabled: true }).freeTransfers,
+    allocSF(0, 2, 1).freeTransfers,
+  ],
+  [2, 3],
+);
+
 console.log('\n=== Stage transition chip-refresh policy ===\n');
 
 // FPL convention: chips refresh when entering the knockout phase. WC1

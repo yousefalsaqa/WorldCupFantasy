@@ -356,6 +356,7 @@ async function advanceOnce(): Promise<AdvanceResult> {
         baseAllocation,
         eliminatedCount,
         mercyEnabled: TRANSFERS.MERCY_RULE_ENABLED && !enteringAutoUnlimited,
+        additiveMercy: nextStage.stageId === 'SF',
       });
 
       // Build the team update. Refresh per-stage chips when entering

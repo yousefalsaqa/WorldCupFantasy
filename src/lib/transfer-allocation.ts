@@ -30,11 +30,26 @@ export function computeNextFreeTransfers(opts: {
   baseAllocation: number;
   eliminatedCount: number;
   mercyEnabled: boolean;
+  /**
+   * SF-only rule: mercy transfers STACK on top of the banked total instead
+   * of just replacing it when eliminatedCount > banked. Field halves to 4
+   * nations at SF, so eliminations are much more likely to bite mid-banking
+   * — additive mercy guarantees every eliminated player gets replaced
+   * without eating into the banked allocation. Uncapped, same as normal
+   * mercy.
+   */
+  additiveMercy?: boolean;
 }): NextAllocation {
   const banked = Math.min(
     FREE_TRANSFER_BANK_CAP,
     Math.max(0, opts.leftover) + opts.baseAllocation,
   );
+  if (opts.mercyEnabled && opts.additiveMercy && opts.eliminatedCount > 0) {
+    return {
+      freeTransfers: banked + opts.eliminatedCount,
+      mercyTransfers: opts.eliminatedCount,
+    };
+  }
   if (opts.mercyEnabled && opts.eliminatedCount > banked) {
     return {
       freeTransfers: opts.eliminatedCount,
