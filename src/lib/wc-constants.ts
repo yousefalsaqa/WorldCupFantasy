@@ -46,8 +46,9 @@ export const SQUAD = {
   // Budget (raised 100 → 105 mid-tournament, Jul 4 2026 — every existing
   // team's bank got +5.0 via scripts/increase-budget-105.ts; raised again
   // 105 → 108 for the QF, Jul 6 2026 — +3.0 via scripts/increase-budget-108.ts;
-  // raised again 108 → 109, Jul 8 2026 — +1.0 via scripts/increase-budget-109.ts)
-  initialBudget: 109.0,
+  // raised again 108 → 109, Jul 8 2026 — +1.0 via scripts/increase-budget-109.ts;
+  // raised again 109 → 112 for the SF, Jul 11 2026 — +3.0 via scripts/increase-budget-112.ts)
+  initialBudget: 112.0,
   minPlayerPrice: 4.0,
   maxPlayerPrice: 15.0,
   priceStep: 0.5,
