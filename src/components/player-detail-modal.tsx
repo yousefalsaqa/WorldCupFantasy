@@ -280,9 +280,22 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
   // knockout opponents the static lib can't). Fall back to the static fixture
   // lib while the fetch is in flight or if it returned nothing (so group-stage
   // behaviour is unchanged on first paint).
+  //
+  // getNextWcOpponent falls back to the LAST fixture it can match by nation
+  // code when it finds no future one — correct for a genuinely eliminated
+  // team (their last opponent is meaningful), but wrong mid-tournament: the
+  // static file stores knockout rounds as bracket placeholders ("W M99")
+  // that never match a real code, so a still-alive team whose next-round
+  // fixture just hasn't synced to the DB yet would show its OLD (already
+  // played) opponent as "Next". Only use that fallback once the nation is
+  // confirmed eliminated; otherwise show nothing until the DB has it.
   const dbUpcoming = upcoming && upcoming.length > 0 ? upcoming : null;
-  const opponent = dbUpcoming ? dbUpcoming[0].opponent : getNextWcOpponent(nationCode);
-  const fdr = getFixtureDifficulty(nationCode, opponent);
+  const opponent = dbUpcoming
+    ? dbUpcoming[0].opponent
+    : nationElim.isEliminated
+      ? getNextWcOpponent(nationCode)
+      : null;
+  const fdr = opponent ? getFixtureDifficulty(nationCode, opponent) : null;
   // Kickoff of the next fixture, shown in the viewer's local timezone.
   // null when the nation has no upcoming game (opponent then falls back
   // to the LAST opponent faced — a date would be misleading there).
@@ -413,17 +426,19 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
                   player.position === 'MID' ? 'bg-emerald-500/30 text-emerald-200 ring-1 ring-emerald-400/40' :
                   'bg-rose-500/30 text-rose-200 ring-1 ring-rose-400/40'
                 }`}>{player.position}</span>
-                <span className="inline-flex items-center gap-1 px-1.5 py-[2px] rounded-md bg-black/30 ring-1 ring-white/10">
-                  <span className="text-white/70 text-[9px] font-bold uppercase">Next</span>
-                  <img src={getFlagUrl(opponent)} alt={opponent} className="w-3.5 h-2.5 rounded-[1px] object-cover" />
-                  <span className="text-white text-[10px] font-bold">{opponent}</span>
-                  <span className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm text-[9px] font-black ${fdrPill(fdr)}`}>{fdr}</span>
-                  {nextKickoff && (
-                    <span className="text-white/60 text-[9px] font-semibold whitespace-nowrap pl-0.5">
-                      {nextKickoff.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                    </span>
-                  )}
-                </span>
+                {opponent && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-[2px] rounded-md bg-black/30 ring-1 ring-white/10">
+                    <span className="text-white/70 text-[9px] font-bold uppercase">Next</span>
+                    <img src={getFlagUrl(opponent)} alt={opponent} className="w-3.5 h-2.5 rounded-[1px] object-cover" />
+                    <span className="text-white text-[10px] font-bold">{opponent}</span>
+                    <span className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm text-[9px] font-black ${fdrPill(fdr!)}`}>{fdr}</span>
+                    {nextKickoff && (
+                      <span className="text-white/60 text-[9px] font-semibold whitespace-nowrap pl-0.5">
+                        {nextKickoff.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                      </span>
+                    )}
+                  </span>
+                )}
               </div>
             </div>
           </div>
