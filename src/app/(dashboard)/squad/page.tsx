@@ -1370,7 +1370,11 @@ export default function SquadPage() {
 
   // Commit a replacement: replaces an existing pending transfer for this
   // slot if any (so users can change their mind mid-flow), otherwise pushes
-  // a new entry.
+  // a new entry. Picking the SAME player back as their own replacement is
+  // an undo, not a transfer — submitting {out: Messi, in: Messi} makes the
+  // server correctly reject it ("Messi is already in your squad", since
+  // he's still on the roster), so just drop the pending entry instead of
+  // creating one.
   const commitTransfer = useCallback(
     (playerOut: Player, playerIn: Player) => {
       setPendingTransfers((prev) => {
@@ -1378,6 +1382,7 @@ export default function SquadPage() {
         // tapping Replace on an already-pending player, which we don't
         // render — defensive anyway), drop the prior entry first.
         const filtered = prev.filter((t) => t.playerOut.id !== playerOut.id);
+        if (playerIn.id === playerOut.id) return filtered;
         return [...filtered, { playerOut, playerIn }];
       });
       setTransferReplacingFor(null);
@@ -1499,7 +1504,6 @@ export default function SquadPage() {
       // them here instead of letting the user pick a doomed transfer.
       ...queuedTransfers.map((t) => t.playerIn?.id).filter((id): id is string => !!id),
     ]);
-    const pendingOutIds = new Set(pendingTransfers.map((t) => t.playerOut.id));
 
     // Per-pick budget = money available AFTER all other pending transfers AND
     // already-queued reservations (`transferPickMax`, computed once above so
@@ -1528,9 +1532,17 @@ export default function SquadPage() {
           // in — these would create duplicates after Confirm.
           const inSquad = squadIds.has(p.id);
           const alreadyIncoming = pendingInIds.has(p.id);
-          const goingOut = pendingOutIds.has(p.id);
+          // Only THIS slot's own removal excuses "still in squad" — a player
+          // pending out via a DIFFERENT slot must stay hidden here. Offering
+          // them would let you "buy" a player who never actually left (their
+          // own out-with-no-replacement entry gets silently dropped at
+          // submit), which the server correctly rejects as "already in your
+          // squad" — confusing since the picker let you pick them in the
+          // first place. Re-selecting a player for their OWN slot is still
+          // allowed (the "change your mind" undo, handled by commitTransfer).
+          const isOwnSlot = transferReplacingFor?.id === p.id;
           if (alreadyIncoming) return false;
-          if (inSquad && !goingOut) return false;
+          if (inSquad && !isOwnSlot) return false;
         } else {
           if (squadIds.has(p.id)) return false;
         }

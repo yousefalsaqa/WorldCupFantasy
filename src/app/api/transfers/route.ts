@@ -168,6 +168,12 @@ export async function POST(request: NextRequest) {
     let moneyBack = 0;
 
     for (const transfer of transfers) {
+      // Same player picked as their own replacement (client sends this if
+      // an older build re-adds a just-removed player to the same slot) is a
+      // no-op — they were never actually leaving. Skip rather than letting
+      // it fall through to "already in your squad".
+      if (transfer.playerOutId === transfer.playerInId) continue;
+
       // Resolve the outgoing player from the team being edited — the Free Hit
       // roster when one is active (transfers target next round's reverted
       // team), else the live squad. Normalised so the rest of the loop reads
