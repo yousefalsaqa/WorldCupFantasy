@@ -24,6 +24,7 @@ export async function GET() {
         currentMinute: true,
         homeNation: { select: { code: true } },
         awayNation: { select: { code: true } },
+        stage: { select: { stageId: true, order: true } },
       },
     });
 
@@ -39,6 +40,8 @@ export async function GET() {
       isStarted: m.isStarted,
       isFinished: m.isFinished,
       currentMinute: m.currentMinute,
+      stageId: m.stage.stageId,
+      stageOrder: m.stage.order,
     }));
 
     return NextResponse.json({

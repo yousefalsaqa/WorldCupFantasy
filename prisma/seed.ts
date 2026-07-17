@@ -99,7 +99,7 @@ const stages = [
   { stageId: 'QF', name: 'Quarter Finals', order: 6 },
   { stageId: 'SF', name: 'Semi Finals', order: 7 },
   { stageId: '3RD', name: 'Third Place Play-off', order: 8 },
-  { stageId: 'F', name: 'Final', order: 9 },
+  { stageId: 'F', name: '3rd Place & Final', order: 9 },
 ];
 
 // ============================================

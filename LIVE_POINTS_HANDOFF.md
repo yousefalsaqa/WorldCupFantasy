@@ -1,13 +1,156 @@
 # Live Points Feature — Handoff
 
-Last updated: 2026-07-11 (**LIVE** — QF active, deadline Jul 9 20:00Z (long
-since passed — round is live/in progress). Jul 9 session: QF budget/nation-cap
-economy, 3rd-place/Final stage merge, float-drift hardening across every money
-write path, a live penalty-save scoring bug found + fixed, read-only activity
-tracking, then upgraded to a detailed ActivityEvent log (team/league views,
-transfer attempts). Jul 9-11 follow-up: GR1 retroactive Raya→Simón correction
-(points + lineup-display fix via Transfer relabeling); R16 Manzambi→Bellingham
-correction was discussed, priced out, and explicitly DECLINED. See top session.)
+Last updated: 2026-07-17 (**LIVE** — SF finished, F stage active: 3rd Place
+FRA v ENG Jul 18, Final ESP v ARG Jul 19, both real fixtures synced with
+apiFootballId. Jul 17 session: full visual overhaul of the landing page,
+authenticated dashboard, and player-detail modal to a "broadcast control
+room" design language (near-black navy, warm off-white, magenta accent, red
+live accents, font-display condensed type) — see below. Plus a round of
+owner-requested point/budget adjustments and retroactive squad corrections.)
+
+---
+
+## Session 2026-07-17 — LANDING PAGE + DASHBOARD + PLAYER MODAL REDESIGN, F-STAGE FIXTURES, POINT/BUDGET ADJUSTMENTS
+
+### Visual redesign (3 surfaces, same new design system)
+New shared tokens in `tailwind.config.ts`: `ink` (warm off-white text),
+`accent` (magenta, sparing use for primary actions/key scores), `live` (thin
+red for live indicators). `font-display` (Bebas Neue) now actually wired up
+in `src/app/layout.tsx` — it was referenced in `tailwind.config.ts` all along
+but nothing backed the `--font-bebas` CSS var, so it silently fell back to
+Impact everywhere it was already used (settings, squad-builder, timezone
+picker) — those pages get the real font for free now too.
+
+- **`src/app/page.tsx` (public landing page)** — full rebuild away from the
+  generic "centered hero + gradient blobs + 3 equal feature cards" template
+  shape. Asymmetric hero (headline left, live squad-builder demo right using
+  the REAL `PitchBg`/`PlayerCard`/`FormationPicker` components against real
+  `/api/players` data — not a mockup), a stage-grouped live fixture ticker
+  (`src/lib/fixture-ticker.ts` + `src/components/fixture-ticker.tsx`, shared
+  with the dashboard), a live-scoring demo, a real private-league table (the
+  actual global top 6 by points), a rules/budget explainer, final CTA +
+  countdown. Iterated several rounds on user feedback: fixed mobile card
+  squish (`size="xs"` not `"sm"`, tighter gaps), made squad VALUE constant
+  across formation changes (formation only decides who starts vs. bench —
+  it's the same fixed 15-man squad, no more re-summing different players
+  into the total), added a real dynamic bench row, removed a stray
+  auto-fluctuating "budget pulse" animation the user didn't want, tuned
+  price-tier selection (`pickSpread`) to land the demo squad's value closer
+  to the real £115m budget. Copy pass: removed every em-dash-joined sentence
+  and the unverifiable "form moves the market" claim from the Budget rule.
+- **`src/app/(dashboard)/dashboard/page.tsx` (authenticated home)** — full
+  rebuild from the old "Welcome, {name}" + stat-card-grid + 8-icon
+  quick-actions template into a matchday command center: account summary
+  strip (points/budget/free transfers + deadline countdown or LIVE badge),
+  a real starting-XI pitch (captain/vice from actual squad data), a
+  matchday-state-aware briefing panel (before: checklist + next fixture;
+  during: live points/players-completed/live-now count; after: round
+  recap + best performer), lower section with real upcoming fixtures,
+  real "Your Leagues" list, and real player warnings (eliminated nation /
+  injured-suspended via `Player.isAvailable`+`availabilityNote`, newly
+  surfaced by `/api/squad/get` — additive field, no logic change). Dropped
+  rank/standings-position entirely per owner's call (too much plumbing for
+  too little payoff this late in the tournament). Redundant quick-links grid
+  removed — Squad/Activity/Fixtures/Standings/Leagues already live in the
+  persistent `DashboardNav`; only History/Trends/Dream Team (not in that nav)
+  get small text links now.
+- **`src/components/player-detail-modal.tsx`** — visual-only redesign (owner
+  was explicit: zero behavior change). Two-column layout on desktop (identity
+  + fantasy actions + tournament-run timeline on the left; stats + match
+  history + adjustments on the right), single column on mobile. Sub/Captain/
+  Vice-captain kept as distinct compact buttons (gold/silver captain
+  convention preserved — that's information, not decoration); Points now
+  reads as a stat, not a 4th identical button. `StageTrack` rebuilt as an
+  actually-connected dot-and-line timeline instead of 6 unrelated pills.
+  Season stats: one bordered strip with internal dividers instead of 6
+  separate boxes. Match History: same columns/data, tightened the Pts column
+  (`col-span-3`→`col-span-2`, was floating with a big gap after DC). All
+  props/state/handlers/API calls byte-identical to before — every prior
+  behavior (undo adjustment, expand a match row, sub-target hint, etc.)
+  re-verified against the original after the rewrite.
+
+### Bracket / fixtures fixes (`src/components/circular-bracket.tsx`)
+- **Always shows the full R32→Final bracket now** — it used to auto-zoom to
+  "the current round" once earlier rounds finished, which left only a
+  2-team SF sliver on screen this deep into the tournament. Removed the
+  zoom heuristic + the now-redundant "Full bracket" toggle/modal (dead code
+  cleanup, not a new feature).
+- **Finalist-flag click bug fixed**: tapping either finalist's flag (not
+  just the trophy) opened the semi-final that produced them, not the Final
+  they're actually in. The innermost winner-ring `Node` was always bound to
+  its own round's tie; now the LAST ring specifically binds to the Final tie
+  instead.
+- Flag-size inconsistency between the outer ring and inner winner nodes
+  (inner `nodes` size classes in `TIERS` are missing the `sm:` breakpoint
+  variant the outer `crest` classes have) was **identified but the user said
+  leave it, move on** — don't "fix" this without being asked again.
+
+### F-stage fixtures created + synced
+SF finished for real (ESP 2-0 FRA, ARG 2-1 ENG), so the Final (ESP v ARG) and
+3rd Place (FRA v ENG) matchups were knowable. `scripts/create-f-stage-fixtures.ts`
+created both `Match` rows (kickoffs from `world-cup-fixtures.ts`'s M103/M104:
+3rd Place Jul 18 17:00 ET, Final Jul 19 15:00 ET). Detail modal initially
+showed "not available yet" for both — not stale cache, they genuinely needed
+a real `apiFootballId` (the detail route hard-requires one). Ran
+`sync-knockout-from-api.ts --round=F --apply`: API-Football already had both
+published (fxId 1591865 / 1591866) and the script matched them to the
+manually-created rows by stage+nation (no duplicates). `set-ko-deadlines.ts`
+confirmed both stage deadlines were already correctly pinned.
+
+### Owner-requested point/budget adjustments (all `AuditLog`-backed)
+- **QF forfeit joke** ("the bois" private league): thebestsaqa +15, omar.sn's
+  Team −50 on the QF `TeamStage` + cumulative `Team.totalPoints` — landed
+  omarsn last for that round on purpose (`apply-qf-forfeit-adjustment.ts`).
+- **SF adjustments + GR1 un-void** (`apply-sf-adjustments-and-gr1-unvoid.ts`):
+  thebestsaqa +10, balls (ayaan) +10, omar.sn's Team −5, all on SF (now
+  settled/frozen, safe to hand-edit like QF was). Separately, Safarjlani to
+  glory (omar saf) was a late joiner whose GR1 was voided (0 pts) — real
+  reconstructed value from his actual GR1 squad/performances was **19**, but
+  owner said "give him 40, why not" — applied as a flat override, not the
+  reconstructed number. Wrote a real squad snapshot for GR1 in the same pass
+  so it's a permanent settled record instead of relying on transfer-rewind.
+- **Retroactive squad corrections** (owner's "pretend I always had him"
+  pattern — no transfer cost, bank/value conserved): chimbohimbo Cucurella→
+  Porro (`swap-cucurella-porro-chimbo.ts`); Micho's Bichos Kounde→Porro
+  (`swap-kounde-porro-michobichos.ts`), then owner asked for THIS one
+  specifically to cost a real free transfer after the fact — added a real
+  `Transfer` row + decremented `freeTransfers` by 1
+  (`charge-transfer-kounde-porro-michobichos.ts`). Cucurella→Cubarsi for
+  chimbo was discussed but never applied (Cubarsi turned out to already be on
+  chimbo's squad via a real wildcard chain — moot).
+- **Budget raised £114m → £115m** (`increase-budget-115.ts`, +£1.0m to every
+  team's bank, `initialBudget` bumped in `wc-constants.ts`) — incidentally
+  also fixed chimbohimbo's -£0.4m bank from the Porro swap above.
+- **"F" stage renamed** "Final" → **"3rd Place & Final"** everywhere (DB row
+  + the 4 hardcoded references in `wc-constants.ts`/`dream-team`/`history`/
+  `prisma/seed.ts`) — the 3RD/F merge existed in the data model already, the
+  display name just hadn't caught up.
+
+### Small fixes along the way
+- **Squad page deep-links straight into transfer mode**: `/squad?transfer=1`
+  (read via `useSearchParams`) auto-fires `enterTransferMode()` once the real
+  squad has loaded. Dashboard's "Make Transfers" button uses it — previously
+  landed on the plain pitch view, needing an extra tap.
+- **Leagues page now honors `?leagueId=`**: previously ignored it entirely
+  (selection was pure internal state, defaulting to global). Dashboard's
+  "Your Leagues" rows link to `/leagues?leagueId=X` and now actually open
+  that league.
+- Dashboard fixture rows + "Next Fixture" now link to `/fixtures?match=<id>`
+  (were static text before).
+- `/api/fixtures/scores` now returns `stageId`/`stageOrder` per match
+  (additive) — powers the ticker's stage grouping on both the landing page
+  and dashboard.
+
+### Files touched this session
+`src/app/page.tsx`, `src/app/(dashboard)/dashboard/page.tsx`,
+`src/app/(dashboard)/squad/page.tsx`, `src/app/(dashboard)/leagues/page.tsx`,
+`src/app/(dashboard)/dream-team/page.tsx`, `src/app/(dashboard)/history/page.tsx`,
+`src/app/layout.tsx`, `src/app/api/fixtures/scores/route.ts`,
+`src/app/api/squad/get/route.ts`, `src/components/player-detail-modal.tsx`,
+`src/components/circular-bracket.tsx`, `src/components/fixture-ticker.tsx`
+(new), `src/lib/fixture-ticker.ts` (new), `src/lib/wc-constants.ts`,
+`prisma/seed.ts`, `tailwind.config.ts`. Plus ~25 one-off scripts in `scripts/`
+for the fixture creation, point adjustments, and squad corrections above.
 
 ---
 

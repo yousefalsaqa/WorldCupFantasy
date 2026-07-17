@@ -39,7 +39,15 @@ const config: Config = {
           def: '#22c55e',
           mid: '#3b82f6',
           fwd: '#ef4444',
-        }
+        },
+        // Landing-page identity: warm off-white ink on near-black navy,
+        // magenta as the sparing brand accent, thin red for live info.
+        ink: '#F3ECDF',
+        accent: {
+          DEFAULT: '#D6296B',
+          dim: '#7A1B41',
+        },
+        live: '#E23A3A',
       },
       fontFamily: {
         sans: ['var(--font-geist-sans)', 'system-ui', 'sans-serif'],

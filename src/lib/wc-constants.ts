@@ -48,8 +48,9 @@ export const SQUAD = {
   // 105 → 108 for the QF, Jul 6 2026 — +3.0 via scripts/increase-budget-108.ts;
   // raised again 108 → 109, Jul 8 2026 — +1.0 via scripts/increase-budget-109.ts;
   // raised again 109 → 112 for the SF, Jul 11 2026 — +3.0 via scripts/increase-budget-112.ts;
-  // raised again 112 → 114, Jul 12 2026 — +2.0 via scripts/increase-budget-114.ts)
-  initialBudget: 114.0,
+  // raised again 112 → 114, Jul 12 2026 — +2.0 via scripts/increase-budget-114.ts;
+  // raised again 114 → 115, Jul 14 2026 — +1.0 via scripts/increase-budget-115.ts)
+  initialBudget: 115.0,
   minPlayerPrice: 4.0,
   maxPlayerPrice: 15.0,
   priceStep: 0.5,
@@ -203,7 +204,7 @@ export const STAGES = {
   // 3rd-place play-off shares this stage with the Final (3RD/F merge) —
   // there is no standalone "3RD" Stage row anymore. isThirdPlace on the
   // Match row distinguishes the two.
-  FINAL: { id: 'F', name: 'Final', order: 9 },
+  FINAL: { id: 'F', name: '3rd Place & Final', order: 9 },
 } as const;
 
 export type StageId = keyof typeof STAGES;

@@ -1,10 +1,27 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import {
+  Coins,
+  Wallet,
+  Repeat,
+  ShieldAlert,
+  Crown,
+  ShieldHalf,
+  CalendarClock,
+  Trophy,
+  History,
+  TrendingUp,
+  Star,
+} from 'lucide-react';
 import { getFlagUrl } from '@/lib/flags';
 import { useUserTimezone } from '@/hooks/useTimezone';
-import { formatDateShort } from '@/lib/format-time';
+import { formatDateShort, formatTime, decomposeDuration } from '@/lib/format-time';
+import { PlayerCard } from '@/components/kit';
+import PitchBg from '@/components/pitch-bg';
+import FixtureTicker from '@/components/fixture-ticker';
+import { buildTicker, type TickerFixture } from '@/lib/fixture-ticker';
 import PointsBreakdownModal from '@/components/points-breakdown-modal';
 
 interface User {
@@ -28,39 +45,71 @@ interface Stage {
   stageId: string;
   name: string;
   isActive: boolean;
+  isComplete: boolean;
   deadlineTime: string | null;
 }
 
-// Host nations
-const HOST_FLAGS = ['us', 'ca', 'mx'];
+interface SquadPlayer {
+  id: string;
+  playerId: string;
+  isStarting: boolean;
+  isCaptain: boolean;
+  isViceCaptain: boolean;
+  benchOrder: number | null;
+  points: number;
+  livePoints: number;
+  player: {
+    id: string;
+    displayName: string;
+    position: string;
+    currentPrice: number;
+    shirtNumber: number | null;
+    photoUrl: string | null;
+    isAvailable: boolean;
+    availabilityNote: string | null;
+    nation: { code: string; name: string; kitColor1: string; kitColor2: string; isEliminated: boolean };
+  };
+}
+
+interface LeagueSummary {
+  id: string;
+  name: string;
+  code: string;
+  isGlobal: boolean;
+  memberCount: number;
+  isOwner: boolean;
+}
+
+type MatchdayState = 'before' | 'during' | 'after';
+
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 18) return 'Good afternoon';
+  return 'Good evening';
+}
 
 export default function DashboardPage() {
   const { timezone } = useUserTimezone();
   const [user, setUser] = useState<User | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
-  // Live-inclusive total (banked + in-progress delta) from /api/team, so the
-  // dashboard "Total" pill matches the squad page and league standings during a
-  // live match instead of sitting on the last banked total until full-time.
   const [liveTotalPoints, setLiveTotalPoints] = useState<number | null>(null);
-  const [showPoints, setShowPoints] = useState(false);
-  // Current-round points + stage label for the inline display; the popup shows
-  // the cumulative total + per-week breakdown.
   const [roundPoints, setRoundPoints] = useState<{ points: number; stageId: string | null }>({ points: 0, stageId: null });
   const [unlimitedTransfers, setUnlimitedTransfers] = useState(false);
   const [currentStage, setCurrentStage] = useState<Stage | null>(null);
+  const [squad, setSquad] = useState<SquadPlayer[]>([]);
+  const [isLate, setIsLate] = useState(false);
+  const [leagues, setLeagues] = useState<LeagueSummary[]>([]);
+  const [fixtures, setFixtures] = useState<TickerFixture[]>([]);
+  const [now, setNow] = useState(() => Date.now());
   const [loading, setLoading] = useState(true);
+  const [showPoints, setShowPoints] = useState(false);
   const [showCreateTeam, setShowCreateTeam] = useState(false);
   const [teamName, setTeamName] = useState('');
 
   useEffect(() => {
     loadData();
-    // Re-pull when the user returns to this tab/page. The team card shows
-    // live-ish numbers (free transfers, bank) that change on OTHER pages —
-    // e.g. queueing a transfer spends a free transfer immediately, and a
-    // dashboard rendered from cache kept showing the old count.
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') loadData();
-    };
+    const onVisible = () => { if (document.visibilityState === 'visible') loadData(); };
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onVisible);
     return () => {
@@ -69,17 +118,19 @@ export default function DashboardPage() {
     };
   }, []);
 
+  // Deadline countdown ticks once a minute — cheap, and matches the landing
+  // page's own countdown cadence.
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   async function loadData() {
-    // Hard timeout so the spinner never spins forever on iOS Safari if a
-    // serverless cold-start or dropped Postgres connection stalls a request.
     const ctrl = new AbortController();
     const timeoutId = setTimeout(() => ctrl.abort(), 20000);
     try {
       const [userRes, teamRes, stageRes] = await Promise.all([
         fetch('/api/auth/me', { signal: ctrl.signal }),
-        // no-store: the team card must reflect transfer-queue spends made
-        // moments ago on the squad page; the API's 10s/30s SWR cache was
-        // serving a stale freeTransfers count here.
         fetch('/api/team', { signal: ctrl.signal, cache: 'no-store' }),
         fetch('/api/stages/current', { signal: ctrl.signal }),
       ]);
@@ -89,23 +140,35 @@ export default function DashboardPage() {
       const stageData = await stageRes.json();
 
       setUser(userData.user);
+      setCurrentStage(stageData.stage);
+
       if (teamRes.ok && teamData.team) {
         setTeam(teamData.team);
-        setLiveTotalPoints(
-          typeof teamData.liveTotalPoints === 'number'
-            ? teamData.liveTotalPoints
-            : teamData.team.totalPoints,
-        );
+        setLiveTotalPoints(typeof teamData.liveTotalPoints === 'number' ? teamData.liveTotalPoints : teamData.team.totalPoints);
         setUnlimitedTransfers(Boolean(teamData.unlimitedTransfers));
-        // Current-round points for the inline display (cheap, non-blocking).
+
         fetch('/api/team/stages-summary', { signal: ctrl.signal })
           .then((r) => (r.ok ? r.json() : null))
           .then((d) => { if (d) setRoundPoints({ points: d.currentRoundPoints ?? 0, stageId: d.currentStageId ?? null }); })
-          .catch(() => { /* non-fatal */ });
+          .catch(() => {});
+
+        fetch('/api/squad/get', { signal: ctrl.signal })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => { if (d?.squad) { setSquad(d.squad); setIsLate(Boolean(d.isLate)); } })
+          .catch(() => {});
+
+        fetch('/api/leagues', { signal: ctrl.signal })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => { if (d?.leagues) setLeagues(d.leagues); })
+          .catch(() => {});
       } else {
         setTeam(null);
       }
-      setCurrentStage(stageData.stage);
+
+      fetch('/api/fixtures/scores', { signal: ctrl.signal })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (d?.matches) setFixtures(d.matches); })
+        .catch(() => {});
     } catch (error) {
       console.error('Load error:', error);
       setTeam(null);
@@ -117,402 +180,416 @@ export default function DashboardPage() {
 
   async function createTeam() {
     if (!teamName.trim()) return;
-
     try {
       const res = await fetch('/api/team', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: teamName }),
       });
-
-      if (res.ok) {
-        // Redirect to squad builder after creating team
-        window.location.href = '/squad';
-      } else {
-        const data = await res.json();
-        alert(data.error || 'Failed to create team');
-      }
+      if (res.ok) window.location.href = '/squad';
+      else { const data = await res.json(); alert(data.error || 'Failed to create team'); }
     } catch (error) {
       console.error('Create team error:', error);
       alert('Failed to create team. Please try again.');
     }
   }
 
+  // ---- Derived state ----
+  const squadComplete = squad.length === 15;
+  const startingXI = squad.filter((s) => s.isStarting);
+  const bench = squad.filter((s) => !s.isStarting).sort((a, b) => (a.benchOrder ?? 99) - (b.benchOrder ?? 99));
+  const captain = squad.find((s) => s.isCaptain);
+  const vice = squad.find((s) => s.isViceCaptain);
+
+  const fwds = startingXI.filter((s) => s.player.position === 'FWD');
+  const mids = startingXI.filter((s) => s.player.position === 'MID');
+  const defs = startingXI.filter((s) => s.player.position === 'DEF');
+  const gks = startingXI.filter((s) => s.player.position === 'GK');
+
+  const warnings = useMemo(
+    () => squad
+      .filter((s) => s.player.nation.isEliminated || !s.player.isAvailable)
+      .map((s) => ({
+        id: s.id,
+        name: s.player.displayName,
+        starting: s.isStarting,
+        reason: s.player.nation.isEliminated ? 'Nation eliminated' : (s.player.availabilityNote || 'Unavailable'),
+      })),
+    [squad],
+  );
+
+  const stageMatches = useMemo(
+    () => (currentStage ? fixtures.filter((f) => f.stageId === currentStage.stageId) : []),
+    [fixtures, currentStage],
+  );
+  const matchdayState: MatchdayState = useMemo(() => {
+    if (stageMatches.some((m) => m.isStarted && !m.isFinished)) return 'during';
+    if (stageMatches.length > 0 && stageMatches.every((m) => m.isFinished)) return 'after';
+    return 'before';
+  }, [stageMatches]);
+
+  const deadline = currentStage?.deadlineTime ? new Date(currentStage.deadlineTime) : null;
+  const countdown = deadline ? decomposeDuration(Math.max(0, deadline.getTime() - now)) : null;
+
+  // Next fixture: prefer the current stage, fall back to the next one with
+  // any not-yet-started match.
+  const nextFixture = useMemo(() => {
+    const upcoming = fixtures
+      .filter((f) => !f.isStarted && new Date(f.kickoff).getTime() > now)
+      .sort((a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime());
+    return upcoming[0] ?? null;
+  }, [fixtures, now]);
+
+  // Live-state player tracking: which of the starting XI's nations have
+  // finished / are live / haven't kicked off, using the current stage's
+  // real match data.
+  const nationStatus = useMemo(() => {
+    const map = new Map<string, 'done' | 'live' | 'upcoming'>();
+    for (const m of stageMatches) {
+      const status: 'done' | 'live' | 'upcoming' = m.isFinished ? 'done' : m.isStarted ? 'live' : 'upcoming';
+      map.set(m.home, status);
+      map.set(m.away, status);
+    }
+    return map;
+  }, [stageMatches]);
+  const completedCount = startingXI.filter((s) => nationStatus.get(s.player.nation.code) === 'done').length;
+  const liveNowCount = startingXI.filter((s) => nationStatus.get(s.player.nation.code) === 'live').length;
+
+  const bestPerformer = useMemo(() => {
+    if (startingXI.length === 0) return null;
+    return [...startingXI].sort((a, b) => (b.livePoints || b.points) - (a.livePoints || a.points))[0];
+  }, [startingXI]);
+
+  const tickerItems = useMemo(() => buildTicker(fixtures), [fixtures]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-10 h-10 border-4 border-rose-500 border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // ---- No team yet ----
+  if (!team) {
+    return (
+      <div className="max-w-md mx-auto pt-16">
+        <p className="text-[10px] font-bold text-white/35 uppercase tracking-[0.2em]">Get Started</p>
+        <h1 className="font-display text-3xl text-ink mt-1">Build your squad</h1>
+        <p className="text-white/50 text-sm mt-2">15 players, 48 nations, one budget.</p>
+        {!showCreateTeam ? (
+          <button
+            onClick={() => setShowCreateTeam(true)}
+            className="mt-6 px-6 py-2.5 rounded-lg bg-accent hover:bg-accent/90 text-ink font-bold text-sm transition-colors"
+          >
+            Create Team
+          </button>
+        ) : (
+          <div className="mt-6 space-y-3">
+            <input
+              type="text"
+              value={teamName}
+              onChange={(e) => setTeamName(e.target.value)}
+              placeholder="Team name…"
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-ink placeholder-white/30 focus:border-white/30 outline-none text-sm"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setShowCreateTeam(false)} className="flex-1 bg-white/5 border border-white/10 text-white/60 py-2 rounded-lg text-sm">Cancel</button>
+              <button onClick={createTeam} className="flex-1 bg-accent text-ink font-bold py-2 rounded-lg text-sm">Create</button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="max-w-[1400px] mx-auto space-y-5">
+      {/* ---- Account summary ---- */}
+      <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 pb-4 border-b border-white/10">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-white">
-            {team ? `Welcome, ${user?.username}` : 'Get Started'}
-          </h1>
-          <p className="text-white/40 text-sm">
-            {team ? team.name : 'Create your World Cup squad'}
-          </p>
+          <p className="text-white/35 text-[11px] font-bold uppercase tracking-[0.2em]">{greeting()}, {user?.username}</p>
+          <h1 className="font-display text-2xl sm:text-3xl text-ink mt-0.5 leading-none">{team.name}</h1>
+          {currentStage && (
+            <p className="text-white/40 text-xs mt-1.5">{currentStage.name}{isLate && ' · this round is provisional (joined late)'}</p>
+          )}
         </div>
-        <div className="flex items-center gap-3">
-          {team && (
-            <button
-              type="button"
-              onClick={() => setShowPoints(true)}
-              className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 hover:border-emerald-400/50 transition-all active:scale-95"
-              title="See your points by gameweek"
-            >
-              <span className="text-[10px] sm:text-xs uppercase tracking-wider text-emerald-300/70 font-bold">Total</span>
-              <span className="text-lg sm:text-xl font-black text-emerald-400 leading-none tabular-nums">{liveTotalPoints ?? team.totalPoints}</span>
-              <span className="text-emerald-300/50 text-[10px] font-bold hidden sm:inline">pts ›</span>
-            </button>
-          )}
-          {/* Host flags - hidden on very small screens */}
-          <div className="hidden sm:flex -space-x-2">
-            {HOST_FLAGS.map(code => (
-              <img
-                key={code}
-                src={getFlagUrl(code, 'md')}
-                alt=""
-                className="w-7 h-5 sm:w-8 sm:h-6 rounded shadow-md ring-2 ring-[#0a0e17]"
-              />
-            ))}
+
+        {matchdayState === 'during' ? (
+          <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-live/10 ring-1 ring-live/40 self-start lg:self-auto">
+            <span className="w-1.5 h-1.5 rounded-full bg-live animate-pulse" />
+            <span className="text-live text-xs font-bold tracking-wider uppercase">Matches in progress</span>
+          </span>
+        ) : countdown && deadline && deadline.getTime() > now ? (
+          <div className="flex items-center gap-3">
+            <span className="text-white/35 text-[10px] font-bold uppercase tracking-widest">Deadline</span>
+            <div className="flex gap-1.5">
+              <DeadlineUnit value={countdown.days} label="D" />
+              <DeadlineUnit value={countdown.hours} label="H" />
+              <DeadlineUnit value={countdown.minutes} label="M" />
+            </div>
           </div>
-          {user?.isAdmin && (
-            <Link
-              href="/admin"
-              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-red-500/20 to-blue-500/20 border border-white/10 rounded-xl text-white/80 hover:text-white hover:border-white/20 transition-all"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-              <span className="font-semibold text-xs sm:text-sm">Admin</span>
+        ) : null}
+      </div>
+
+      {/* ---- Squad-incomplete notice (compact, not a marketing hero) ---- */}
+      {team.teamValue === 0 && (
+        <Link href="/squad" className="flex items-center justify-between gap-3 px-4 py-3 rounded-lg border border-accent/30 bg-accent/[0.06] hover:border-accent/50 transition-colors">
+          <span className="text-sm text-ink font-bold">Your squad is empty. Pick your 15 to get started</span>
+          <span className="text-accent text-sm font-bold shrink-0">Build squad →</span>
+        </Link>
+      )}
+
+      {/* ---- Stat strip ---- */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <button type="button" onClick={() => setShowPoints(true)} className="text-left">
+          <StatTile label={`${roundPoints.stageId ?? currentStage?.stageId ?? 'Round'} Points`} value={(liveTotalPoints ?? team.totalPoints).toString()} accent />
+        </button>
+        <StatTile label="Budget Left" value={`£${team.bankBalance.toFixed(1)}m`} icon={<Wallet className="w-3.5 h-3.5" />} />
+        <StatTile label="Squad Value" value={`£${team.teamValue.toFixed(1)}m`} icon={<Coins className="w-3.5 h-3.5" />} />
+        <StatTile label="Free Transfers" value={unlimitedTransfers ? '∞' : team.freeTransfers.toString()} icon={<Repeat className="w-3.5 h-3.5" />} />
+      </div>
+
+      {/* ---- Pitch + briefing ---- */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div className="lg:col-span-8">
+          <div className="rounded-xl ring-1 ring-white/10 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 bg-[#0d1220] border-b border-white/10">
+              <span className="text-[11px] font-bold text-white/45 tracking-[0.15em] uppercase">Your Starting XI</span>
+              <Link href="/squad" className="text-[11px] font-bold text-accent hover:text-accent/80 uppercase tracking-wide">Edit →</Link>
+            </div>
+            <div className="relative">
+              <PitchBg />
+              <div className="relative z-10 p-3 sm:p-6 space-y-3 sm:space-y-5 min-h-[280px]">
+                <PitchRow players={fwds} captainId={captain?.playerId} viceId={vice?.playerId} />
+                <PitchRow players={mids} captainId={captain?.playerId} viceId={vice?.playerId} />
+                <PitchRow players={defs} captainId={captain?.playerId} viceId={vice?.playerId} />
+                <PitchRow players={gks} captainId={captain?.playerId} viceId={vice?.playerId} />
+              </div>
+            </div>
+            {bench.length > 0 && (
+              <div className="px-3 sm:px-5 py-3 bg-[#0a0e17] border-t border-white/10">
+                <p className="text-[9px] font-bold text-white/30 uppercase tracking-widest mb-2">Substitutes</p>
+                <div className="flex justify-center gap-1.5 sm:gap-3">
+                  {bench.map((s) => (
+                    <PlayerCard
+                      key={s.id}
+                      player={s.player}
+                      size="xs"
+                      eliminated={s.player.nation.isEliminated}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Matchday briefing */}
+        <div className="lg:col-span-4">
+          <div className="rounded-xl ring-1 ring-white/10 bg-[#0d1220] h-full flex flex-col">
+            <div className="px-4 py-2.5 border-b border-white/10">
+              <span className="text-[11px] font-bold text-white/45 tracking-[0.15em] uppercase">Matchday Briefing</span>
+            </div>
+            <div className="p-4 space-y-4 flex-1">
+              {matchdayState === 'before' && (
+                <>
+                  <ChecklistRow ok={squadComplete} label="Squad complete" />
+                  <ChecklistRow ok={!!captain} label="Captain selected" detail={captain ? captain.player.displayName : undefined} />
+                  <ChecklistRow ok={warnings.length === 0} label={warnings.length === 0 ? 'No player warnings' : `${warnings.length} player warning${warnings.length > 1 ? 's' : ''}`} warn={warnings.length > 0} />
+                </>
+              )}
+              {matchdayState === 'during' && (
+                <>
+                  <BriefingStat label="Players completed" value={`${completedCount}/${startingXI.length}`} />
+                  <BriefingStat label="Live now" value={liveNowCount.toString()} live={liveNowCount > 0} />
+                  <BriefingStat label="Live points" value={(liveTotalPoints ?? team.totalPoints).toString()} />
+                </>
+              )}
+              {matchdayState === 'after' && (
+                <>
+                  <BriefingStat label="Round points" value={roundPoints.points.toString()} />
+                  {bestPerformer && (
+                    <BriefingStat label="Best performer" value={`${bestPerformer.player.displayName} · ${bestPerformer.livePoints || bestPerformer.points} pts`} />
+                  )}
+                </>
+              )}
+
+              <div className="pt-3 border-t border-white/10">
+                <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1.5">Captain / Vice</p>
+                <div className="flex items-center gap-2 text-sm">
+                  <Crown className="w-3.5 h-3.5 text-accent" />
+                  <span className="text-ink font-bold">{captain?.player.displayName ?? '—'}</span>
+                  <span className="text-white/25">/</span>
+                  <span className="text-white/50">{vice?.player.displayName ?? '—'}</span>
+                </div>
+              </div>
+
+              {nextFixture && (
+                <Link href={`/fixtures?match=${nextFixture.id}`} className="block pt-3 border-t border-white/10 hover:opacity-80 transition-opacity">
+                  <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1.5">Next Fixture</p>
+                  <div className="flex items-center gap-2 text-sm">
+                    <img src={getFlagUrl(nextFixture.home, 'sm')} alt={nextFixture.home} className="w-4 h-3 rounded-[2px] object-cover" />
+                    <span className="text-ink font-bold">{nextFixture.home} v {nextFixture.away}</span>
+                    <img src={getFlagUrl(nextFixture.away, 'sm')} alt={nextFixture.away} className="w-4 h-3 rounded-[2px] object-cover" />
+                  </div>
+                  <p className="text-white/40 text-xs mt-1">
+                    {formatDateShort(new Date(nextFixture.kickoff), timezone)} · {formatTime(new Date(nextFixture.kickoff), timezone)}
+                  </p>
+                </Link>
+              )}
+            </div>
+            <Link href="/squad?transfer=1" className="block text-center py-2.5 border-t border-white/10 text-accent text-xs font-bold uppercase tracking-wide hover:text-accent/80 transition-colors">
+              Make Transfers
             </Link>
-          )}
+          </div>
         </div>
       </div>
 
-      {/* No Team State */}
-      {!team && (
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-12 text-center">
-          <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-red-500/20 to-blue-500/20 flex items-center justify-center">
-            <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
+      {/* ---- Lower section ---- */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Upcoming fixtures */}
+        <div className="rounded-xl ring-1 ring-white/10 bg-[#0d1220]">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/10">
+            <span className="text-[11px] font-bold text-white/45 tracking-[0.15em] uppercase flex items-center gap-1.5"><CalendarClock className="w-3.5 h-3.5" />Fixtures</span>
+            <Link href="/fixtures" className="text-[11px] font-bold text-accent uppercase tracking-wide">All →</Link>
           </div>
-          <h2 className="text-xl font-bold text-white mb-2">Create Your Squad</h2>
-          <p className="text-white/40 mb-8 max-w-sm mx-auto">
-            Pick 15 players from 48 nations. Compete with friends. Win glory.
-          </p>
-          
-          {!showCreateTeam ? (
-            <button
-              onClick={() => setShowCreateTeam(true)}
-              className="px-8 py-3 bg-white text-[#0a0e17] font-black rounded-xl hover:bg-white/90 transition-all"
-            >
-              Create Team
-            </button>
-          ) : (
-            <div className="max-w-xs mx-auto space-y-4">
-              <input
-                type="text"
-                value={teamName}
-                onChange={e => setTeamName(e.target.value)}
-                placeholder="Enter team name..."
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:border-white/30 outline-none"
-                autoFocus
-              />
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowCreateTeam(false)}
-                  className="flex-1 bg-white/5 border border-white/10 text-white/70 py-2.5 rounded-xl hover:bg-white/10 transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={createTeam}
-                  className="flex-1 bg-white text-[#0a0e17] font-bold py-2.5 rounded-xl hover:bg-white/90 transition-all"
-                >
-                  Create
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Team Dashboard */}
-      {team && (
-        <>
-          {/* Empty-squad hero — the one thing a new user must do is pick
-              their 15. Until teamValue is non-zero nothing else on this
-              page matters, so this card leads and everything else demotes. */}
-          {team.teamValue === 0 && (
-            <Link
-              href="/squad"
-              className="block relative overflow-hidden rounded-2xl border border-rose-500/30 bg-gradient-to-br from-rose-500/15 via-pink-500/10 to-purple-600/15 p-6 sm:p-8 group hover:border-rose-400/50 transition-all"
-            >
-              <div
-                className="absolute inset-0 pointer-events-none"
-                style={{
-                  backgroundImage:
-                    'radial-gradient(ellipse 400px 200px at 80% 0%, rgba(244,63,94,0.15), transparent 70%)',
-                }}
-              />
-              <div className="relative flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-rose-300 text-xs font-bold uppercase tracking-widest mb-1.5">Get Started</p>
-                  <h2 className="text-xl sm:text-2xl font-black text-white mb-1">Pick your 15 players</h2>
-                  <p className="text-white/50 text-sm">
-                    £109m budget · 48 nations
-                    {currentStage?.deadlineTime
-                      ? ` · deadline ${formatDateShort(new Date(currentStage.deadlineTime), timezone)}`
-                      : ''}
-                  </p>
-                  <span className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-rose-500 to-pink-600 rounded-xl font-black text-white text-sm shadow-lg shadow-rose-500/30 group-hover:shadow-rose-500/50 transition-shadow">
-                    Build Your Squad
-                    <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
+          <div className="divide-y divide-white/5">
+            {fixtures
+              .filter((f) => !f.isFinished)
+              .sort((a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime())
+              .slice(0, 4)
+              .map((f) => (
+                <Link key={f.id} href={`/fixtures?match=${f.id}`} className="flex items-center justify-between px-4 py-2.5 text-sm hover:bg-white/[0.03] transition-colors">
+                  <span className="flex items-center gap-1.5 text-white/70">
+                    <img src={getFlagUrl(f.home, 'sm')} alt="" className="w-4 h-3 rounded-[2px] object-cover" />
+                    {f.home} v {f.away}
+                    <img src={getFlagUrl(f.away, 'sm')} alt="" className="w-4 h-3 rounded-[2px] object-cover" />
                   </span>
-                </div>
-                <div className="hidden sm:flex w-24 h-24 rounded-2xl bg-white/5 border border-white/10 items-center justify-center text-5xl font-black text-white/20 group-hover:text-white/30 transition-colors">
-                  15
-                </div>
-              </div>
-            </Link>
-          )}
-
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-            <button type="button" onClick={() => setShowPoints(true)} className="w-full text-left active:scale-[0.98] transition-transform">
-              <StatCard
-                label={`${roundPoints.stageId ?? 'Round'} Points ›`}
-                value={roundPoints.points.toString()}
-                icon={<ChartIcon />}
-                highlight
-              />
-            </button>
-            <StatCard
-              label="Bank"
-              value={`£${team.bankBalance.toFixed(1)}m`}
-              icon={<BankIcon />}
-            />
-            <StatCard
-              label="Team Value"
-              value={`£${team.teamValue.toFixed(1)}m`}
-              icon={<TrendIcon />}
-            />
-            <StatCard
-              label="Free Transfers"
-              value={unlimitedTransfers ? '∞' : team.freeTransfers.toString()}
-              icon={<TransferIcon />}
-            />
-          </div>
-
-          {/* Current Stage */}
-          {currentStage && (
-            <div className="bg-gradient-to-r from-white/5 to-transparent border border-white/10 rounded-2xl p-5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center">
-                    <TrophyIcon />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-white">{currentStage.name}</h3>
-                    <p className="text-sm text-white/40">
-                      {currentStage.deadlineTime
-                        ? `Deadline: ${formatDateShort(new Date(currentStage.deadlineTime), timezone)}`
-                        : 'Pre-tournament'}
-                    </p>
-                  </div>
-                </div>
-                <div className="px-3 py-1 rounded-full bg-green-500/20 text-green-400 text-xs font-bold">
-                  ACTIVE
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Quick Actions */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 gap-3">
-            <QuickAction href="/squad" icon={<SquadIcon />} label="My Squad" />
-            <QuickAction href="/fixtures" icon={<CalendarIcon />} label="Fixtures" />
-            <QuickAction href="/standings" icon={<StandingsIcon />} label="Standings" />
-            <QuickAction href="/transfers" icon={<TransferIcon />} label="Activity" />
-            <QuickAction href="/leagues" icon={<TrophyIcon />} label="Leagues" />
-            <QuickAction href="/history" icon={<HistoryIcon />} label="History" />
-            <QuickAction href="/trends" icon={<TrendsIcon />} label="Trends" />
-            <QuickAction href="/dream-team" icon={<StarIcon />} label="Dream Team" />
-          </div>
-
-          {/* Groups Preview */}
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-white">Tournament Groups</h3>
-              <Link href="/fixtures" className="text-sm text-rose-400 hover:text-rose-300 font-medium">
-                View all fixtures →
-              </Link>
-            </div>
-            <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-12 gap-2">
-              {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'].map(group => (
-                <Link
-                  key={group}
-                  href={`/standings?group=${group}`}
-                  className="aspect-square bg-white/5 rounded-lg flex items-center justify-center font-bold text-white/60 hover:bg-rose-500/20 hover:text-rose-400 transition-all cursor-pointer border border-transparent hover:border-rose-500/30"
-                >
-                  {group}
+                  <span className="text-white/35 text-xs tabular-nums">{formatDateShort(new Date(f.kickoff), timezone)}</span>
                 </Link>
               ))}
-            </div>
+            {fixtures.filter((f) => !f.isFinished).length === 0 && (
+              <p className="px-4 py-4 text-white/30 text-sm">No fixtures remaining.</p>
+            )}
           </div>
-        </>
-      )}
+        </div>
+
+        {/* Your leagues */}
+        <div className="rounded-xl ring-1 ring-white/10 bg-[#0d1220]">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/10">
+            <span className="text-[11px] font-bold text-white/45 tracking-[0.15em] uppercase flex items-center gap-1.5"><Trophy className="w-3.5 h-3.5" />Your Leagues</span>
+            <Link href="/leagues" className="text-[11px] font-bold text-accent uppercase tracking-wide">All →</Link>
+          </div>
+          <div className="divide-y divide-white/5">
+            {leagues.filter((l) => !l.isGlobal).slice(0, 4).map((l) => (
+              <Link key={l.id} href={`/leagues?leagueId=${l.id}`} className="flex items-center justify-between px-4 py-2.5 text-sm hover:bg-white/[0.03] transition-colors">
+                <span className="text-ink font-bold truncate">{l.name}</span>
+                <span className="text-white/35 text-xs shrink-0">{l.memberCount} teams</span>
+              </Link>
+            ))}
+            {leagues.filter((l) => !l.isGlobal).length === 0 && (
+              <p className="px-4 py-4 text-white/30 text-sm">You haven&apos;t joined a private league yet.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Player warnings */}
+        <div className="rounded-xl ring-1 ring-white/10 bg-[#0d1220]">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/10">
+            <span className="text-[11px] font-bold text-white/45 tracking-[0.15em] uppercase flex items-center gap-1.5"><ShieldAlert className="w-3.5 h-3.5" />Player Warnings</span>
+          </div>
+          <div className="divide-y divide-white/5">
+            {warnings.slice(0, 4).map((w) => (
+              <div key={w.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                <span className="text-ink font-bold truncate">{w.name}{w.starting && <span className="text-live text-[10px] font-black ml-1.5 align-middle">STARTING</span>}</span>
+                <span className="text-white/40 text-xs shrink-0">{w.reason}</span>
+              </div>
+            ))}
+            {warnings.length === 0 && (
+              <p className="px-4 py-4 text-white/30 text-sm flex items-center gap-1.5"><ShieldHalf className="w-3.5 h-3.5" />No issues with your squad.</p>
+            )}
+          </div>
+          <div className="flex items-center gap-4 px-4 py-2.5 border-t border-white/10">
+            <Link href="/history" className="text-[11px] font-bold text-white/40 hover:text-ink uppercase tracking-wide flex items-center gap-1"><History className="w-3 h-3" />History</Link>
+            <Link href="/trends" className="text-[11px] font-bold text-white/40 hover:text-ink uppercase tracking-wide flex items-center gap-1"><TrendingUp className="w-3 h-3" />Trends</Link>
+            <Link href="/dream-team" className="text-[11px] font-bold text-white/40 hover:text-ink uppercase tracking-wide flex items-center gap-1"><Star className="w-3 h-3" />Dream Team</Link>
+          </div>
+        </div>
+      </div>
+
+      {/* ---- Live tournament ticker ---- */}
+      <div className="-mx-4 sm:-mx-6">
+        <FixtureTicker items={tickerItems} />
+      </div>
 
       {showPoints && <PointsBreakdownModal onClose={() => setShowPoints(false)} />}
     </div>
   );
 }
 
-// Icons
-function ChartIcon() {
+function DeadlineUnit({ value, label }: { value: number; label: string }) {
   return (
-    <svg className="w-5 h-5 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-    </svg>
+    <div className="w-9 h-9 rounded-md bg-white/5 border border-white/10 flex flex-col items-center justify-center">
+      <span className="font-display text-sm text-ink leading-none tabular-nums">{value.toString().padStart(2, '0')}</span>
+      <span className="text-[7px] text-white/30 font-bold">{label}</span>
+    </div>
   );
 }
 
-function BankIcon() {
+function StatTile({ label, value, icon, accent }: { label: string; value: string; icon?: React.ReactNode; accent?: boolean }) {
   return (
-    <svg className="w-5 h-5 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  );
-}
-
-function TrendIcon() {
-  return (
-    <svg className="w-5 h-5 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-    </svg>
-  );
-}
-
-function TransferIcon() {
-  return (
-    <svg className="w-5 h-5 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-    </svg>
-  );
-}
-
-function TrophyIcon() {
-  return (
-    <svg className="w-5 h-5 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-    </svg>
-  );
-}
-
-function SquadIcon() {
-  return (
-    <svg className="w-6 h-6 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-    </svg>
-  );
-}
-
-function StarIcon() {
-  return (
-    <svg className="w-6 h-6 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-    </svg>
-  );
-}
-
-function CalendarIcon() {
-  return (
-    <svg className="w-6 h-6 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-    </svg>
-  );
-}
-
-function StandingsIcon() {
-  return (
-    <svg className="w-6 h-6 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h18v18H3z" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9h18" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v18" />
-    </svg>
-  );
-}
-
-function HistoryIcon() {
-  return (
-    <svg className="w-6 h-6 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  );
-}
-
-function TrendsIcon() {
-  return (
-    <svg className="w-6 h-6 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-    </svg>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  icon,
-  highlight = false,
-}: {
-  label: string;
-  value: string;
-  icon: React.ReactNode;
-  highlight?: boolean;
-}) {
-  return (
-    <div className={`rounded-xl p-4 border transition-all
-      ${highlight
-        ? 'bg-gradient-to-br from-red-500/10 to-blue-500/10 border-white/20'
-        : 'bg-white/5 border-white/10 hover:border-white/20'
-      }`}>
-      <div className="flex items-center gap-2 mb-2">
+    <div className={`rounded-lg px-3.5 py-3 border ${accent ? 'bg-accent/[0.08] border-accent/30' : 'bg-white/[0.03] border-white/10'}`}>
+      <div className="flex items-center gap-1.5 mb-1 text-white/40">
         {icon}
-        <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">{label}</span>
+        <span className="text-[9px] font-bold uppercase tracking-wider">{label}</span>
       </div>
-      <div className={`text-xl sm:text-2xl font-black ${highlight ? 'text-white' : 'text-white/80'}`}>
-        {value}
+      <div className={`font-display text-xl leading-none tabular-nums ${accent ? 'text-accent' : 'text-ink'}`}>{value}</div>
+    </div>
+  );
+}
+
+function ChecklistRow({ ok, label, detail, warn }: { ok: boolean; label: string; detail?: string; warn?: boolean }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className={`w-4 h-4 rounded-sm flex items-center justify-center text-[10px] font-black shrink-0 ${
+        warn ? 'bg-live/20 text-live' : ok ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/10 text-white/40'
+      }`}>
+        {warn ? '!' : ok ? '✓' : '·'}
+      </span>
+      <div className="min-w-0">
+        <p className="text-sm text-ink font-bold truncate">{label}</p>
+        {detail && <p className="text-white/40 text-xs truncate">{detail}</p>}
       </div>
     </div>
   );
 }
 
-function QuickAction({
-  href,
-  icon,
-  label,
-}: {
-  href: string;
-  icon: React.ReactNode;
-  label: string;
-}) {
+function BriefingStat({ label, value, live }: { label: string; value: string; live?: boolean }) {
   return (
-    <Link
-      href={href}
-      className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-xl p-3.5 text-center transition-all group"
-    >
-      <div className="mb-1.5 flex justify-center group-hover:scale-110 transition-transform">{icon}</div>
-      <div className="font-semibold text-white/70 group-hover:text-white text-xs sm:text-sm">{label}</div>
-    </Link>
+    <div className="flex items-center justify-between">
+      <span className="text-white/40 text-xs font-bold uppercase tracking-wide">{label}</span>
+      <span className={`font-display text-lg tabular-nums ${live ? 'text-live' : 'text-ink'}`}>{value}</span>
+    </div>
+  );
+}
+
+function PitchRow({ players, captainId, viceId }: { players: SquadPlayer[]; captainId?: string; viceId?: string }) {
+  if (players.length === 0) return null;
+  return (
+    <div className="flex justify-center gap-1 sm:gap-3">
+      {players.map((s) => (
+        <PlayerCard
+          key={s.id}
+          player={s.player}
+          size="xs"
+          isCaptain={s.playerId === captainId}
+          isViceCaptain={s.playerId === viceId}
+          livePoints={s.livePoints || s.points}
+          eliminated={s.player.nation.isEliminated}
+        />
+      ))}
+    </div>
   );
 }

@@ -30,7 +30,7 @@
 // ============================================
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Repeat } from 'lucide-react';
 import Kit from '@/components/kit';
 import { getFlagUrl } from '@/lib/flags';
 import { fdrPill, getFixtureDifficulty } from '@/lib/fdr';
@@ -337,6 +337,13 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
     return TRACK_IDS.map((_, i) => (i < current ? 'done' : i === current ? 'current' : 'future'));
   })();
 
+  const POSITION_TONE: Record<string, string> = {
+    GK: 'text-amber-300 bg-amber-500/15 ring-amber-400/30',
+    DEF: 'text-sky-300 bg-sky-500/15 ring-sky-400/30',
+    MID: 'text-emerald-300 bg-emerald-500/15 ring-emerald-400/30',
+    FWD: 'text-rose-300 bg-rose-500/15 ring-rose-400/30',
+  };
+
   return (
     <div
       className="fixed inset-0 bg-black/80 z-[9999] backdrop-blur-sm flex items-start sm:items-center justify-center"
@@ -354,410 +361,394 @@ export default function PlayerDetailModal(props: PlayerDetailModalProps) {
       }}
     >
       <div
-        className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl max-h-[82dvh] overflow-y-auto"
+        className="bg-[#0d1220] border border-white/10 rounded-xl w-full max-w-sm lg:max-w-3xl shadow-2xl max-h-[85dvh] overflow-y-auto lg:overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="relative bg-gradient-to-br from-emerald-600 via-emerald-700 to-emerald-900 p-4 rounded-t-2xl overflow-hidden">
-          <div
-            className="absolute inset-0 opacity-20 pointer-events-none"
-            style={{
-              backgroundImage: 'repeating-linear-gradient(to bottom, rgba(255,255,255,0.06) 0 8%, rgba(0,0,0,0.10) 8% 16%)',
-            }}
-          />
-          <button
-            onClick={onClose}
-            className="absolute top-3 right-3 z-10 text-white bg-black/70 hover:bg-black p-2 rounded-full transition-all touch-manipulation shadow-lg"
-            style={{ minWidth: '36px', minHeight: '36px', WebkitTapHighlightColor: 'transparent' }}
-          >
-            <X className="w-4 h-4" />
-          </button>
-
-          <div className="relative flex items-center gap-3 pr-10">
-            {player.photoUrl ? (
+        <div className="lg:grid lg:grid-cols-[19rem_1fr] lg:max-h-[85dvh]">
+          {/* ============ LEFT: identity, fantasy actions, run ============ */}
+          <div className="lg:overflow-y-auto lg:border-r lg:border-white/10">
+            {/* Header */}
+            <div className="relative p-4 border-b border-white/10 overflow-hidden">
+              {/* Restrained team-accent wash — a faint diagonal tint from the
+                  nation's kit colors, not a saturated full-width banner. */}
               <div
-                className="relative w-14 h-14 rounded-xl p-[2px] shrink-0 shadow-[0_4px_14px_rgba(0,0,0,0.4)]"
+                className="absolute inset-0 opacity-[0.14] pointer-events-none"
                 style={{
-                  background: `linear-gradient(160deg, ${player.nation?.kitColor1 || '#334155'} 0%, ${player.nation?.kitColor2 || '#0f172a'} 110%)`,
+                  background: `linear-gradient(135deg, ${player.nation?.kitColor1 || '#334155'} 0%, transparent 65%)`,
                 }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={player.photoUrl}
-                  alt=""
-                  className="w-full h-full rounded-[10px] object-cover object-top bg-slate-800"
-                />
-                {(isCaptain || isViceCaptain) && (
-                  <div className={`absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full flex items-center justify-center ring-2 shadow-lg ${
-                    isCaptain
-                      ? 'bg-gradient-to-br from-yellow-300 to-amber-500 ring-yellow-200/80'
-                      : 'bg-gradient-to-br from-gray-200 to-gray-400 ring-white/70'
-                  }`}>
-                    <span className="text-[10px] font-black text-black">{isCaptain ? 'C' : 'V'}</span>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <Kit
-                primaryColor={player.nation?.kitColor1 || '#FFF'}
-                secondaryColor={player.nation?.kitColor2 || '#000'}
-                number={player.shirtNumber}
-                nationCode={player.nation?.code || ''}
-                size="xs"
-                isCaptain={isCaptain}
-                isViceCaptain={isViceCaptain}
               />
-            )}
-            <div className="text-white flex-1 min-w-0">
-              <h2 className="text-lg font-black leading-tight truncate">{player.displayName}</h2>
-              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                <span className="inline-flex items-center gap-1 px-1.5 py-[2px] rounded-md bg-white/10 ring-1 ring-white/15">
-                  <img src={getFlagUrl(player.nation?.code || '')} alt="" className="w-3.5 h-2.5 rounded-[1px] object-cover" />
-                  <span className="text-white text-[10px] font-bold">{player.nation?.code}</span>
-                </span>
-                {nationGroup && (
-                  <span className="px-1.5 py-[2px] rounded-md text-[10px] font-bold bg-white/10 ring-1 ring-white/15 text-white/80">
-                    Group {nationGroup}
-                  </span>
-                )}
-                <span className={`px-1.5 py-[2px] rounded-md text-[10px] font-black ${
-                  player.position === 'GK' ? 'bg-amber-500/30 text-amber-200 ring-1 ring-amber-400/40' :
-                  player.position === 'DEF' ? 'bg-sky-500/30 text-sky-200 ring-1 ring-sky-400/40' :
-                  player.position === 'MID' ? 'bg-emerald-500/30 text-emerald-200 ring-1 ring-emerald-400/40' :
-                  'bg-rose-500/30 text-rose-200 ring-1 ring-rose-400/40'
-                }`}>{player.position}</span>
-                {opponent && (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-[2px] rounded-md bg-black/30 ring-1 ring-white/10">
-                    <span className="text-white/70 text-[9px] font-bold uppercase">Next</span>
-                    <img src={getFlagUrl(opponent)} alt={opponent} className="w-3.5 h-2.5 rounded-[1px] object-cover" />
-                    <span className="text-white text-[10px] font-bold">{opponent}</span>
-                    <span className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm text-[9px] font-black ${fdrPill(fdr!)}`}>{fdr}</span>
-                    {nextKickoff && (
-                      <span className="text-white/60 text-[9px] font-semibold whitespace-nowrap pl-0.5">
-                        {nextKickoff.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                      </span>
-                    )}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+              <button
+                onClick={onClose}
+                aria-label="Close"
+                className="absolute top-3 right-3 z-10 text-white/60 hover:text-ink bg-white/5 hover:bg-white/10 border border-white/10 p-2 rounded-lg transition-colors touch-manipulation"
+                style={{ minWidth: '36px', minHeight: '36px', WebkitTapHighlightColor: 'transparent' }}
+              >
+                <X className="w-4 h-4" />
+              </button>
 
-        {/* Content */}
-        <div className="p-4 space-y-4">
-          {/* Action row OR read-only status badges */}
-          {readOnly ? (
-            (props as ReadOnlyProps).hideRole ? null : (
-              <div className="grid grid-cols-4 gap-2">
-                <ReadOnlyBadge
-                  label="Role"
-                  value={isStarting ? 'STARTING' : 'BENCH'}
-                  tone={isStarting ? 'emerald' : 'slate'}
-                />
-                <ReadOnlyBadge
-                  label="Capt"
-                  value={isCaptain ? 'YES' : '—'}
-                  tone={isCaptain ? 'yellow' : 'mute'}
-                />
-                <ReadOnlyBadge
-                  label="V-Capt"
-                  value={isViceCaptain ? 'YES' : '—'}
-                  tone={isViceCaptain ? 'silver' : 'mute'}
-                />
-                <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-white/5 border border-white/10 text-emerald-400">
-                  <span className="text-sm font-bold mb-0.5">{player.points ?? 0}</span>
-                  <span className="text-[9px] font-bold text-white/40">Points</span>
-                </div>
-              </div>
-            )
-          ) : (
-            <>
-              <div className="grid grid-cols-4 gap-2">
-                <button
-                  onClick={(props as InteractiveProps).onSub}
-                  className={`flex flex-col items-center justify-center p-2 rounded-lg border transition-all text-xs ${
-                    (props as InteractiveProps).isSubTarget
-                      ? 'bg-amber-500/20 border-amber-500 text-amber-500'
-                      : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10'
-                  }`}
-                >
-                  <span className="text-sm mb-0.5">🔄</span>
-                  <span className="text-[9px] font-bold">Sub</span>
-                </button>
-                <button
-                  onClick={(props as InteractiveProps).onSetCaptain}
-                  className={`flex flex-col items-center justify-center p-2 rounded-lg border transition-all text-xs ${
-                    isCaptain
-                      ? 'bg-yellow-500/20 border-yellow-500 text-yellow-500'
-                      : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10'
-                  }`}
-                >
-                  <span className="text-sm font-black mb-0.5">C</span>
-                  <span className="text-[9px] font-bold">Capt</span>
-                </button>
-                <button
-                  onClick={(props as InteractiveProps).onSetViceCaptain}
-                  className={`flex flex-col items-center justify-center p-2 rounded-lg border transition-all text-xs ${
-                    isViceCaptain
-                      ? 'bg-gray-400/20 border-gray-400 text-gray-400'
-                      : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10'
-                  }`}
-                >
-                  <span className="text-sm font-black mb-0.5">V</span>
-                  <span className="text-[9px] font-bold">V-Capt</span>
-                </button>
-                <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-white/5 border border-white/10 text-emerald-400">
-                  <span className="text-sm font-bold mb-0.5">{player.points ?? 0}</span>
-                  <span className="text-[9px] font-bold text-white/40">Points</span>
-                </div>
-              </div>
-              {(props as InteractiveProps).subTargetName && !(props as InteractiveProps).isSubTarget && (
-                <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg text-center">
-                  <p className="text-amber-500 text-xs font-medium">
-                    Select player to swap with{' '}
-                    <span className="font-bold">{(props as InteractiveProps).subTargetName}</span>
-                  </p>
-                  {(props as InteractiveProps).onCancelSub && (
-                    <button
-                      onClick={(props as InteractiveProps).onCancelSub}
-                      className="mt-1 text-[10px] text-amber-500 underline"
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-
-          {/* Upcoming fixtures — the next few games with FDR difficulty so
-              you can read the run, not just the immediate next match shown in
-              the header. The first chip (next game) is ringed. */}
-          {nextFixtures.length > 0 && (
-            <div>
-              <h3 className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2">Upcoming</h3>
-              <div className="flex gap-1.5">
-                {nextFixtures.map((fx, i) => (
+              <div className="relative flex items-center gap-3 pr-10">
+                {player.photoUrl ? (
                   <div
-                    key={i}
-                    className={`flex-1 flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg bg-white/5 border ${
-                      i === 0 ? 'border-white/25 ring-1 ring-white/15' : 'border-white/10'
-                    }`}
+                    className="relative w-16 h-16 sm:w-[4.5rem] sm:h-[4.5rem] rounded-lg p-[2px] shrink-0 shadow-[0_4px_14px_rgba(0,0,0,0.4)]"
+                    style={{
+                      background: `linear-gradient(160deg, ${player.nation?.kitColor1 || '#334155'} 0%, ${player.nation?.kitColor2 || '#0f172a'} 110%)`,
+                    }}
                   >
-                    <span className="text-white/40 text-[9px] font-bold">vs</span>
-                    <img src={getFlagUrl(fx.opponent)} alt="" className="w-3.5 h-2.5 rounded-[1px] object-cover" />
-                    <span className="text-white text-[10px] font-bold">{fx.opponent}</span>
-                    <span className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm text-[9px] font-black ${fdrPill(fx.difficulty)}`}>
-                      {fx.difficulty}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={player.photoUrl}
+                      alt=""
+                      className="w-full h-full rounded-[7px] object-cover object-top bg-slate-800"
+                    />
+                    {(isCaptain || isViceCaptain) && (
+                      <div className={`absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full flex items-center justify-center ring-2 shadow-lg ${
+                        isCaptain
+                          ? 'bg-gradient-to-br from-yellow-300 to-amber-500 ring-yellow-200/80'
+                          : 'bg-gradient-to-br from-gray-200 to-gray-400 ring-white/70'
+                      }`}>
+                        <span className="text-[10px] font-black text-black">{isCaptain ? 'C' : 'V'}</span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <Kit
+                    primaryColor={player.nation?.kitColor1 || '#FFF'}
+                    secondaryColor={player.nation?.kitColor2 || '#000'}
+                    number={player.shirtNumber}
+                    nationCode={player.nation?.code || ''}
+                    size="xs"
+                    isCaptain={isCaptain}
+                    isViceCaptain={isViceCaptain}
+                  />
+                )}
+                <div className="min-w-0 flex-1">
+                  <h2 className="font-display text-2xl text-ink leading-none tracking-wide truncate">{player.displayName}</h2>
+                  <div className="flex items-center gap-1.5 mt-1.5 flex-wrap text-white/50 text-[11px] font-semibold">
+                    <img src={getFlagUrl(player.nation?.code || '')} alt="" className="w-3.5 h-2.5 rounded-[1px] object-cover shrink-0" />
+                    <span>{player.nation?.code}</span>
+                    {nationGroup && (
+                      <>
+                        <span className="text-white/20">·</span>
+                        <span>Group {nationGroup}</span>
+                      </>
+                    )}
+                    <span
+                      className={`ml-0.5 px-1.5 py-[1px] rounded text-[9px] font-black ring-1 ${POSITION_TONE[player.position] || 'text-white/60 bg-white/10 ring-white/15'}`}
+                      title="Position"
+                    >
+                      {player.position}
                     </span>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Tournament journey — the nation's run through the rounds. */}
-          <div>
-            <h3 className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-1.5">Run</h3>
-            <StageTrack states={trackStates} />
-          </div>
-
-          {/* Season-aggregate stats — derived from the same per-match
-              PlayerPerformance rows we fetch for the Match History
-              table below. Labels mirror what the scoring engine
-              actually stores; "DC" matches the column header used
-              one row down for consistency. */}
-          <div>
-            <h3 className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-1.5">Stats</h3>
-            <div className="grid grid-cols-6 gap-1.5">
-              <StatTile label="Gls" value={statsLoading ? '—' : seasonStats.goals} />
-              <StatTile label="Ast" value={statsLoading ? '—' : seasonStats.assists} />
-              <StatTile label="Apps" value={statsLoading ? '—' : seasonStats.apps} />
-              <StatTile label="Min" value={statsLoading ? '—' : seasonStats.minutes} />
-              <StatTile label="DC" value={statsLoading ? '—' : seasonStats.defensiveActions} />
-              <StatTile label="CS" value={statsLoading ? '—' : seasonStats.cleanSheets} />
-            </div>
-          </div>
-
-          {/* Match History — real per-match performances. Click a row to
-              expand the points breakdown (per-category contributions). */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Match History</h3>
-              {loading && <span className="text-[9px] text-white/30">Loading…</span>}
-            </div>
-            <div className="rounded-lg border border-white/10 overflow-hidden">
-              <div className="grid grid-cols-12 gap-1 bg-white/5 px-2 py-1.5 text-[9px] font-bold text-white/40 uppercase tracking-wider items-center">
-                <div className="col-span-4">Match</div>
-                <div className="col-span-2 text-center">Min</div>
-                <div className="col-span-1 text-center">G</div>
-                <div className="col-span-1 text-center">A</div>
-                <div className="col-span-1 text-center">DC</div>
-                <div className="col-span-3 text-right">Pts</div>
-              </div>
-              <div className="max-h-72 overflow-y-auto">
-                {error && (
-                  <div className="text-center text-rose-400 text-[11px] py-3">{error}</div>
-                )}
-                {!error && performances && performances.length === 0 && (
-                  <div className="text-center text-white/30 text-xs py-3">No matches yet</div>
-                )}
-                {(performances || []).map((perf) => {
-                  const playerNation = player.nation?.code || '';
-                  const isHome = perf.match.homeNation.code === playerNation;
-                  const opp = isHome ? perf.match.awayNation : perf.match.homeNation;
-                  const isExpanded = expandedId === perf.id;
-                  const score = perf.match.homeScore != null && perf.match.awayScore != null
-                    ? `${perf.match.homeScore}-${perf.match.awayScore}`
-                    : '–';
-
-                  // Did-not-play: nation played, player didn't feature. Render
-                  // a muted, non-expandable row so the match is visible without
-                  // masquerading as a 0-point appearance.
-                  if (perf.didNotPlay) {
-                    return (
-                      <div key={perf.id} className="border-t border-white/5 grid grid-cols-12 gap-1 px-2 py-1.5 items-center opacity-40">
-                        <div className="col-span-4 flex items-center gap-1.5 min-w-0">
-                          <img
-                            src={getFlagUrl(opp.code)}
-                            alt={opp.code}
-                            className="w-4 h-3 rounded-sm object-cover ring-1 ring-white/10 shrink-0 grayscale"
-                          />
-                          <span className="text-[10px] text-white/70 font-medium truncate">
-                            vs {opp.code}
-                          </span>
-                          <span className="text-[9px] text-white/40 ml-auto shrink-0">{score}</span>
-                        </div>
-                        <div className="col-span-5 text-center text-[9px] text-white/40 font-bold uppercase tracking-wider">
-                          Did not play
-                        </div>
-                        <div className="col-span-3 text-right text-[10px] text-white/30 font-medium pr-[14px]">—</div>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div key={perf.id} className="border-t border-white/5">
-                      <button
-                        type="button"
-                        onClick={() => setExpandedId(isExpanded ? null : perf.id)}
-                        className={`w-full grid grid-cols-12 gap-1 px-2 py-1.5 items-center text-left hover:bg-white/5 transition-colors ${perf.isLive ? 'bg-emerald-500/5' : ''}`}
-                      >
-                        <div className="col-span-4 flex items-center gap-1.5 min-w-0">
-                          <img
-                            src={getFlagUrl(opp.code)}
-                            alt={opp.code}
-                            className="w-4 h-3 rounded-sm object-cover ring-1 ring-white/10 shrink-0"
-                          />
-                          <span className="text-[10px] text-white/80 font-medium truncate">
-                            vs {opp.code}
-                          </span>
-                          <span className="text-[9px] text-white/40 ml-auto shrink-0">{score}</span>
-                          {perf.isLive && (
-                            <span className="inline-flex items-center gap-1 px-1 py-[1px] rounded bg-emerald-500/20 text-emerald-300 text-[8px] font-bold ring-1 ring-emerald-400/40">
-                              <span className="w-1 h-1 bg-emerald-400 rounded-full animate-pulse" />
-                              LIVE
-                            </span>
-                          )}
-                        </div>
-                        <div className="col-span-2 text-center text-[10px] text-white/60 font-medium">{perf.stats.minutesPlayed}'</div>
-                        <div className="col-span-1 text-center">
-                          <span className={`text-[10px] font-bold ${perf.stats.goals > 0 ? 'text-emerald-400' : 'text-white/40'}`}>{perf.stats.goals}</span>
-                        </div>
-                        <div className="col-span-1 text-center">
-                          <span className={`text-[10px] font-bold ${perf.stats.assists > 0 ? 'text-emerald-400' : 'text-white/40'}`}>{perf.stats.assists}</span>
-                        </div>
-                        <div className="col-span-1 text-center">
-                          <span className={`text-[10px] font-bold ${perf.stats.defensiveActions > 0 ? 'text-sky-300' : 'text-white/40'}`}>{perf.stats.defensiveActions}</span>
-                        </div>
-                        <div className="col-span-3 text-right flex items-center justify-end gap-1">
-                          <span className={`text-[11px] font-black ${perf.totalPoints > 0 ? 'text-emerald-400' : perf.totalPoints < 0 ? 'text-rose-400' : 'text-white/50'}`}>
-                            {perf.totalPoints}
-                          </span>
-                          <span className={`text-white/30 text-[10px] transition-transform ${isExpanded ? 'rotate-90' : ''}`}>›</span>
-                        </div>
-                      </button>
-                      {isExpanded && (
-                        <div className="bg-black/30 px-3 py-2 border-t border-white/5">
-                          <div className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-1.5">
-                            {perf.match.stageName} · {new Date(perf.match.kickoffTime).toLocaleDateString()}
-                          </div>
-                          {perf.breakdown.lines.length === 0 ? (
-                            <div className="text-[10px] text-white/30 italic">No scoring events yet.</div>
-                          ) : (
-                            <div className="space-y-1">
-                              {perf.breakdown.lines.map((line, idx) => (
-                                <div key={idx} className="flex items-center justify-between gap-2 text-[10px]">
-                                  <span className="text-white/70 truncate">
-                                    {line.label}
-                                    {line.detail && <span className="text-white/30 ml-1">({line.detail})</span>}
-                                  </span>
-                                  <span className={`font-bold tabular-nums ${
-                                    line.points > 0 ? 'text-emerald-400' :
-                                    line.points < 0 ? 'text-rose-400' : 'text-white/40'
-                                  }`}>
-                                    {line.points > 0 ? `+${line.points}` : line.points}
-                                  </span>
-                                </div>
-                              ))}
-                              <div className="flex items-center justify-between gap-2 text-[10px] pt-1 mt-1 border-t border-white/10">
-                                <span className="text-white/80 font-bold uppercase tracking-wider">Total</span>
-                                <span className={`font-black tabular-nums ${
-                                  perf.breakdown.total > 0 ? 'text-emerald-400' :
-                                  perf.breakdown.total < 0 ? 'text-rose-400' : 'text-white/60'
-                                }`}>
-                                  {perf.breakdown.total > 0 ? `+${perf.breakdown.total}` : perf.breakdown.total}
-                                </span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                  {opponent && (
+                    <div className="inline-flex items-center gap-1 mt-1.5 px-1.5 py-[2px] rounded-md bg-black/20 ring-1 ring-white/10">
+                      <span className="text-white/40 text-[9px] font-bold uppercase">Next</span>
+                      <img src={getFlagUrl(opponent)} alt={opponent} className="w-3.5 h-2.5 rounded-[1px] object-cover" />
+                      <span className="text-ink text-[10px] font-bold">{opponent}</span>
+                      <span className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm text-[9px] font-black ${fdrPill(fdr!)}`} title="Fixture difficulty">{fdr}</span>
+                      {nextKickoff && (
+                        <span className="text-white/40 text-[9px] font-semibold whitespace-nowrap pl-0.5">
+                          {nextKickoff.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        </span>
                       )}
                     </div>
-                  );
-                })}
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Manual Adjustments — emergency overrides. Admin sees an
-              Undo button per row regardless of which team's player they
-              opened (Undo is server-side admin-gated). */}
-          {adjustments.length > 0 && (
-            <div>
-              <h3 className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2">Adjustments</h3>
-              <div className="rounded-lg border border-white/10 overflow-hidden divide-y divide-white/5">
-                {adjustments.slice(0, 5).map((adj) => (
-                  <div key={adj.id} className="px-2 py-1.5 flex items-center gap-2 text-[10px]">
-                    <span className={`font-bold tabular-nums shrink-0 ${
-                      (adj.pointsAdded ?? 0) > 0 ? 'text-emerald-400' :
-                      (adj.pointsAdded ?? 0) < 0 ? 'text-rose-400' : 'text-white/50'
-                    }`}>
-                      {(adj.pointsAdded ?? 0) > 0 ? '+' : ''}{adj.pointsAdded ?? 0}
-                    </span>
-                    <span className="text-white/70 truncate flex-1">
-                      {adj.reason || (adj.action === 'MANUAL_OVERRIDE_MATCH' ? 'Match adjustment' : 'Total adjustment')}
-                    </span>
-                    <span className="text-white/30 text-[9px] shrink-0">
-                      {new Date(adj.createdAt).toLocaleDateString()}
-                    </span>
-                    {isAdmin && (
+            {/* Fantasy actions — compact cluster, visually distinct from the
+                points readout (a stat, not a fourth button). */}
+            {readOnly ? (
+              (props as ReadOnlyProps).hideRole ? null : (
+                <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/10">
+                  <div className="flex items-center gap-1.5">
+                    <StatusPill categoryLabel="Role" value={isStarting ? 'STARTING' : 'BENCH'} tone={isStarting ? 'emerald' : 'slate'} wide />
+                    <StatusPill categoryLabel="Capt" value={isCaptain ? 'YES' : '—'} tone={isCaptain ? 'gold' : 'mute'} />
+                    <StatusPill categoryLabel="V-Capt" value={isViceCaptain ? 'YES' : '—'} tone={isViceCaptain ? 'silver' : 'mute'} />
+                  </div>
+                  <PointsReadout value={player.points ?? 0} />
+                </div>
+              )
+            ) : (
+              <div className="border-b border-white/10">
+                <div className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="flex items-center gap-1.5">
+                    <ActionButton
+                      label="SUB"
+                      title="Substitute"
+                      icon={<Repeat className="w-3.5 h-3.5" />}
+                      active={!!(props as InteractiveProps).isSubTarget}
+                      activeTone="accent"
+                      onClick={(props as InteractiveProps).onSub}
+                    />
+                    <ActionButton
+                      label="C"
+                      title="Set captain"
+                      active={isCaptain}
+                      activeTone="gold"
+                      onClick={(props as InteractiveProps).onSetCaptain}
+                    />
+                    <ActionButton
+                      label="V"
+                      title="Set vice-captain"
+                      active={isViceCaptain}
+                      activeTone="silver"
+                      onClick={(props as InteractiveProps).onSetViceCaptain}
+                    />
+                  </div>
+                  <PointsReadout value={player.points ?? 0} />
+                </div>
+                {(props as InteractiveProps).subTargetName && !(props as InteractiveProps).isSubTarget && (
+                  <div className="mx-4 mb-3 p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg text-center">
+                    <p className="text-amber-400 text-xs font-medium">
+                      Select player to swap with{' '}
+                      <span className="font-bold">{(props as InteractiveProps).subTargetName}</span>
+                    </p>
+                    {(props as InteractiveProps).onCancelSub && (
                       <button
-                        type="button"
-                        onClick={() => handleUndoAdjustment(adj.id)}
-                        disabled={undoingId === adj.id}
-                        className="shrink-0 px-1.5 py-0.5 rounded bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-[9px] font-bold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        title="Undo this adjustment (admin only)"
+                        onClick={(props as InteractiveProps).onCancelSub}
+                        className="mt-1 text-[10px] text-amber-400 underline"
                       >
-                        {undoingId === adj.id ? '…' : 'Undo'}
+                        Cancel
                       </button>
                     )}
                   </div>
-                ))}
+                )}
+              </div>
+            )}
+
+            {/* Upcoming fixtures — the next few games with FDR difficulty so
+                you can read the run, not just the immediate next match shown
+                in the header. The first chip (next game) is ringed. */}
+            {nextFixtures.length > 0 && (
+              <div className="px-4 py-3 border-b border-white/10">
+                <h3 className="text-[10px] font-bold text-white/35 uppercase tracking-wider mb-2">Upcoming</h3>
+                <div className="flex gap-1.5">
+                  {nextFixtures.map((fx, i) => (
+                    <div
+                      key={i}
+                      className={`flex-1 flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-md bg-white/[0.03] ring-1 ${
+                        i === 0 ? 'ring-white/25' : 'ring-white/10'
+                      }`}
+                    >
+                      <span className="text-white/35 text-[9px] font-bold">vs</span>
+                      <img src={getFlagUrl(fx.opponent)} alt="" className="w-3.5 h-2.5 rounded-[1px] object-cover" />
+                      <span className="text-ink text-[10px] font-bold">{fx.opponent}</span>
+                      <span className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm text-[9px] font-black ${fdrPill(fx.difficulty)}`}>
+                        {fx.difficulty}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Tournament journey — connected timeline instead of a row of
+                unrelated pills. */}
+            <div className="px-4 py-3 lg:pb-4">
+              <h3 className="text-[10px] font-bold text-white/35 uppercase tracking-wider mb-2.5">Tournament Run</h3>
+              <StageTrack states={trackStates} />
+            </div>
+          </div>
+
+          {/* ============ RIGHT: stats, match history, adjustments ============ */}
+          <div className="p-4 space-y-4 lg:overflow-y-auto">
+            {/* Season-aggregate stats — derived from the same per-match
+                PlayerPerformance rows we fetch for the Match History
+                table below. Labels mirror what the scoring engine
+                actually stores; "DC" matches the column header used
+                one row down for consistency. */}
+            <div>
+              <h3 className="text-[10px] font-bold text-white/35 uppercase tracking-wider mb-2">Season Stats</h3>
+              <div className="grid grid-cols-6 rounded-lg border border-white/10 divide-x divide-white/10 overflow-hidden">
+                <StatTile label="Gls" title="Goals" value={statsLoading ? '—' : seasonStats.goals} />
+                <StatTile label="Ast" title="Assists" value={statsLoading ? '—' : seasonStats.assists} />
+                <StatTile label="Apps" title="Appearances" value={statsLoading ? '—' : seasonStats.apps} />
+                <StatTile label="Min" title="Minutes played" value={statsLoading ? '—' : seasonStats.minutes} />
+                <StatTile label="DC" title="Defensive contributions" value={statsLoading ? '—' : seasonStats.defensiveActions} />
+                <StatTile label="CS" title="Clean sheets" value={statsLoading ? '—' : seasonStats.cleanSheets} />
               </div>
             </div>
-          )}
+
+            {/* Match History — real per-match performances. Click a row to
+                expand the points breakdown (per-category contributions). */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-[10px] font-bold text-white/35 uppercase tracking-wider">Match History</h3>
+                {loading && <span className="text-[9px] text-white/30">Loading…</span>}
+              </div>
+              <div className="rounded-lg border border-white/10 overflow-hidden">
+                <div className="sticky top-0 z-10 grid grid-cols-12 gap-1 bg-[#11172a] px-2.5 py-1.5 text-[9px] font-bold text-white/40 uppercase tracking-wider items-center border-b border-white/10">
+                  <div className="col-span-5">Match</div>
+                  <div className="col-span-2 text-center">Min</div>
+                  <div className="col-span-1 text-center" title="Goals">G</div>
+                  <div className="col-span-1 text-center" title="Assists">A</div>
+                  <div className="col-span-1 text-center" title="Defensive contributions">DC</div>
+                  <div className="col-span-2 text-right">Pts</div>
+                </div>
+                <div className="max-h-72 overflow-y-auto">
+                  {error && (
+                    <div className="text-center text-live text-[11px] py-3">{error}</div>
+                  )}
+                  {!error && performances && performances.length === 0 && (
+                    <div className="text-center text-white/30 text-xs py-3">No matches yet</div>
+                  )}
+                  {(performances || []).map((perf) => {
+                    const playerNation = player.nation?.code || '';
+                    const isHome = perf.match.homeNation.code === playerNation;
+                    const opp = isHome ? perf.match.awayNation : perf.match.homeNation;
+                    const isExpanded = expandedId === perf.id;
+                    const score = perf.match.homeScore != null && perf.match.awayScore != null
+                      ? `${perf.match.homeScore}-${perf.match.awayScore}`
+                      : '–';
+
+                    // Did-not-play: nation played, player didn't feature. Render
+                    // a muted, non-expandable row so the match is visible without
+                    // masquerading as a 0-point appearance.
+                    if (perf.didNotPlay) {
+                      return (
+                        <div key={perf.id} className="border-t border-white/5 grid grid-cols-12 gap-1 px-2.5 py-1.5 items-center opacity-40">
+                          <div className="col-span-5 flex items-center gap-1.5 min-w-0">
+                            <img
+                              src={getFlagUrl(opp.code)}
+                              alt={opp.code}
+                              className="w-4 h-3 rounded-sm object-cover ring-1 ring-white/10 shrink-0 grayscale"
+                            />
+                            <span className="text-[10px] text-white/70 font-medium truncate">
+                              vs {opp.code}
+                            </span>
+                            <span className="text-[9px] text-white/40 ml-auto shrink-0">{score}</span>
+                          </div>
+                          <div className="col-span-5 text-center text-[9px] text-white/40 font-bold uppercase tracking-wider">
+                            Did not play
+                          </div>
+                          <div className="col-span-2 text-right text-[10px] text-white/30 font-medium">—</div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div key={perf.id} className="border-t border-white/5">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedId(isExpanded ? null : perf.id)}
+                          className={`w-full grid grid-cols-12 gap-1 px-2.5 py-1.5 items-center text-left hover:bg-white/[0.04] transition-colors ${perf.isLive ? 'bg-live/[0.06]' : ''} ${isExpanded ? 'bg-white/[0.03]' : ''}`}
+                        >
+                          <div className="col-span-5 flex items-center gap-1.5 min-w-0">
+                            <img
+                              src={getFlagUrl(opp.code)}
+                              alt={opp.code}
+                              className="w-4 h-3 rounded-sm object-cover ring-1 ring-white/10 shrink-0"
+                            />
+                            <span className="text-[10px] text-ink font-semibold truncate">
+                              vs {opp.code}
+                            </span>
+                            <span className="text-[9px] text-white/40 ml-auto shrink-0">{score}</span>
+                            {perf.isLive && (
+                              <span className="inline-flex items-center gap-1 px-1 py-[1px] rounded bg-live/15 text-live text-[8px] font-bold ring-1 ring-live/40">
+                                <span className="w-1 h-1 bg-live rounded-full animate-pulse motion-reduce:animate-none" />
+                                LIVE
+                              </span>
+                            )}
+                          </div>
+                          <div className="col-span-2 text-center text-[10px] text-white/55 font-medium tabular-nums">{perf.stats.minutesPlayed}'</div>
+                          <div className="col-span-1 text-center">
+                            <span className={`text-[10px] font-bold tabular-nums ${perf.stats.goals > 0 ? 'text-emerald-400' : 'text-white/35'}`}>{perf.stats.goals}</span>
+                          </div>
+                          <div className="col-span-1 text-center">
+                            <span className={`text-[10px] font-bold tabular-nums ${perf.stats.assists > 0 ? 'text-emerald-400' : 'text-white/35'}`}>{perf.stats.assists}</span>
+                          </div>
+                          <div className="col-span-1 text-center">
+                            <span className={`text-[10px] font-bold tabular-nums ${perf.stats.defensiveActions > 0 ? 'text-sky-300' : 'text-white/35'}`}>{perf.stats.defensiveActions}</span>
+                          </div>
+                          <div className="col-span-2 text-right flex items-center justify-end gap-1">
+                            <span className={`text-xs font-black tabular-nums ${perf.totalPoints > 0 ? 'text-emerald-400' : perf.totalPoints < 0 ? 'text-live' : 'text-white/50'}`}>
+                              {perf.totalPoints}
+                            </span>
+                            <span className={`text-white/30 text-[10px] transition-transform ${isExpanded ? 'rotate-90' : ''}`}>›</span>
+                          </div>
+                        </button>
+                            {isExpanded && (
+                              <div className="bg-black/30 px-3 py-2 border-t border-white/5">
+                                <div className="text-[9px] font-bold text-white/40 uppercase tracking-wider mb-1.5">
+                                  {perf.match.stageName} · {new Date(perf.match.kickoffTime).toLocaleDateString()}
+                                </div>
+                                {perf.breakdown.lines.length === 0 ? (
+                                  <div className="text-[10px] text-white/30 italic">No scoring events yet.</div>
+                                ) : (
+                                  <div className="space-y-1">
+                                    {perf.breakdown.lines.map((line, idx) => (
+                                      <div key={idx} className="flex items-center justify-between gap-2 text-[10px]">
+                                        <span className="text-white/70 truncate">
+                                          {line.label}
+                                          {line.detail && <span className="text-white/30 ml-1">({line.detail})</span>}
+                                        </span>
+                                        <span className={`font-bold tabular-nums ${
+                                          line.points > 0 ? 'text-emerald-400' :
+                                          line.points < 0 ? 'text-live' : 'text-white/40'
+                                        }`}>
+                                          {line.points > 0 ? `+${line.points}` : line.points}
+                                        </span>
+                                      </div>
+                                    ))}
+                                    <div className="flex items-center justify-between gap-2 text-[10px] pt-1 mt-1 border-t border-white/10">
+                                      <span className="text-white/80 font-bold uppercase tracking-wider">Total</span>
+                                      <span className={`font-black tabular-nums ${
+                                        perf.breakdown.total > 0 ? 'text-emerald-400' :
+                                        perf.breakdown.total < 0 ? 'text-live' : 'text-white/60'
+                                      }`}>
+                                        {perf.breakdown.total > 0 ? `+${perf.breakdown.total}` : perf.breakdown.total}
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+              </div>
+            </div>
+
+            {/* Manual Adjustments — emergency overrides. Admin sees an
+                Undo button per row regardless of which team's player they
+                opened (Undo is server-side admin-gated). */}
+            {adjustments.length > 0 && (
+              <div>
+                <h3 className="text-[10px] font-bold text-white/35 uppercase tracking-wider mb-2">Adjustments</h3>
+                <div className="rounded-lg border border-white/10 overflow-hidden divide-y divide-white/5">
+                  {adjustments.slice(0, 5).map((adj) => (
+                    <div key={adj.id} className="px-2.5 py-1.5 flex items-center gap-2 text-[10px]">
+                      <span className={`font-bold tabular-nums shrink-0 ${
+                        (adj.pointsAdded ?? 0) > 0 ? 'text-emerald-400' :
+                        (adj.pointsAdded ?? 0) < 0 ? 'text-live' : 'text-white/50'
+                      }`}>
+                        {(adj.pointsAdded ?? 0) > 0 ? '+' : ''}{adj.pointsAdded ?? 0}
+                      </span>
+                      <span className="text-white/70 truncate flex-1">
+                        {adj.reason || (adj.action === 'MANUAL_OVERRIDE_MATCH' ? 'Match adjustment' : 'Total adjustment')}
+                      </span>
+                      <span className="text-white/30 text-[9px] shrink-0">
+                        {new Date(adj.createdAt).toLocaleDateString()}
+                      </span>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => handleUndoAdjustment(adj.id)}
+                          disabled={undoingId === adj.id}
+                          className="shrink-0 px-1.5 py-0.5 rounded bg-live/15 hover:bg-live/25 border border-live/30 text-live text-[9px] font-bold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          title="Undo this adjustment (admin only)"
+                        >
+                          {undoingId === adj.id ? '…' : 'Undo'}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -779,61 +770,136 @@ function toTrackIdx(stageId: string | null | undefined): number {
 
 type PipState = 'done' | 'current' | 'out' | 'future';
 
+// Connected timeline: a dot + label per stage joined by a line whose fill
+// tracks progress, instead of a row of unrelated pills. The current stage's
+// dot is emphasized; an eliminated nation's line breaks at a red "OUT" dot.
 function StageTrack({ states }: { states: PipState[] }) {
-  const pip = (s: PipState) => {
+  const dotClass = (s: PipState) => {
     switch (s) {
-      case 'done': return 'bg-emerald-500/25 text-emerald-200 ring-1 ring-emerald-500/40';
-      case 'current': return 'bg-emerald-500 text-white ring-2 ring-emerald-300/80 shadow-[0_0_10px_rgba(16,185,129,0.6)] animate-pulse';
-      case 'out': return 'bg-rose-500/15 text-rose-300/90 ring-1 ring-rose-500/30';
-      default: return 'bg-white/5 text-white/25 ring-1 ring-white/10';
+      case 'done': return 'bg-emerald-400 ring-2 ring-emerald-400/25';
+      case 'current': return 'bg-accent ring-4 ring-accent/25 shadow-[0_0_10px_rgba(214,41,107,0.5)]';
+      case 'out': return 'bg-live ring-2 ring-live/25';
+      default: return 'bg-white/15 ring-2 ring-white/5';
     }
   };
+  const labelClass = (s: PipState) => {
+    switch (s) {
+      case 'done': return 'text-emerald-300/90';
+      case 'current': return 'text-ink';
+      case 'out': return 'text-live';
+      default: return 'text-white/25';
+    }
+  };
+  const lineClass = (from: PipState) => (from === 'done' || from === 'current' ? 'bg-emerald-400/50' : 'bg-white/10');
+
   return (
-    <div className="flex items-center gap-1">
-      {TRACK_IDS.map((id, i) => (
-        <div
-          key={id}
-          className={`flex-1 min-w-0 text-center rounded-md py-1 text-[9px] font-black tracking-tight ${pip(states[i])}`}
-        >
-          {states[i] === 'out' ? 'OUT' : TRACK_LABELS[id]}
-        </div>
-      ))}
+    <div className="flex items-start">
+      {TRACK_IDS.map((id, i) => {
+        const s = states[i];
+        const isLast = i === TRACK_IDS.length - 1;
+        const isTrophy = id === 'F';
+        return (
+          <div key={id} className={`flex items-center ${isLast ? '' : 'flex-1'}`}>
+            <div className="flex flex-col items-center gap-1.5 shrink-0">
+              {isTrophy && s !== 'future' ? (
+                <span className={`text-sm leading-none ${s === 'done' || s === 'current' ? '' : 'opacity-40 grayscale'}`}>🏆</span>
+              ) : (
+                <span className={`block w-2 h-2 rounded-full transition-colors ${dotClass(s)}`} />
+              )}
+              <span className={`text-[8px] font-black tracking-wide uppercase ${labelClass(s)}`}>
+                {s === 'out' ? 'OUT' : TRACK_LABELS[id]}
+              </span>
+            </div>
+            {!isLast && <div className={`flex-1 h-px mx-1 mb-4 transition-colors ${lineClass(s)}`} />}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-function StatTile({ label, value }: { label: string; value: string | number }) {
+function StatTile({ label, value, title }: { label: string; value: string | number; title?: string }) {
   return (
-    <div className="bg-white/5 rounded-md px-1.5 py-1 border border-white/5 text-center">
-      <p className="text-sm font-black text-white leading-none">{value}</p>
-      <p className="text-[8px] font-bold text-white/35 uppercase tracking-wide mt-0.5">{label}</p>
+    <div className="px-1 py-2.5 text-center" title={title}>
+      <p className="font-display text-lg text-ink leading-none tabular-nums">{value}</p>
+      <p className="text-[8px] font-bold text-white/35 uppercase tracking-wide mt-1">{label}</p>
     </div>
   );
 }
 
-// Read-only badge replacing the Sub/Capt/V-Capt action buttons when the
-// modal is opened from someone else's team. Tones are picked to match
-// the interactive buttons' active states so the visual language is
-// consistent across the two modes.
-function ReadOnlyBadge({
+// Points shown as a stat readout (not a button) — visually distinct from
+// the Sub / Captain / Vice-captain actions beside it.
+function PointsReadout({ value }: { value: number }) {
+  return (
+    <div className="flex items-baseline gap-1 pl-3 border-l border-white/10 shrink-0">
+      <span className="font-display text-2xl text-emerald-400 leading-none tabular-nums">{value}</span>
+      <span className="text-[9px] text-white/35 font-bold uppercase tracking-wide">pts</span>
+    </div>
+  );
+}
+
+// Interactive Sub/Captain/Vice-captain button. Magenta is reserved for the
+// generic "you can act on this" affordance (Sub); Captain/Vice keep the
+// gold/silver convention every fantasy-football product uses for the
+// armband, since that distinction is information, not decoration.
+function ActionButton({
   label,
-  value,
-  tone,
+  title,
+  icon,
+  active,
+  activeTone,
+  onClick,
 }: {
   label: string;
+  title: string;
+  icon?: React.ReactNode;
+  active: boolean;
+  activeTone: 'accent' | 'gold' | 'silver';
+  onClick: () => void;
+}) {
+  const activeCls =
+    activeTone === 'accent' ? 'bg-accent/20 border-accent text-accent' :
+    activeTone === 'gold' ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400' :
+    'bg-gray-400/20 border-gray-400 text-gray-300';
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      aria-pressed={active}
+      className={`flex flex-col items-center justify-center w-11 h-11 rounded-lg border transition-colors ${
+        active ? activeCls : 'bg-white/[0.03] border-white/10 text-white/60 hover:bg-white/[0.07] hover:border-white/20'
+      }`}
+    >
+      {icon ?? <span className="text-sm font-black leading-none">{label}</span>}
+      <span className="text-[8px] font-bold uppercase tracking-wide mt-0.5">{label}</span>
+    </button>
+  );
+}
+
+// Read-only equivalent of ActionButton — same visual language (gold/silver
+// for captain/vice, emerald for starting, muted for inactive) so both modes
+// of the modal read as one consistent system.
+function StatusPill({
+  categoryLabel,
+  value,
+  tone,
+  wide = false,
+}: {
+  categoryLabel: string;
   value: string;
-  tone: 'emerald' | 'yellow' | 'silver' | 'slate' | 'mute';
+  tone: 'emerald' | 'gold' | 'silver' | 'slate' | 'mute';
+  wide?: boolean;
 }) {
   const cls =
     tone === 'emerald' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300' :
-    tone === 'yellow' ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400' :
+    tone === 'gold' ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400' :
     tone === 'silver' ? 'bg-gray-400/20 border-gray-400 text-gray-300' :
     tone === 'slate' ? 'bg-slate-500/15 border-slate-500/40 text-slate-300' :
-    'bg-white/5 border-white/10 text-white/40';
+    'bg-white/[0.03] border-white/10 text-white/30';
   return (
-    <div className={`flex flex-col items-center justify-center p-2 rounded-lg border ${cls}`}>
-      <span className="text-[10px] font-black mb-0.5 leading-none">{value}</span>
-      <span className="text-[9px] font-bold uppercase tracking-wider opacity-70">{label}</span>
+    <div className={`flex flex-col items-center justify-center ${wide ? 'px-2.5 h-11' : 'w-11 h-11'} rounded-lg border ${cls}`}>
+      <span className="text-[10px] font-black leading-none whitespace-nowrap">{value}</span>
+      <span className="text-[8px] font-bold uppercase tracking-wider opacity-70 mt-0.5">{categoryLabel}</span>
     </div>
   );
 }

@@ -204,16 +204,21 @@ function RadialView({
         })
       ))}
 
-      {/* Winner nodes per round (crest if decided, else faint pip). */}
+      {/* Winner nodes per round (crest if decided, else faint pip). The
+          innermost ring is the two finalists — tapping either one should
+          open the Final they're now in, not the earlier tie that got them
+          there (which is what "tie" would open; only the trophy used to be
+          wired to the Final). */}
       {roundTies.map((ties, lvl) =>
         ties.map((tie, k) => {
           const p = polar(angles[lvl + 1][k], RAD[lvl + 1]);
+          const isFinalistRing = lvl === roundTies.length - 1;
           return (
             <Node
               key={`n-${lvl}-${k}`} x={p.x} y={p.y}
               code={winnerCode(tie)} live={tie.live}
               flagClass={tier.nodes[Math.min(lvl, tier.nodes.length - 1)]} pipClass={tier.pip}
-              onClick={() => onOpenTie(tie)}
+              onClick={() => onOpenTie(isFinalistRing ? fin : tie)}
             />
           );
         }),
@@ -249,7 +254,6 @@ export default function CircularBracket({
   const openTie = (tie?: Tie) => { if (tie?.matchId) onOpenMatch(tie.matchId); };
   const [rounds, setRounds] = useState<Round[] | null>(null);
   const [anyLive, setAnyLive] = useState(false);
-  const [showFull, setShowFull] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -281,57 +285,18 @@ export default function CircularBracket({
 
   const ordered = orderByBracket(rounds);
 
-  // Zoom to the current round: the first one that isn't fully finished.
-  // (Clamped to SF — a "Final only" ring is just 2 teams, SF start shows it
-  // better.) While R32 is live this resolves to 0 = the full bracket anyway.
-  const seq = [ordered.R32, ordered.R16, ordered.QF, ordered.SF];
-  let start = 0;
-  while (start < 3 && seq[start].length > 0 && seq[start].every((t) => t.finished)) start++;
+  // Always show the full R32 → Final bracket. This used to auto-zoom to the
+  // current round once earlier rounds finished, but this deep into the
+  // tournament that left only a 2-team "SF" sliver on screen by default.
+  const start = 0;
 
   return (
     <div className="w-full">
-      {/* Header: current-round label + full-bracket toggle */}
       <div className="flex items-center justify-between max-w-[44rem] mx-auto px-4 mb-1">
-        <span className="text-xs font-bold uppercase tracking-widest text-white/40">{START_LABEL[start]}</span>
-        {start > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowFull(true)}
-            className="px-3 py-1 rounded-full text-xs font-bold bg-white/[0.06] text-white/70 ring-1 ring-white/10 hover:bg-white/10 hover:text-white transition-colors"
-          >
-            Full bracket
-          </button>
-        )}
+        <span className="text-xs font-bold uppercase tracking-widest text-white/40">{START_LABEL[start]} → Final</span>
       </div>
 
       <RadialView ordered={ordered} start={start} onOpenTie={openTie} />
-
-      {/* Full-bracket overlay: the complete R32→Final circle, read-only feel
-          (taps still open match details). */}
-      {showFull && (
-        <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-6"
-          onClick={() => setShowFull(false)}
-        >
-          <div
-            className="relative w-full max-w-3xl max-h-full overflow-auto rounded-2xl bg-[#0d1220] ring-1 ring-white/10 p-3 sm:p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-bold uppercase tracking-widest text-white/40">Full bracket · Round of 32 → Final</span>
-              <button
-                type="button"
-                onClick={() => setShowFull(false)}
-                aria-label="Close full bracket"
-                className="px-2.5 py-1 rounded-full text-xs font-bold bg-white/[0.06] text-white/70 ring-1 ring-white/10 hover:bg-white/10 hover:text-white transition-colors"
-              >
-                ✕ Close
-              </button>
-            </div>
-            <RadialView ordered={ordered} start={0} onOpenTie={openTie} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }

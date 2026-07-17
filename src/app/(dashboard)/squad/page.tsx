@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { PlayerCard, EmptySlot, PlayerFace } from '@/components/kit';
 import PlayerDetailModal from '@/components/player-detail-modal';
 import PitchBg from '@/components/pitch-bg';
@@ -547,6 +547,7 @@ function GwSlider({
 
 export default function SquadPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { setDirty, forceClean } = useUnsavedChanges();
   // Reactive timezone + per-minute clock — drives the deadline tile, fixture
   // dates and chip countdowns so they all stay in lockstep when the user
@@ -1408,6 +1409,18 @@ export default function SquadPage() {
     setDiscardConfirmOpen(false);
     setDirty(false);
   }, [setDirty]);
+
+  // Deep-link from the dashboard's "Make Transfers" button (/squad?transfer=1)
+  // straight into transfer mode instead of landing on the pitch view and
+  // requiring an extra tap. Fires once, only once the real squad has loaded.
+  const autoTransferHandled = useRef(false);
+  useEffect(() => {
+    if (autoTransferHandled.current) return;
+    if (mode !== 'view') return;
+    if (searchParams.get('transfer') !== '1') return;
+    autoTransferHandled.current = true;
+    enterTransferMode();
+  }, [mode, searchParams, enterTransferMode]);
 
   // Cancel a transfer queued for next round (made while the current round
   // was locked). The server refunds the free transfer; we mirror both

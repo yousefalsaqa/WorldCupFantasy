@@ -1,10 +1,14 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, Bebas_Neue } from 'next/font/google';
 import IosInstallPrompt from '@/components/ios-install-prompt';
 import SplashRemover from '@/components/splash-remover';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
+// Condensed display face for scoreboard-style headlines (font-display in
+// tailwind.config already points at --font-bebas; it just had nothing
+// backing the variable, so it silently fell back to Impact).
+const bebas = Bebas_Neue({ subsets: ['latin'], weight: '400', variable: '--font-bebas' });
 
 export const metadata: Metadata = {
   title: 'World Cup 2026 Fantasy',
@@ -74,7 +78,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" translate="no">
-      <body className={`${inter.className} notranslate`}>
+      <body className={`${inter.className} ${bebas.variable} notranslate`}>
         {/* Static splash – rendered as part of the initial HTML so it appears
          * the instant the page is parsed, long before the React bundle
          * finishes downloading and hydrating. <SplashRemover /> tears this

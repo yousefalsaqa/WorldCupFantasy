@@ -260,6 +260,10 @@ export async function GET(request: NextRequest) {
           currentPrice: sp.player.currentPrice,
           shirtNumber: sp.player.shirtNumber,
           photoUrl: sp.player.photoUrl,
+          // Injury/suspension flag — drives the dashboard's player-warning
+          // list. availabilityNote is freeform (e.g. "Suspended - red card").
+          isAvailable: sp.player.isAvailable,
+          availabilityNote: sp.player.availabilityNote,
           nation: {
             id: sp.player.nation.id,
             name: sp.player.nation.name,

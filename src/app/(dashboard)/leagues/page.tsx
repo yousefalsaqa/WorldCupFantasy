@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Copy, Check, Trash2, Globe, Users, Trophy } from 'lucide-react';
 import { CreateLeagueModal } from '@/components/create-league-modal';
 import { JoinLeagueModal } from '@/components/join-league-modal';
@@ -58,6 +58,7 @@ export default function LeaguesPage() {
   const [deleting, setDeleting] = useState(false);
   const [motwOpen, setMotwOpen] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const fetchMyLeagues = useCallback(async () => {
     try {
@@ -106,12 +107,18 @@ export default function LeaguesPage() {
           const teamData = await teamRes.json();
           if (teamData.team) setCurrentUserTeamId(teamData.team.id);
         }
-        await Promise.all([fetchMyLeagues(), refreshStandings()]);
+        // Deep link from elsewhere in the app (e.g. the dashboard's "Your
+        // Leagues" list) — /leagues?leagueId=X opens straight into that league
+        // instead of always landing on the global table.
+        const urlLeagueId = searchParams.get('leagueId');
+        if (urlLeagueId) setSelectedLeagueId(urlLeagueId);
+        await Promise.all([fetchMyLeagues(), refreshStandings(urlLeagueId)]);
       } finally {
         setLoading(false);
       }
     }
     fetchInitial();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchMyLeagues, refreshStandings]);
 
   const selectLeague = (id: string | null) => {
