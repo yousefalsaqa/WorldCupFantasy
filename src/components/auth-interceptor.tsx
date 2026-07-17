@@ -17,7 +17,7 @@ import { useEffect } from 'react';
  *   1. Wrap `window.fetch` so we can observe every response.
  *   2. If a response is 401 AND came from one of OUR API routes AND
  *      isn't an auth endpoint that legitimately 401s on bad creds,
- *      bounce to /login?reason=session_expired.
+ *      bounce to / (the marketing page — Sign In is right there).
  *   3. Best-effort POST /api/auth/logout first so the server clears
  *      the cookie cleanly. If that fails (offline, race), we still
  *      redirect – the login flow will overwrite the cookie anyway.
@@ -88,7 +88,7 @@ export default function AuthInterceptor({ children }: { children: React.ReactNod
           } catch {
             /* noop */
           }
-          window.location.href = '/login?reason=session_expired';
+          window.location.href = '/';
         }
       }
 

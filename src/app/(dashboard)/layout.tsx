@@ -47,7 +47,11 @@ export default async function DashboardLayout({
     // does no harm – it just gets overwritten on the next successful
     // login. (Clearing it from a Server Component would require a
     // workaround; not worth the complexity for this case.)
-    redirect('/login?reason=session_expired');
+    //
+    // Lands on the marketing page, not straight to the login form — a
+    // signed-out visitor sees the app's front door first (Sign In is one
+    // click away from there either way).
+    redirect('/');
   }
 
   return (
